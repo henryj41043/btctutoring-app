@@ -1,0 +1,28 @@
+<mat-toolbar>
+  <button matIconButton class="menu-icon" aria-label="Icon-button with menu icon">
+    <mat-icon>menu</mat-icon>
+  </button>
+  <img ngSrc="assets/BTC_Transparent_BG.png" alt="" height="100" width="100"/>
+  <span *ngIf="!loggedIn">Beyond the Chalkboard Tutoring</span>
+  <span *ngIf="loggedIn">Welcome, {{user?.email}}</span>
+  <span class="toolbar-spacer"></span>
+  <button matIconButton [matMenuTriggerFor]="accountMenu" #menuTrigger="matMenuTrigger" aria-label="Example icon-button with a menu">
+    <mat-icon>account_circle</mat-icon>
+  </button>
+  <mat-menu #accountMenu="matMenu" [hasBackdrop]="false">
+    <div style="padding: 16px;" (click)="$event.stopPropagation()">
+      <h3>Login</h3>
+      <form (ngSubmit)="login()">
+        <mat-form-field appearance="outline">
+          <mat-label>Email</mat-label>
+          <input matInput (click)="$event.stopPropagation()" type="email" [(ngModel)]="email" name="email" required>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Password</mat-label>
+          <input matInput (click)="$event.stopPropagation()" type="password" [(ngModel)]="password" name="password" required>
+        </mat-form-field>
+        <button mat-raised-button color="primary" type="submit">Login</button>
+      </form>
+    </div>
+  </mat-menu>
+</mat-toolbar>
