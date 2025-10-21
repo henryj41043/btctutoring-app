@@ -5,6 +5,7 @@
 // Learn more about theming and how to use it for your application's
 // custom components at https://material.angular.dev/guide/theming
 @use '@angular/material' as mat;
+@use 'angular-calendar/scss/angular-calendar';
 @import "./app/themes/greentheme.css";
 
 //html {
@@ -17,6 +18,39 @@
 //    density: 0,
 //  ));
 //}
+
+.dark-theme {
+  // First define some global color variables for your app, these are just for the demo, they can be anything you like
+  $bg-dark-primary: #1f262d;
+  $bg-dark-secondary: #394046;
+  $bg-active: #2c343a;
+  $text-color: #d5d6d7;
+  $border-color: rgb(0 0 0 / 60%);
+
+  // Call the calendar mixin with a sass color map of your theme. Every property is optional.
+  // For a list of all variables and how they are used,
+  // see https://github.com/mattlewis92/angular-calendar/tree/main/projects/angular-calendar/src/variables.scss
+  @include angular-calendar.cal-theme(
+      (
+        bg-primary: $bg-dark-primary,
+        bg-secondary: $bg-dark-secondary,
+        weekend-color: indianred,
+        bg-active: $bg-active,
+        border-color: $border-color,
+        gray: $bg-dark-secondary,
+        today-bg: $bg-dark-secondary,
+        event-color-primary: $bg-dark-secondary,
+      )
+  );
+
+  // How to override a non themable property, this was copied from chrome -> inspect element -> styles panel
+  .cal-month-view .cal-day-cell.cal-out-month .cal-day-number {
+    opacity: 0.3;
+  }
+}
+
+
+
 
 body {
   // Default the application to a light color theme. This can be changed to

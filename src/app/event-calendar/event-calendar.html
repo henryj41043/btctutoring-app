@@ -1,0 +1,75 @@
+<div class="event-calendar-header">
+  <button matButton mwlCalendarPreviousView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()">Previous</button>
+  <button matButton mwlCalendarToday [(viewDate)]="viewDate">Today</button>
+  <button matButton mwlCalendarNextView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()">Next</button>
+  <span class="calendar-spacer"></span>
+  <span class="calendar-title">{{ viewDate | calendarDate: view + 'ViewTitle' : 'en' }}</span>
+  <span class="calendar-spacer"></span>
+  <button matButton (click)="setView(CalendarView.Month)" [class.active]="view === CalendarView.Month">Month</button>
+  <button matButton (click)="setView(CalendarView.Week)" [class.active]="view === CalendarView.Week">Week</button>
+  <button matButton (click)="setView(CalendarView.Day)" [class.active]="view === CalendarView.Day">Day</button>
+</div>
+<div class="event-calendar">
+  @switch (view) {
+    @case (CalendarView.Month) {
+      <mwl-calendar-month-view
+        class="event-cal-month event-cal"
+        [viewDate]="viewDate"
+        [events]="events"
+        (dayClicked)="dayClicked($event.day)"
+      />
+    }
+    @case (CalendarView.Week) {
+      <mwl-calendar-week-view class="event-cal-week event-cal" [viewDate]="viewDate" [events]="events" />
+    }
+    @case (CalendarView.Day) {
+      <mwl-calendar-day-view class="event-cal-day event-cal" [viewDate]="viewDate" [events]="events" />
+    }
+  }
+  <mat-card class="event-card" appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Events</mat-card-title>
+    </mat-card-header>
+    <mat-card-actions>
+      <button matButton>Add Event</button>
+    </mat-card-actions>
+    <mat-card-content>
+      <table mat-table [dataSource]="eventData" class="mat-elevation-z8">
+
+        <!--- Note that these columns can be defined in any order.
+              The actual rendered columns are set as a property on the row definition" -->
+
+        <!-- Position Column -->
+        <ng-container matColumnDef="tutor">
+          <th mat-header-cell *matHeaderCellDef> Tutor </th>
+          <td mat-cell *matCellDef="let item"> {{item.tutor}} </td>
+        </ng-container>
+
+        <!-- Name Column -->
+        <ng-container matColumnDef="student">
+          <th mat-header-cell *matHeaderCellDef> Student </th>
+          <td mat-cell *matCellDef="let item"> {{item.student}} </td>
+        </ng-container>
+
+        <!-- Weight Column -->
+        <ng-container matColumnDef="start">
+          <th mat-header-cell *matHeaderCellDef> Start </th>
+          <td mat-cell *matCellDef="let item"> {{item.start.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: 'numeric',})}} </td>
+        </ng-container>
+
+        <!-- Symbol Column -->
+        <ng-container matColumnDef="end">
+          <th mat-header-cell *matHeaderCellDef> End </th>
+          <td mat-cell *matCellDef="let item"> {{item.end.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: 'numeric',})}} </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="eventColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: eventColumns;"></tr>
+      </table>
+    </mat-card-content>
+  </mat-card>
+</div>

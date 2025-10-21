@@ -1,0 +1,50 @@
+.calendar-spacer {
+  flex: 1 1 auto;
+}
+
+.event-calendar-header {
+  display: flex;
+  box-sizing: border-box;
+  padding: 0 16px;
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+  margin-top: 16px;
+}
+
+.event-calendar {
+  display: flex;
+  box-sizing: border-box;
+  padding: 0 16px;
+  width: 100%;
+  flex-direction: row;
+}
+
+.calendar-title {
+  color: var(--mat-sys-on-primary-container);
+  font-family: var(--mat-toolbar-title-text-font, var(--mat-sys-title-large-font)), serif;
+  font-size: var(--mat-toolbar-title-text-size, var(--mat-sys-title-large-size));
+  line-height: var(--mat-toolbar-title-text-line-height, var(--mat-sys-title-large-line-height));
+  font-weight: var(--mat-toolbar-title-text-weight, var(--mat-sys-title-large-weight));
+  letter-spacing: var(--mat-toolbar-title-text-tracking, var(--mat-sys-title-large-tracking));
+}
+
+.event-card {
+  max-width: 500px;
+  margin-left: auto;
+  height: fit-content;
+}
+
+.mat-mdc-card-header {
+  margin: auto;
+}
+
+.event-cal {
+  width: -webkit-fill-available;
+  margin-right: 16px;
+}
+
+.mdc-data-table__cell {
+  text-wrap-mode: nowrap;
+}
