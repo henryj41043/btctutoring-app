@@ -6,7 +6,7 @@ import {Observable} from 'rxjs';
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://localhost:3000'; // Replace with your actual API base URL
+  private apiUrl = 'https://bitshiftstudio.io'; // Replace with your actual API base URL
   httpClient: HttpClient = inject(HttpClient);
 
   login(email: string, password: string): Observable<any> {
