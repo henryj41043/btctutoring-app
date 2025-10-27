@@ -17,6 +17,6 @@ export class AuthService {
   }
 
   getUser(): Observable<any> {
-    return this.httpClient.get(`${this.apiUrl}/users/user`);
+    return this.httpClient.get(`${this.apiUrl}/auth`);
   }
 }
