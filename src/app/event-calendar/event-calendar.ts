@@ -41,6 +41,7 @@ import {MatTableModule} from '@angular/material/table';
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: true
 })
 export class EventCalendar implements OnInit {
   readonly CalendarView: typeof CalendarView = CalendarView;

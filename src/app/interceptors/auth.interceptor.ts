@@ -10,7 +10,7 @@ export function AuthInterceptor(
   next: HttpHandlerFn,
 ): Observable<HttpEvent<unknown>> {
   const accessToken = sessionStorage.getItem('accessToken');
-  const idToken = sessionStorage.getItem('idToken'); // If needed for specific APIs
+  const idToken = sessionStorage.getItem('idToken');
 
   if (accessToken) {
     const updatedRequest = request.clone({

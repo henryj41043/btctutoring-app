@@ -6,6 +6,7 @@ import {ToolBar} from './tool-bar/tool-bar';
   selector: 'app-root',
   imports: [RouterOutlet, ToolBar],
   templateUrl: './app.html',
+  standalone: true,
   styleUrl: './app.scss'
 })
 export class App {
