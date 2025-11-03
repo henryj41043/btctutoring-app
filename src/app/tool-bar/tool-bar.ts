@@ -1,9 +1,9 @@
-import {Component, inject, ViewChild} from '@angular/core';
+import {Component, inject} from '@angular/core';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {NgOptimizedImage} from '@angular/common';
-import {MatMenuModule, MatMenuTrigger} from '@angular/material/menu';
+import {MatMenuModule} from '@angular/material/menu';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
@@ -16,12 +16,9 @@ import {AuthService} from '../services/auth.service';
   styleUrl: './tool-bar.scss'
 })
 export class ToolBar {
-  @ViewChild('menuTrigger') menuTrigger!: MatMenuTrigger;
   authService: AuthService = inject(AuthService);
 
   logout(): void {
-    console.log('logout');
-    this.menuTrigger.closeMenu();
     this.authService.logout();
   }
 }

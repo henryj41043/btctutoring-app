@@ -9,11 +9,11 @@
     <span>Beyond the Chalkboard Tutoring</span>
   }
   <span class="toolbar-spacer"></span>
-  <button matIconButton [matMenuTriggerFor]="accountMenu" #menuTrigger="matMenuTrigger" aria-label="Example icon-button with a menu">
+  <button matIconButton [matMenuTriggerFor]="accountMenu" aria-label="Icon-button with account icon">
     <mat-icon>account_circle</mat-icon>
   </button>
-  <mat-menu #accountMenu="matMenu" [hasBackdrop]="false">
-    <div style="padding: 16px;" (click)="$event.stopPropagation()">
+  <mat-menu #accountMenu="matMenu" [hasBackdrop]="true">
+    <div class="profile-container">
       <h3>Profile</h3>
       <form (ngSubmit)="logout()">
         <button mat-raised-button color="primary" type="submit">Logout</button>
