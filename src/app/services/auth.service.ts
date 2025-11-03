@@ -25,6 +25,7 @@ export class AuthService {
 
   login(email: string, password: string): void {
     console.log('Attempting login with:', email, password);
+    this._hasError.set(false);
     this.httpClient.post(`${this.baseUrl}/auth/login`, {
       email: email,
       password: password
@@ -57,5 +58,20 @@ export class AuthService {
         this._user.set(response as User);
         this.router.navigate(['/calendar']);
       });
+  }
+
+  logout() {
+    if(this.loggedIn()) {
+      sessionStorage.setItem('accessToken', '');
+      sessionStorage.setItem('idToken', '');
+      this._hasError.set(false);
+      this._user.set({
+        username: '',
+        email: '',
+        groups: [],
+      });
+      this._loggedIn.set(false);
+      this.router.navigate(['/login']);
+    }
   }
 }

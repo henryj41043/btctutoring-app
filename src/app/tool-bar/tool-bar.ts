@@ -22,5 +22,6 @@ export class ToolBar {
   logout(): void {
     console.log('logout');
     this.menuTrigger.closeMenu();
+    this.authService.logout();
   }
 }
