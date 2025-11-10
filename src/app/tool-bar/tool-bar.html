@@ -1,15 +1,20 @@
 <mat-toolbar>
-  <button matIconButton class="menu-icon" aria-label="Icon-button with menu icon">
+  <button matIconButton class="toolbar-icon" [matMenuTriggerFor]="actionMenu" aria-label="Icon-button with menu icon">
     <mat-icon>menu</mat-icon>
   </button>
-  <img ngSrc="assets/BTC_Transparent_BG.png" alt="" height="100" width="100"/>
+  <mat-menu #actionMenu="matMenu">
+    @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+      <button mat-menu-item (click)="openCreateSessionDialog()">Add Session</button>
+    }
+  </mat-menu>
+  <img ngSrc="assets/BTC_Transparent_BG.png" alt="" height="100" width="100" priority/>
   @if (authService.loggedIn()) {
     <span>Welcome, {{authService.user().email}}</span>
   } @else {
     <span>Beyond the Chalkboard Tutoring</span>
   }
   <span class="toolbar-spacer"></span>
-  <button matIconButton [matMenuTriggerFor]="accountMenu" aria-label="Icon-button with account icon">
+  <button matIconButton class="toolbar-icon"  [matMenuTriggerFor]="accountMenu" aria-label="Icon-button with account icon">
     <mat-icon>account_circle</mat-icon>
   </button>
   <mat-menu #accountMenu="matMenu" [hasBackdrop]="true">

@@ -1,0 +1,53 @@
+<h2 mat-dialog-title>Create New Session</h2>
+<mat-dialog-content>
+  <mat-form-field>
+    <mat-label>Enter date</mat-label>
+    <input matInput [matDatepicker]="datepicker" [(ngModel)]="date">
+    <mat-datepicker #datepicker/>
+    <mat-datepicker-toggle [for]="datepicker" matSuffix/>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Select Tutor</mat-label>
+    <mat-select [(value)]="selectedTutor">
+      @for (tutor of tutors; track tutor) {
+        <mat-option [value]="tutor">{{tutor.name}}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <br/>
+  <mat-form-field>
+    <mat-label>Enter start time</mat-label>
+    <input matInput
+           [matTimepicker]="starttimepicker"
+           [(ngModel)]="startTime"
+           [ngModelOptions]="{updateOn: 'blur'}">
+    <mat-timepicker interval="15min" #starttimepicker/>
+    <mat-timepicker-toggle [for]="starttimepicker" matSuffix/>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Select Student</mat-label>
+    <mat-select [(value)]="selectedStudent">
+      @for (student of students; track student) {
+        <mat-option [value]="student">{{student.name}}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <br/>
+  <mat-form-field>
+    <mat-label>Enter end time</mat-label>
+    <input matInput
+           [matTimepicker]="endtimepicker"
+           [(ngModel)]="endTime"
+           [ngModelOptions]="{updateOn: 'blur'}">
+    <mat-timepicker interval="15min" #endtimepicker/>
+    <mat-timepicker-toggle [for]="endtimepicker" matSuffix/>
+  </mat-form-field>
+  <br/>
+  @if (hasError) {
+    <mat-error>{{errorMessage}}</mat-error>
+  }
+</mat-dialog-content>
+<mat-dialog-actions>
+  <button matButton (click)="cancel()">Cancel</button>
+  <button matButton (click)="createSession()">Create</button>
+</mat-dialog-actions>
