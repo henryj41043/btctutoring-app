@@ -1,4 +1,10 @@
-<h2 mat-dialog-title>Create New Session</h2>
+<h2 mat-dialog-title>
+  @if (dialogData.type === 'create') {
+    Create New Session
+  } @else {
+    Update Session
+  }
+</h2>
 <mat-dialog-content>
   <mat-form-field>
     <mat-label>Enter date</mat-label>

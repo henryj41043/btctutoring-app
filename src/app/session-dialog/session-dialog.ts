@@ -1,10 +1,9 @@
-import {Component, inject} from '@angular/core';
+import {Component, inject, OnInit} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
-  MatDialogClose,
   MatDialogContent,
   MatDialogRef,
   MatDialogTitle,
@@ -15,8 +14,11 @@ import {SessionDialogData} from '../interfaces/session-dialog-data.interface';
 import {MatTimepickerModule} from '@angular/material/timepicker';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {MatDatepickerModule} from '@angular/material/datepicker';
-import {MatDivider} from '@angular/material/divider';
 import {MatSelectModule} from '@angular/material/select';
+import {SessionsService} from '../services/sessions.service';
+import {Session} from '../models/session.model';
+import {Response} from '../models/response.model';
+import {catchError, Observable} from 'rxjs';
 
 @Component({
   selector: 'app-session-dialog',
@@ -29,7 +31,6 @@ import {MatSelectModule} from '@angular/material/select';
     MatInputModule,
     FormsModule,
     MatButtonModule,
-    MatDivider,
     MatTimepickerModule,
     MatDatepickerModule,
     MatSelectModule,
@@ -37,7 +38,7 @@ import {MatSelectModule} from '@angular/material/select';
   templateUrl: './session-dialog.html',
   styleUrl: './session-dialog.scss'
 })
-export class SessionDialog {
+export class SessionDialog implements OnInit {
   startTime: Date | undefined;
   endTime: Date | undefined;
   date: Date | undefined;
@@ -75,6 +76,17 @@ export class SessionDialog {
   ];
   readonly dialogRef = inject(MatDialogRef<SessionDialog>);
   readonly dialogData = inject<SessionDialogData>(MAT_DIALOG_DATA);
+  sessionsService: SessionsService = inject(SessionsService);
+
+  ngOnInit(): void {
+    if(this.dialogData.type === 'update') {
+      this.selectedStudent = this.dialogData.session.student;
+      this.selectedTutor = this.dialogData.session.tutor;
+      this.date = new Date(this.dialogData.session.start as string);
+      this.startTime = new Date(this.dialogData.session.start as string);
+      this.endTime = new Date(this.dialogData.session.end as string);
+    }
+  }
 
   cancel(): void {
     this.dialogRef.close();
@@ -93,25 +105,27 @@ export class SessionDialog {
       let submitEndDate: Date = new Date(this.date);
       submitEndDate.setHours(this.endTime.getHours());
       submitEndDate.setMinutes(this.endTime.getMinutes());
-      this.hasError = false;
-      console.log(submitStartDate.toISOString());
-      console.log(submitEndDate.toISOString());
-      console.log(this.selectedTutor);
-      console.log(this.selectedStudent);
-      this.dialogRef.close({
-        startTime: submitStartDate.toISOString(),
-        endTime: submitEndDate.toISOString(),
-      });
-      // this.timesheetService.createTimeEntry({
-      //   start: submitStartDate.toISOString(),
-      //   end: submitEndDate.toISOString()
-      // })
-      //   .pipe( catchError( (error: any): any => {
-      //     console.log(error);
-      //   }))
-      //   .subscribe((response) => {
-      //     console.log(response);
-      //   });
+      let session: Session = new Session();
+      session.tutor = this.selectedTutor.name;
+      session.student = this.selectedStudent.name;
+      session.start = submitStartDate.toISOString();
+      session.end = submitEndDate.toISOString();
+      session.completed = false;
+      session.makeup = false;
+      console.log(session);
+      this.sessionsService.createSession(session).pipe(
+        catchError(err =>  {
+          this.errorMessage = 'Create session failed';
+          this.hasError = true;
+          console.log(err);
+          return new Observable();
+        })
+      ).subscribe(
+        response => {
+          this.hasError = false;
+          this.dialogRef.close(response as Response);
+        }
+      );
     } else {
       this.errorMessage = 'Please enter a valid date and time range';
       this.hasError = true;

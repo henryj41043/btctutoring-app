@@ -1,4 +1,4 @@
-import {Component, OnInit, Inject, Renderer2, ChangeDetectionStrategy, ChangeDetectorRef} from '@angular/core';
+import {Component, OnInit, Inject, Renderer2, ChangeDetectionStrategy, ChangeDetectorRef, inject} from '@angular/core';
 import {DOCUMENT} from '@angular/common';
 import {
   CalendarDatePipe,
@@ -17,6 +17,12 @@ import {adapterFactory} from 'angular-calendar/date-adapters/date-fns';
 import {MatButton} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableModule} from '@angular/material/table';
+import {SessionDialog} from '../session-dialog/session-dialog';
+import {Session} from '../models/session.model';
+import {MatDialog} from '@angular/material/dialog';
+import {SessionsService} from '../services/sessions.service';
+import {AuthService} from '../services/auth.service';
+import {catchError, Observable} from 'rxjs';
 
 @Component({
   selector: 'app-event-calendar',
@@ -45,39 +51,14 @@ import {MatTableModule} from '@angular/material/table';
 })
 export class EventCalendar implements OnInit {
   readonly CalendarView: typeof CalendarView = CalendarView;
+  readonly sessionDialog: MatDialog = inject(MatDialog);
+  sessionsService: SessionsService = inject(SessionsService);
+  authService: AuthService = inject(AuthService);
   view: CalendarView = CalendarView.Month;
   viewDate: Date = new Date();
   eventColumns: string[] = ['tutor', 'student', 'start', 'end'];
   eventData: any[] = [];
-  events: CalendarEvent<{ tutor: string, student: string}>[] = [
-    {
-      title: 'Tutor Session',
-      start: new Date('Mon Oct 20 2025 14:00:00 GMT-0400 (Eastern Daylight Time)'),
-      end: new Date('Mon Oct 20 2025 14:30:00 GMT-0400 (Eastern Daylight Time)'),
-      meta: {
-        tutor: 'Mario',
-        student: 'Bowser',
-      }
-    },
-    {
-      title: 'Tutor Session',
-      start: new Date('Mon Oct 20 2025 16:00:00 GMT-0400 (Eastern Daylight Time)'),
-      end: new Date('Mon Oct 20 2025 17:00:00 GMT-0400 (Eastern Daylight Time)'),
-      meta: {
-        tutor: 'Peach',
-        student: 'Yoshi',
-      }
-    },
-    {
-      title: 'Tutor Session',
-      start: new Date('Thu Oct 16 2025 14:00:00 GMT-0400 (Eastern Daylight Time)'),
-      end: new Date('Thu Oct 16 2025 14:30:00 GMT-0400 (Eastern Daylight Time)'),
-      meta: {
-        tutor: 'Mario',
-        student: 'Bowser',
-      }
-    }
-  ];
+  events: CalendarEvent<{ tutor: string, student: string}>[] = [];
 
   constructor(
     private renderer: Renderer2,
@@ -91,6 +72,7 @@ export class EventCalendar implements OnInit {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
       this.applySystemTheme();
     });
+    this.updateSessionsData();
   }
 
   private applySystemTheme(): void {
@@ -100,6 +82,62 @@ export class EventCalendar implements OnInit {
     } else {
       this.renderer.addClass(this.document.body, 'light-theme');
       this.renderer.removeClass(this.document.body, 'dark-theme');
+    }
+  }
+
+  private updateSessionsData(): void {
+    if(this.authService.user().groups.includes('Admins')) {
+      this.sessionsService.getAllSessions().pipe(
+        catchError(error => {
+          console.log(error);
+          return new Observable();
+        })
+      ).subscribe(
+        response => {
+          console.log(response);
+          let sessions: Session[] = response as Session[];
+          let calEvents: CalendarEvent<{ tutor: string, student: string }>[] = [];
+          sessions.forEach(session => {
+            calEvents.push({
+              title: 'Tutor Session',
+              start: new Date(session.start as string),
+              end: new Date(session.end as string),
+              meta: {
+                tutor: session.tutor as string,
+                student: session.student as string,
+              }
+            });
+          });
+          this.events = calEvents;
+          this.cdr.markForCheck();
+        }
+      );
+    } else {
+      this.sessionsService.getSessionsByTutor(this.authService.user().email).pipe(
+        catchError(error => {
+          console.log(error);
+          return new Observable();
+        })
+      ).subscribe(
+        response => {
+          console.log(response);
+          let sessions: Session[] = response as Session[];
+          let calEvents: CalendarEvent<{ tutor: string, student: string }>[] = [];
+          sessions.forEach(session => {
+            calEvents.push({
+              title: 'Tutor Session',
+              start: new Date(session.start as string),
+              end: new Date(session.end as string),
+              meta: {
+                tutor: session.tutor as string,
+                student: session.student as string,
+              }
+            });
+          });
+          this.events = calEvents;
+          this.cdr.markForCheck();
+        }
+      );
     }
   }
 
@@ -126,5 +164,20 @@ export class EventCalendar implements OnInit {
     this.eventData = temp;
     this.cdr.markForCheck();
     console.log(this.eventData);
+  }
+
+  openCreateSessionDialog(): void {
+    console.log('openCreateSessionDialog');
+    const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
+      data: {type: 'create', session: new Session()},
+    });
+
+    sessionDialogRef.afterClosed().subscribe(result => {
+      console.log('The dialog was closed');
+      if (result !== undefined) {
+        console.log(result);
+        this.updateSessionsData();
+      }
+    });
   }
 }

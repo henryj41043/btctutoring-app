@@ -28,10 +28,10 @@
   }
   <mat-card class="event-card" appearance="outlined">
     <mat-card-header>
-      <mat-card-title>Events</mat-card-title>
+      <mat-card-title>Sessions</mat-card-title>
     </mat-card-header>
     <mat-card-actions>
-      <button matButton>Add Event</button>
+      <button matButton (click)="openCreateSessionDialog()">Add Session</button>
     </mat-card-actions>
     <mat-card-content>
       <table mat-table [dataSource]="eventData" class="mat-elevation-z8">
