@@ -31,42 +31,46 @@
       <mat-card-title>Sessions</mat-card-title>
     </mat-card-header>
     <mat-card-actions>
-      <button matButton (click)="openCreateSessionDialog()">Add Session</button>
+      @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+        <button matButton (click)="openCreateSessionDialog()">Add Session</button>
+      }
     </mat-card-actions>
     <mat-card-content>
       <table mat-table [dataSource]="eventData" class="mat-elevation-z8">
-
-        <!--- Note that these columns can be defined in any order.
-              The actual rendered columns are set as a property on the row definition" -->
-
-        <!-- Position Column -->
         <ng-container matColumnDef="tutor">
           <th mat-header-cell *matHeaderCellDef> Tutor </th>
           <td mat-cell *matCellDef="let item"> {{item.tutor}} </td>
         </ng-container>
-
-        <!-- Name Column -->
         <ng-container matColumnDef="student">
           <th mat-header-cell *matHeaderCellDef> Student </th>
           <td mat-cell *matCellDef="let item"> {{item.student}} </td>
         </ng-container>
-
-        <!-- Weight Column -->
         <ng-container matColumnDef="start">
           <th mat-header-cell *matHeaderCellDef> Start </th>
-          <td mat-cell *matCellDef="let item"> {{item.start.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: 'numeric',})}} </td>
+          <td mat-cell *matCellDef="let item"> {{item.start | date:'hh:mm a'}} </td>
         </ng-container>
-
-        <!-- Symbol Column -->
         <ng-container matColumnDef="end">
           <th mat-header-cell *matHeaderCellDef> End </th>
-          <td mat-cell *matCellDef="let item"> {{item.end.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: 'numeric',})}} </td>
+          <td mat-cell *matCellDef="let item"> {{item.end | date:'hh:mm a'}} </td>
         </ng-container>
-
+        <ng-container matColumnDef="edit">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let item">
+            <button matIconButton class="session-table-icon" (click)="openEditSessionDialog(item)" aria-label="Icon button with edit icon">
+              <mat-icon>edit</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="delete">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let item">
+            @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+              <button matIconButton class="session-table-icon" (click)="openDeleteSessionDialog(item)" aria-label="Icon button with delete icon">
+                <mat-icon>delete</mat-icon>
+              </button>
+            }
+          </td>
+        </ng-container>
         <tr mat-header-row *matHeaderRowDef="eventColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: eventColumns;"></tr>
       </table>

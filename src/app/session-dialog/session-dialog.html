@@ -1,8 +1,10 @@
 <h2 mat-dialog-title>
   @if (dialogData.type === 'create') {
     Create New Session
-  } @else {
+  } @else if (dialogData.type === 'edit') {
     Update Session
+  } @else if (dialogData.type === 'delete') {
+    Confirm Delete Session
   }
 </h2>
 <mat-dialog-content>
@@ -14,9 +16,9 @@
   </mat-form-field>
   <mat-form-field>
     <mat-label>Select Tutor</mat-label>
-    <mat-select [(value)]="selectedTutor">
+    <mat-select [(ngModel)]="selectedTutor">
       @for (tutor of tutors; track tutor) {
-        <mat-option [value]="tutor">{{tutor.name}}</mat-option>
+        <mat-option [value]="tutor.name">{{tutor.name}}</mat-option>
       }
     </mat-select>
   </mat-form-field>
@@ -32,9 +34,9 @@
   </mat-form-field>
   <mat-form-field>
     <mat-label>Select Student</mat-label>
-    <mat-select [(value)]="selectedStudent">
+    <mat-select [(ngModel)]="selectedStudent">
       @for (student of students; track student) {
-        <mat-option [value]="student">{{student.name}}</mat-option>
+        <mat-option [value]="student.name">{{student.name}}</mat-option>
       }
     </mat-select>
   </mat-form-field>
@@ -55,5 +57,11 @@
 </mat-dialog-content>
 <mat-dialog-actions>
   <button matButton (click)="cancel()">Cancel</button>
-  <button matButton (click)="createSession()">Create</button>
+  @if (dialogData.type === 'create') {
+    <button matButton (click)="createSession()">Create</button>
+  } @else if (dialogData.type === 'edit') {
+    <button matButton (click)="updateSession()">Update</button>
+  } @else if (dialogData.type === 'delete') {
+    <button matButton (click)="deleteSession()">Confirm</button>
+  }
 </mat-dialog-actions>

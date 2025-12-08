@@ -48,3 +48,8 @@
 .mdc-data-table__cell {
   text-wrap-mode: nowrap;
 }
+
+.session-table-icon {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container) !important;
+}

@@ -79,7 +79,7 @@ export class SessionDialog implements OnInit {
   sessionsService: SessionsService = inject(SessionsService);
 
   ngOnInit(): void {
-    if(this.dialogData.type === 'update') {
+    if(this.dialogData.type !== 'create') {
       this.selectedStudent = this.dialogData.session.student;
       this.selectedTutor = this.dialogData.session.tutor;
       this.date = new Date(this.dialogData.session.start as string);
@@ -92,7 +92,7 @@ export class SessionDialog implements OnInit {
     this.dialogRef.close();
   }
 
-  createSession() {
+  createSession(): void {
     if(this.date && this.startTime && this.endTime) {
       if(this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
@@ -106,8 +106,8 @@ export class SessionDialog implements OnInit {
       submitEndDate.setHours(this.endTime.getHours());
       submitEndDate.setMinutes(this.endTime.getMinutes());
       let session: Session = new Session();
-      session.tutor = this.selectedTutor.name;
-      session.student = this.selectedStudent.name;
+      session.tutor = this.selectedTutor;
+      session.student = this.selectedStudent;
       session.start = submitStartDate.toISOString();
       session.end = submitEndDate.toISOString();
       session.completed = false;
@@ -123,12 +123,74 @@ export class SessionDialog implements OnInit {
       ).subscribe(
         response => {
           this.hasError = false;
-          this.dialogRef.close(response as Response);
+          let tempResponse: Response = response as Response;
+          console.log(tempResponse);
+          session.id = tempResponse.id;
+          this.dialogRef.close(session);
         }
       );
     } else {
       this.errorMessage = 'Please enter a valid date and time range';
       this.hasError = true;
     }
+  }
+
+  updateSession(): void {
+    if(this.date && this.startTime && this.endTime) {
+      if (this.startTime > this.endTime) {
+        this.errorMessage = 'Please enter a valid date and time range';
+        this.hasError = true;
+        return;
+      }
+      let submitStartDate: Date = new Date(this.date);
+      submitStartDate.setHours(this.startTime.getHours());
+      submitStartDate.setMinutes(this.startTime.getMinutes());
+      let submitEndDate: Date = new Date(this.date);
+      submitEndDate.setHours(this.endTime.getHours());
+      submitEndDate.setMinutes(this.endTime.getMinutes());
+      let session: Session = new Session();
+      session.tutor = this.selectedTutor;
+      session.student = this.selectedStudent;
+      session.start = submitStartDate.toISOString();
+      session.end = submitEndDate.toISOString();
+      session.completed = false;
+      session.makeup = false;
+      session.id = this.dialogData.session.id;
+      console.log(session);
+      this.sessionsService.updateSession(session).pipe(
+        catchError(err =>  {
+          this.errorMessage = 'Update session failed';
+          this.hasError = true;
+          console.log(err);
+          return new Observable();
+        })
+      ).subscribe(
+        response => {
+          this.hasError = false;
+          this.dialogRef.close(response as Session);
+        }
+      );
+    } else {
+      this.errorMessage = 'Please enter a valid date and time range';
+      this.hasError = true;
+    }
+  }
+
+  deleteSession(): void {
+    let id: string = this.dialogData.session.id as string;
+    console.log('Attempting to delete: ' + id);
+    this.sessionsService.deleteSession(id).pipe(
+      catchError(err =>  {
+        this.errorMessage = 'Delete session failed';
+        this.hasError = true;
+        console.log(err);
+        return new Observable();
+      })
+    ).subscribe(
+      response => {
+        this.hasError = false;
+        this.dialogRef.close(response as Response);
+      }
+    );
   }
 }

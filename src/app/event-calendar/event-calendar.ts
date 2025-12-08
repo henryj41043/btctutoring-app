@@ -1,5 +1,5 @@
 import {Component, OnInit, Inject, Renderer2, ChangeDetectionStrategy, ChangeDetectorRef, inject} from '@angular/core';
-import {DOCUMENT} from '@angular/common';
+import {DatePipe, DOCUMENT} from '@angular/common';
 import {
   CalendarDatePipe,
   CalendarDayViewComponent,
@@ -14,7 +14,6 @@ import {
   provideCalendar
 } from 'angular-calendar';
 import {adapterFactory} from 'angular-calendar/date-adapters/date-fns';
-import {MatButton} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableModule} from '@angular/material/table';
 import {SessionDialog} from '../session-dialog/session-dialog';
@@ -23,6 +22,9 @@ import {MatDialog} from '@angular/material/dialog';
 import {SessionsService} from '../services/sessions.service';
 import {AuthService} from '../services/auth.service';
 import {catchError, Observable} from 'rxjs';
+import {MatIconModule} from '@angular/material/icon';
+import {MatButtonModule} from '@angular/material/button';
+import {Response} from '../models/response.model';
 
 @Component({
   selector: 'app-event-calendar',
@@ -34,9 +36,11 @@ import {catchError, Observable} from 'rxjs';
     CalendarWeekViewComponent,
     CalendarDayViewComponent,
     CalendarDatePipe,
-    MatButton,
+    MatButtonModule,
     MatCardModule,
     MatTableModule,
+    MatIconModule,
+    DatePipe,
   ],
   templateUrl: './event-calendar.html',
   styleUrl: './event-calendar.scss',
@@ -56,9 +60,9 @@ export class EventCalendar implements OnInit {
   authService: AuthService = inject(AuthService);
   view: CalendarView = CalendarView.Month;
   viewDate: Date = new Date();
-  eventColumns: string[] = ['tutor', 'student', 'start', 'end'];
-  eventData: any[] = [];
-  events: CalendarEvent<{ tutor: string, student: string}>[] = [];
+  eventColumns: string[] = ['tutor', 'student', 'start', 'end', 'edit', 'delete'];
+  eventData: Session[] = [];
+  events: CalendarEvent<Session>[] = [];
 
   constructor(
     private renderer: Renderer2,
@@ -96,16 +100,13 @@ export class EventCalendar implements OnInit {
         response => {
           console.log(response);
           let sessions: Session[] = response as Session[];
-          let calEvents: CalendarEvent<{ tutor: string, student: string }>[] = [];
-          sessions.forEach(session => {
+          let calEvents: CalendarEvent<Session>[] = [];
+          sessions.forEach((session: Session): void => {
             calEvents.push({
               title: 'Tutor Session',
               start: new Date(session.start as string),
               end: new Date(session.end as string),
-              meta: {
-                tutor: session.tutor as string,
-                student: session.student as string,
-              }
+              meta: session
             });
           });
           this.events = calEvents;
@@ -122,16 +123,13 @@ export class EventCalendar implements OnInit {
         response => {
           console.log(response);
           let sessions: Session[] = response as Session[];
-          let calEvents: CalendarEvent<{ tutor: string, student: string }>[] = [];
-          sessions.forEach(session => {
+          let calEvents: CalendarEvent<Session>[] = [];
+          sessions.forEach((session: Session): void => {
             calEvents.push({
               title: 'Tutor Session',
               start: new Date(session.start as string),
               end: new Date(session.end as string),
-              meta: {
-                tutor: session.tutor as string,
-                student: session.student as string,
-              }
+              meta: session
             });
           });
           this.events = calEvents;
@@ -152,14 +150,9 @@ export class EventCalendar implements OnInit {
 
   dayClicked({ date, events }: { date: Date; events: CalendarEvent[] }): void {
     console.log("Clicked: " + date.toLocaleDateString());
-    let temp: any[] = [];
+    let temp: Session[] = [];
     events.forEach((event) => {
-      temp.push({
-        tutor: event.meta.tutor,
-        student: event.meta.student,
-        start: event.start,
-        end: event.end ? event.end : new Date(),
-      });
+      temp.push(event.meta);
     });
     this.eventData = temp;
     this.cdr.markForCheck();
@@ -172,10 +165,52 @@ export class EventCalendar implements OnInit {
       data: {type: 'create', session: new Session()},
     });
 
-    sessionDialogRef.afterClosed().subscribe(result => {
+    sessionDialogRef.afterClosed().subscribe((result: Session): void => {
       console.log('The dialog was closed');
       if (result !== undefined) {
         console.log(result);
+        // TODO: check if result is the same day as events in eventData
+        this.eventData = this.eventData.concat(result);
+        this.cdr.markForCheck();
+        this.updateSessionsData();
+      }
+    });
+  }
+
+  openEditSessionDialog(item: any): void {
+    console.log('openEditSessionDialog');
+    const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
+      data: {type: 'edit', session: item},
+    });
+
+    sessionDialogRef.afterClosed().subscribe((result: Session): void => {
+      console.log('The dialog was closed');
+      if (result !== undefined) {
+        console.log(result);
+        this.eventData = this.eventData.map((session: Session): Session => {
+          if(session.id === result.id) {
+            return result;
+          }
+          return session;
+        });
+        this.cdr.markForCheck();
+        this.updateSessionsData();
+      }
+    });
+  }
+
+  openDeleteSessionDialog(item: any): void {
+    console.log('openDeleteSessionDialog');
+    const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
+      data: {type: 'delete', session: item},
+    });
+
+    sessionDialogRef.afterClosed().subscribe((result: Response): void => {
+      console.log('The dialog was closed');
+      if (result !== undefined) {
+        console.log(result);
+        this.eventData = this.eventData.filter(session => session.id !== result.id);
+        this.cdr.markForCheck();
         this.updateSessionsData();
       }
     });
