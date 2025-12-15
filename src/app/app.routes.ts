@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import {EventCalendar} from './event-calendar/event-calendar';
 import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
+import {SessionsTable} from './sessions-table/sessions-table';
 
 export const routes: Routes = [
   {
@@ -16,6 +17,11 @@ export const routes: Routes = [
   {
     path: 'calendar',
     component: EventCalendar,
+    canActivate: [AuthGuard],
+  },
+  {
+    path: 'sessions',
+    component: SessionsTable,
     canActivate: [AuthGuard],
   },
   {

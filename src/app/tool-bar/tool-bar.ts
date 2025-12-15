@@ -10,6 +10,7 @@ import {AuthService} from '../services/auth.service';
 import {MatDialog} from '@angular/material/dialog';
 import {SessionDialog} from '../session-dialog/session-dialog';
 import {Session} from '../models/session.model';
+import {Router} from '@angular/router';
 
 @Component({
   selector: 'app-tool-bar',
@@ -22,22 +23,21 @@ import {Session} from '../models/session.model';
 export class ToolBar {
   authService: AuthService = inject(AuthService);
   readonly sessionDialog = inject(MatDialog);
+  router: Router = inject(Router);
 
   logout(): void {
     this.authService.logout();
   }
 
-  openCreateSessionDialog(): void {
-    console.log('openCreateSessionDialog');
-    const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
-      data: {type: 'create', session: new Session()},
-    });
+  calendarNav(): void {
+    this.router.navigate(['/calendar']);
+  }
 
-    sessionDialogRef.afterClosed().subscribe(result => {
-      console.log('The dialog was closed');
-      if (result !== undefined) {
-        console.log(result);
-      }
-    });
+  sessionsNav(): void {
+    this.router.navigate(['/sessions']);
+  }
+
+  clientsNav(): void {
+    console.log('Clients Nav');
   }
 }

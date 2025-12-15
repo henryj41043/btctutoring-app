@@ -46,33 +46,24 @@ export class SessionDialog implements OnInit {
   hasError: boolean = false;
   selectedTutor: any;
   selectedStudent: any;
+  selectedAttendance: any;
+  attendanceOptions = [
+    { value: 'Pending' },
+    { value: 'Attended' },
+    { value: 'Makeup' },
+    { value: 'NCNS' },
+  ];
   tutors = [
-    {
-      name: 'Mario',
-    },
-    {
-      name: 'Peach',
-    },
-    {
-      name: 'Yoshi',
-    },
-    {
-      name: 'Luigi',
-    },
+    { name: 'Mario' },
+    { name: 'Peach' },
+    { name: 'Yoshi' },
+    { name: 'Luigi' },
   ];
   students = [
-    {
-      name: 'Bowser',
-    },
-    {
-      name: 'Koopa',
-    },
-    {
-      name: 'Toad',
-    },
-    {
-      name: 'Boo',
-    },
+    { name: 'Bowser' },
+    { name: 'Koopa' },
+    { name: 'Toad' },
+    { name: 'Boo' },
   ];
   readonly dialogRef = inject(MatDialogRef<SessionDialog>);
   readonly dialogData = inject<SessionDialogData>(MAT_DIALOG_DATA);
@@ -85,6 +76,13 @@ export class SessionDialog implements OnInit {
       this.date = new Date(this.dialogData.session.start as string);
       this.startTime = new Date(this.dialogData.session.start as string);
       this.endTime = new Date(this.dialogData.session.end as string);
+      if(!this.dialogData.session.completed && !this.dialogData.session.makeup) {
+        this.selectedAttendance = 'Pending';
+      } else if(this.dialogData.session.completed && !this.dialogData.session.makeup) {
+        this.selectedAttendance = 'Attended';
+      } else if(!this.dialogData.session.completed && this.dialogData.session.makeup) {
+        this.selectedAttendance = 'Makeup';
+      }
     }
   }
 
@@ -153,8 +151,23 @@ export class SessionDialog implements OnInit {
       session.student = this.selectedStudent;
       session.start = submitStartDate.toISOString();
       session.end = submitEndDate.toISOString();
-      session.completed = false;
-      session.makeup = false;
+      switch (this.selectedAttendance) {
+        case 'Pending':
+          session.completed = false;
+          session.makeup = false;
+          break;
+        case 'Attended':
+          session.completed = true;
+          session.makeup = false;
+          break;
+        case 'Makeup':
+          session.completed = false;
+          session.makeup = true;
+          break;
+        default:
+          session.completed = false;
+          session.makeup = false;
+      }
       session.id = this.dialogData.session.id;
       console.log(session);
       this.sessionsService.updateSession(session).pipe(

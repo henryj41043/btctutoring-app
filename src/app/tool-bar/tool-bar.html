@@ -3,8 +3,10 @@
     <mat-icon>menu</mat-icon>
   </button>
   <mat-menu #actionMenu="matMenu">
-    @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
-      <button mat-menu-item (click)="openCreateSessionDialog()">Add Session</button>
+    @if (authService.loggedIn()) {
+      <button mat-menu-item (click)="calendarNav()">Calendar</button>
+      <button mat-menu-item (click)="sessionsNav()">Sessions</button>
+      <button mat-menu-item (click)="clientsNav()">Clients</button>
     }
   </mat-menu>
   <img ngSrc="assets/BTC_Transparent_BG.png" alt="" height="100" width="100" priority/>

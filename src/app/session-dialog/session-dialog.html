@@ -50,6 +50,16 @@
     <mat-timepicker interval="15min" #endtimepicker/>
     <mat-timepicker-toggle [for]="endtimepicker" matSuffix/>
   </mat-form-field>
+  @if (dialogData.type !== 'create') {
+    <mat-form-field>
+      <mat-label>Take Attendance</mat-label>
+      <mat-select [(ngModel)]="selectedAttendance">
+        @for (option of attendanceOptions; track option) {
+          <mat-option [value]="option.value">{{option.value}}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  }
   <br/>
   @if (hasError) {
     <mat-error>{{errorMessage}}</mat-error>

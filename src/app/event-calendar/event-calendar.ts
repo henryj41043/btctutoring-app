@@ -1,9 +1,20 @@
-import {Component, OnInit, Inject, Renderer2, ChangeDetectionStrategy, ChangeDetectorRef, inject} from '@angular/core';
-import {DatePipe, DOCUMENT} from '@angular/common';
+import {
+  Component,
+  OnInit,
+  Inject,
+  Renderer2,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  inject,
+  LOCALE_ID
+} from '@angular/core';
+import {DOCUMENT, formatDate} from '@angular/common';
 import {
   CalendarDatePipe,
   CalendarDayViewComponent,
   CalendarEvent,
+  CalendarEventAction,
+  CalendarEventTimesChangedEvent,
   CalendarMonthViewComponent,
   CalendarNextViewDirective,
   CalendarPreviousViewDirective,
@@ -21,10 +32,31 @@ import {Session} from '../models/session.model';
 import {MatDialog} from '@angular/material/dialog';
 import {SessionsService} from '../services/sessions.service';
 import {AuthService} from '../services/auth.service';
-import {catchError, Observable} from 'rxjs';
+import {catchError, Observable, Subject} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {Response} from '../models/response.model';
+import {isSameDay, isSameMonth} from 'date-fns';
+import { EventColor } from 'calendar-utils';
+
+const colors: Record<string, EventColor> = {
+  red: {
+    primary: '#ad2121',
+    secondary: '#ff7f7f',
+  },
+  blue: {
+    primary: '#0083ff',
+    secondary: '#53a8ff',
+  },
+  yellow: {
+    primary: '#e3bc08',
+    secondary: '#FDF1BA',
+  },
+  green: {
+    primary: '#18c100',
+    secondary: '#87ff78',
+  },
+};
 
 @Component({
   selector: 'app-event-calendar',
@@ -40,7 +72,6 @@ import {Response} from '../models/response.model';
     MatCardModule,
     MatTableModule,
     MatIconModule,
-    DatePipe,
   ],
   templateUrl: './event-calendar.html',
   styleUrl: './event-calendar.scss',
@@ -54,15 +85,32 @@ import {Response} from '../models/response.model';
   standalone: true
 })
 export class EventCalendar implements OnInit {
+  private locale = inject(LOCALE_ID);
   readonly CalendarView: typeof CalendarView = CalendarView;
   readonly sessionDialog: MatDialog = inject(MatDialog);
   sessionsService: SessionsService = inject(SessionsService);
   authService: AuthService = inject(AuthService);
   view: CalendarView = CalendarView.Month;
   viewDate: Date = new Date();
-  eventColumns: string[] = ['tutor', 'student', 'start', 'end', 'edit', 'delete'];
-  eventData: Session[] = [];
   events: CalendarEvent<Session>[] = [];
+  actions: CalendarEventAction[] = [
+    {
+      label: '<i class="fas fa-fw fa-pencil-alt"></i>',
+      a11yLabel: 'Edit',
+      onClick: ({ event }: { event: CalendarEvent }): void => {
+        this.handleEvent('Edited', event);
+      },
+    },
+    {
+      label: '<i class="fas fa-fw fa-trash-alt"></i>',
+      a11yLabel: 'Delete',
+      onClick: ({ event }: { event: CalendarEvent }): void => {
+        this.handleEvent('Deleted', event);
+      },
+    },
+  ];
+  refresh = new Subject<void>();
+  activeDayIsOpen: boolean = false;
 
   constructor(
     private renderer: Renderer2,
@@ -102,11 +150,26 @@ export class EventCalendar implements OnInit {
           let sessions: Session[] = response as Session[];
           let calEvents: CalendarEvent<Session>[] = [];
           sessions.forEach((session: Session): void => {
+            let color: EventColor = colors['yellow'];
+            if(!session.completed && !session.makeup){
+              color = colors['yellow'];
+            } else if(session.completed && !session.makeup){
+              color = colors['green'];
+            } else if(!session.completed && session.makeup) {
+              color = colors['red'];
+            }
             calEvents.push({
-              title: 'Tutor Session',
+              title: `${session.tutor} with ${session.student} - ${formatDate(new Date(session.start as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end as string), 'h:m a', this.locale)}`,
               start: new Date(session.start as string),
               end: new Date(session.end as string),
-              meta: session
+              meta: session,
+              actions: this.actions,
+              color: color,
+              resizable: {
+                beforeStart: true,
+                afterEnd: true,
+              },
+              draggable: true,
             });
           });
           this.events = calEvents;
@@ -125,11 +188,26 @@ export class EventCalendar implements OnInit {
           let sessions: Session[] = response as Session[];
           let calEvents: CalendarEvent<Session>[] = [];
           sessions.forEach((session: Session): void => {
+            let color: EventColor = colors['yellow'];
+            if(!session.completed && !session.makeup){
+              color = colors['yellow'];
+            } else if(session.completed && !session.makeup){
+              color = colors['green'];
+            } else if(!session.completed && session.makeup) {
+              color = colors['red'];
+            }
             calEvents.push({
-              title: 'Tutor Session',
+              title: `${session.tutor} with ${session.student} - ${formatDate(new Date(session.start as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end as string), 'h:m a', this.locale)}`,
               start: new Date(session.start as string),
               end: new Date(session.end as string),
-              meta: session
+              meta: session,
+              actions: this.actions,
+              color: color,
+              resizable: {
+                beforeStart: true,
+                afterEnd: true,
+              },
+              draggable: true,
             });
           });
           this.events = calEvents;
@@ -146,17 +224,48 @@ export class EventCalendar implements OnInit {
   closeOpenMonthViewDay() {
     console.log(this.view);
     console.log(this.viewDate);
+    this.activeDayIsOpen = false;
   }
 
   dayClicked({ date, events }: { date: Date; events: CalendarEvent[] }): void {
     console.log("Clicked: " + date.toLocaleDateString());
-    let temp: Session[] = [];
-    events.forEach((event) => {
-      temp.push(event.meta);
+    if (isSameMonth(date, this.viewDate)) {
+      this.activeDayIsOpen = !((isSameDay(this.viewDate, date) && this.activeDayIsOpen) || events.length === 0);
+      this.viewDate = date;
+    }
+  }
+
+  eventTimesChanged({event, newStart, newEnd,}: CalendarEventTimesChangedEvent): void {
+    this.events = this.events.map((iEvent) => {
+      if (iEvent === event) {
+        event.meta.start = newStart.toISOString();
+        event.meta.end = newEnd?.toISOString();
+        return {
+          ...event,
+          start: newStart,
+          end: newEnd,
+        };
+      }
+      return iEvent;
     });
-    this.eventData = temp;
-    this.cdr.markForCheck();
-    console.log(this.eventData);
+    this.handleEvent('Dropped or resized', event);
+  }
+
+  handleEvent(action: string, event: CalendarEvent): void {
+    switch (action) {
+      case 'Edited':
+        this.openEditSessionDialog(event.meta);
+        break;
+      case 'Clicked':
+        this.openEditSessionDialog(event.meta);
+        break;
+      case 'Dropped or resized':
+        this.openEditSessionDialog(event.meta);
+        break;
+      case 'Deleted':
+        this.openDeleteSessionDialog(event.meta);
+        break;
+    }
   }
 
   openCreateSessionDialog(): void {
@@ -169,9 +278,6 @@ export class EventCalendar implements OnInit {
       console.log('The dialog was closed');
       if (result !== undefined) {
         console.log(result);
-        // TODO: check if result is the same day as events in eventData
-        this.eventData = this.eventData.concat(result);
-        this.cdr.markForCheck();
         this.updateSessionsData();
       }
     });
@@ -187,13 +293,6 @@ export class EventCalendar implements OnInit {
       console.log('The dialog was closed');
       if (result !== undefined) {
         console.log(result);
-        this.eventData = this.eventData.map((session: Session): Session => {
-          if(session.id === result.id) {
-            return result;
-          }
-          return session;
-        });
-        this.cdr.markForCheck();
         this.updateSessionsData();
       }
     });
@@ -209,8 +308,6 @@ export class EventCalendar implements OnInit {
       console.log('The dialog was closed');
       if (result !== undefined) {
         console.log(result);
-        this.eventData = this.eventData.filter(session => session.id !== result.id);
-        this.cdr.markForCheck();
         this.updateSessionsData();
       }
     });
