@@ -36,6 +36,7 @@ import {catchError, Observable} from 'rxjs';
     MatSelectModule,
   ],
   templateUrl: './session-dialog.html',
+  standalone: true,
   styleUrl: './session-dialog.scss'
 })
 export class SessionDialog implements OnInit {
@@ -43,14 +44,15 @@ export class SessionDialog implements OnInit {
   endTime: Date | undefined;
   date: Date | undefined;
   errorMessage: String = '';
+  notes: string = '';
   hasError: boolean = false;
   selectedTutor: any;
   selectedStudent: any;
   selectedAttendance: any;
   attendanceOptions = [
-    { value: 'Pending' },
-    { value: 'Attended' },
-    { value: 'Makeup' },
+    { value: 'pending' },
+    { value: 'completed' },
+    { value: 'makeup' },
     { value: 'NCNS' },
   ];
   tutors = [
@@ -71,18 +73,13 @@ export class SessionDialog implements OnInit {
 
   ngOnInit(): void {
     if(this.dialogData.type !== 'create') {
-      this.selectedStudent = this.dialogData.session.student;
-      this.selectedTutor = this.dialogData.session.tutor;
-      this.date = new Date(this.dialogData.session.start as string);
-      this.startTime = new Date(this.dialogData.session.start as string);
-      this.endTime = new Date(this.dialogData.session.end as string);
-      if(!this.dialogData.session.completed && !this.dialogData.session.makeup) {
-        this.selectedAttendance = 'Pending';
-      } else if(this.dialogData.session.completed && !this.dialogData.session.makeup) {
-        this.selectedAttendance = 'Attended';
-      } else if(!this.dialogData.session.completed && this.dialogData.session.makeup) {
-        this.selectedAttendance = 'Makeup';
-      }
+      this.selectedStudent = this.dialogData.session.student_name;
+      this.selectedTutor = this.dialogData.session.tutor_name;
+      this.date = new Date(this.dialogData.session.start_datetime as string);
+      this.startTime = new Date(this.dialogData.session.start_datetime as string);
+      this.endTime = new Date(this.dialogData.session.end_datetime as string);
+      this.selectedAttendance = this.dialogData.session.status;
+      this.notes = this.dialogData.session.notes as string;
     }
   }
 
@@ -104,12 +101,14 @@ export class SessionDialog implements OnInit {
       submitEndDate.setHours(this.endTime.getHours());
       submitEndDate.setMinutes(this.endTime.getMinutes());
       let session: Session = new Session();
-      session.tutor = this.selectedTutor;
-      session.student = this.selectedStudent;
-      session.start = submitStartDate.toISOString();
-      session.end = submitEndDate.toISOString();
-      session.completed = false;
-      session.makeup = false;
+      session.tutor_name = this.selectedTutor;
+      session.tutor_id = 'henry41043+' + this.selectedTutor.toLowerCase() + '@gmail.com';
+      session.student_name = this.selectedStudent;
+      session.student_id = 'henry41043+' + this.selectedStudent.toLowerCase() + '@gmail.com';
+      session.start_datetime = submitStartDate.toISOString();
+      session.end_datetime = submitEndDate.toISOString();
+      session.status = this.selectedAttendance;
+      session.notes = this.notes;
       console.log(session);
       this.sessionsService.createSession(session).pipe(
         catchError(err =>  {
@@ -147,27 +146,14 @@ export class SessionDialog implements OnInit {
       submitEndDate.setHours(this.endTime.getHours());
       submitEndDate.setMinutes(this.endTime.getMinutes());
       let session: Session = new Session();
-      session.tutor = this.selectedTutor;
-      session.student = this.selectedStudent;
-      session.start = submitStartDate.toISOString();
-      session.end = submitEndDate.toISOString();
-      switch (this.selectedAttendance) {
-        case 'Pending':
-          session.completed = false;
-          session.makeup = false;
-          break;
-        case 'Attended':
-          session.completed = true;
-          session.makeup = false;
-          break;
-        case 'Makeup':
-          session.completed = false;
-          session.makeup = true;
-          break;
-        default:
-          session.completed = false;
-          session.makeup = false;
-      }
+      session.tutor_name = this.selectedTutor;
+      session.tutor_id = 'henry41043+' + this.selectedTutor.toLowerCase() + '@gmail.com';
+      session.student_name = this.selectedStudent;
+      session.student_id = 'henry41043+' + this.selectedStudent.toLowerCase() + '@gmail.com';
+      session.start_datetime = submitStartDate.toISOString();
+      session.end_datetime = submitEndDate.toISOString();
+      session.status = this.selectedAttendance;
+      session.notes = this.notes;
       session.id = this.dialogData.session.id;
       console.log(session);
       this.sessionsService.updateSession(session).pipe(

@@ -21,6 +21,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
     MatProgressSpinnerModule,
   ],
   templateUrl: './login.html',
+  standalone: true,
   styleUrl: './login.scss'
 })
 export class Login {

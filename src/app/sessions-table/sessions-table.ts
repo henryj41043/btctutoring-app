@@ -30,7 +30,7 @@ export class SessionsTable implements OnInit {
   readonly sessionDialog: MatDialog = inject(MatDialog);
   sessionsService: SessionsService = inject(SessionsService);
   authService: AuthService = inject(AuthService);
-  eventColumns: string[] = ['date', 'tutor', 'student', 'start', 'end', 'attendance', 'edit', 'delete'];
+  eventColumns: string[] = ['date', 'tutor', 'student', 'start', 'end', 'attendance', 'notes', 'edit', 'delete'];
   eventData: Session[] = [];
 
   constructor(private cdr: ChangeDetectorRef) {}

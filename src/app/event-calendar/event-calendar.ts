@@ -150,18 +150,11 @@ export class EventCalendar implements OnInit {
           let sessions: Session[] = response as Session[];
           let calEvents: CalendarEvent<Session>[] = [];
           sessions.forEach((session: Session): void => {
-            let color: EventColor = colors['yellow'];
-            if(!session.completed && !session.makeup){
-              color = colors['yellow'];
-            } else if(session.completed && !session.makeup){
-              color = colors['green'];
-            } else if(!session.completed && session.makeup) {
-              color = colors['red'];
-            }
+            let color: EventColor = this.setColor(session.status as string);
             calEvents.push({
-              title: `${session.tutor} with ${session.student} - ${formatDate(new Date(session.start as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end as string), 'h:m a', this.locale)}`,
-              start: new Date(session.start as string),
-              end: new Date(session.end as string),
+              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:m a', this.locale)}`,
+              start: new Date(session.start_datetime as string),
+              end: new Date(session.end_datetime as string),
               meta: session,
               actions: this.actions,
               color: color,
@@ -188,18 +181,11 @@ export class EventCalendar implements OnInit {
           let sessions: Session[] = response as Session[];
           let calEvents: CalendarEvent<Session>[] = [];
           sessions.forEach((session: Session): void => {
-            let color: EventColor = colors['yellow'];
-            if(!session.completed && !session.makeup){
-              color = colors['yellow'];
-            } else if(session.completed && !session.makeup){
-              color = colors['green'];
-            } else if(!session.completed && session.makeup) {
-              color = colors['red'];
-            }
+            let color: EventColor = this.setColor(session.status as string);
             calEvents.push({
-              title: `${session.tutor} with ${session.student} - ${formatDate(new Date(session.start as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end as string), 'h:m a', this.locale)}`,
-              start: new Date(session.start as string),
-              end: new Date(session.end as string),
+              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:m a', this.locale)}`,
+              start: new Date(session.start_datetime as string),
+              end: new Date(session.end_datetime as string),
               meta: session,
               actions: this.actions,
               color: color,
@@ -214,6 +200,19 @@ export class EventCalendar implements OnInit {
           this.cdr.markForCheck();
         }
       );
+    }
+  }
+
+  private setColor(status: string): EventColor {
+    switch (status) {
+      case 'pending':
+        return colors['yellow'];
+      case 'completed':
+        return colors['green'];
+      case 'makeup':
+        return colors['red'];
+      default:
+        return colors['yellow'];
     }
   }
 

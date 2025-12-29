@@ -61,6 +61,11 @@
     </mat-form-field>
   }
   <br/>
+  <mat-form-field>
+    <mat-label>Notes</mat-label>
+    <textarea matInput [(ngModel)]="notes"></textarea>
+  </mat-form-field>
+  <br/>
   @if (hasError) {
     <mat-error>{{errorMessage}}</mat-error>
   }

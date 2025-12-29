@@ -7,9 +7,6 @@ import {MatMenuModule} from '@angular/material/menu';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
-import {MatDialog} from '@angular/material/dialog';
-import {SessionDialog} from '../session-dialog/session-dialog';
-import {Session} from '../models/session.model';
 import {Router} from '@angular/router';
 
 @Component({
@@ -22,7 +19,6 @@ import {Router} from '@angular/router';
 })
 export class ToolBar {
   authService: AuthService = inject(AuthService);
-  readonly sessionDialog = inject(MatDialog);
   router: Router = inject(Router);
 
   logout(): void {
