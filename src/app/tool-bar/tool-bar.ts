@@ -34,6 +34,6 @@ export class ToolBar {
   }
 
   clientsNav(): void {
-    console.log('Clients Nav');
+    this.router.navigate(['/clients']);
   }
 }
