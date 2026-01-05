@@ -8,33 +8,85 @@
     </mat-card-actions>
     <mat-card-content>
       <table mat-table [dataSource]="clientData" class="mat-elevation-z8">
-        <ng-container matColumnDef="date">
-          <th mat-header-cell *matHeaderCellDef> Date </th>
-          <td mat-cell *matCellDef="let item"> {{item.start_datetime | date:'MM/dd/yyyy'}} </td>
+        <ng-container matColumnDef="parent_name">
+          <th mat-header-cell *matHeaderCellDef> Parent </th>
+          <td mat-cell *matCellDef="let item"> {{item.parent_name}} </td>
         </ng-container>
-        <ng-container matColumnDef="tutor">
-          <th mat-header-cell *matHeaderCellDef> Tutor </th>
-          <td mat-cell *matCellDef="let item"> {{item.tutor_name}} </td>
+        <ng-container matColumnDef="email">
+          <th mat-header-cell *matHeaderCellDef> Email </th>
+          <td mat-cell *matCellDef="let item"> {{item.email}} </td>
         </ng-container>
-        <ng-container matColumnDef="student">
+        <ng-container matColumnDef="phone_number">
+          <th mat-header-cell *matHeaderCellDef> Phone # </th>
+          <td mat-cell *matCellDef="let item"> {{item.phone_number}} </td>
+        </ng-container>
+        <ng-container matColumnDef="student_name">
           <th mat-header-cell *matHeaderCellDef> Student </th>
           <td mat-cell *matCellDef="let item"> {{item.student_name}} </td>
         </ng-container>
-        <ng-container matColumnDef="start">
-          <th mat-header-cell *matHeaderCellDef> Start </th>
-          <td mat-cell *matCellDef="let item"> {{item.start_datetime | date:'h:mm a'}} </td>
+        <ng-container matColumnDef="service">
+          <th mat-header-cell *matHeaderCellDef> Service </th>
+          <td mat-cell *matCellDef="let item"> {{item.service}} </td>
         </ng-container>
-        <ng-container matColumnDef="end">
-          <th mat-header-cell *matHeaderCellDef> End </th>
-          <td mat-cell *matCellDef="let item"> {{item.end_datetime | date:'h:mm a'}} </td>
-        </ng-container>
-        <ng-container matColumnDef="attendance">
-          <th mat-header-cell *matHeaderCellDef> Attendance </th>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef> Status </th>
           <td mat-cell *matCellDef="let item"> {{item.status}} </td>
+        </ng-container>
+        <ng-container matColumnDef="package">
+          <th mat-header-cell *matHeaderCellDef> Package </th>
+          <td mat-cell *matCellDef="let item"> {{item.package}} </td>
+        </ng-container>
+        <ng-container matColumnDef="assigned_tutor">
+          <th mat-header-cell *matHeaderCellDef> Tutor </th>
+          <td mat-cell *matCellDef="let item"> {{item.assigned_tutor}} </td>
         </ng-container>
         <ng-container matColumnDef="notes">
           <th mat-header-cell *matHeaderCellDef> Notes </th>
           <td mat-cell *matCellDef="let item"> {{item.notes}} </td>
+        </ng-container>
+        <ng-container matColumnDef="sessions">
+          <th mat-header-cell *matHeaderCellDef> Sessions </th>
+          <td mat-cell *matCellDef="let item"> {{item.sessions}} </td>
+        </ng-container>
+        <ng-container matColumnDef="makeup_sessions">
+          <th mat-header-cell *matHeaderCellDef> Makeup </th>
+          <td mat-cell *matCellDef="let item"> {{item.makeup_sessions}} </td>
+        </ng-container>
+        <ng-container matColumnDef="completed_sessions">
+          <th mat-header-cell *matHeaderCellDef> Completed </th>
+          <td mat-cell *matCellDef="let item"> {{item.completed_sessions}} </td>
+        </ng-container>
+        <ng-container matColumnDef="billing_cycle">
+          <th mat-header-cell *matHeaderCellDef> Billing Cycle </th>
+          <td mat-cell *matCellDef="let item"> {{item.billing_cycle}} </td>
+        </ng-container>
+        <ng-container matColumnDef="inquiry_date">
+          <th mat-header-cell *matHeaderCellDef> Inquiry Date </th>
+          <td mat-cell *matCellDef="let item"> {{item.inquiry_date | date:'MM/dd/yyyy'}} </td>
+        </ng-container>
+        <ng-container matColumnDef="interview_scheduled">
+          <th mat-header-cell *matHeaderCellDef> Interview Scheduled </th>
+          <td mat-cell *matCellDef="let item"> {{item.interview_scheduled}} </td>
+        </ng-container>
+        <ng-container matColumnDef="student_birthday">
+          <th mat-header-cell *matHeaderCellDef> Birthday </th>
+          <td mat-cell *matCellDef="let item"> {{item.student_birthday}} </td>
+        </ng-container>
+        <ng-container matColumnDef="registration_received">
+          <th mat-header-cell *matHeaderCellDef> Registration Received </th>
+          <td mat-cell *matCellDef="let item"> {{item.registration_received}} </td>
+        </ng-container>
+        <ng-container matColumnDef="scholarship">
+          <th mat-header-cell *matHeaderCellDef> Scholarship </th>
+          <td mat-cell *matCellDef="let item"> {{item.scholarship}} </td>
+        </ng-container>
+        <ng-container matColumnDef="scholarship_name">
+          <th mat-header-cell *matHeaderCellDef> Scholarship Name </th>
+          <td mat-cell *matCellDef="let item"> {{item.scholarship_name}} </td>
+        </ng-container>
+        <ng-container matColumnDef="btc_and_me_enrolled">
+          <th mat-header-cell *matHeaderCellDef> BTC + Me Enrolled </th>
+          <td mat-cell *matCellDef="let item"> {{item.btc_and_me_enrolled}} </td>
         </ng-container>
         <ng-container matColumnDef="edit">
           <th mat-header-cell *matHeaderCellDef></th>

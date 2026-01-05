@@ -1,0 +1,25 @@
+<h2 mat-dialog-title>
+  @if (dialogData.type === 'create') {
+    Create New Client
+  } @else if (dialogData.type === 'edit') {
+    Update Client
+  } @else if (dialogData.type === 'delete') {
+    Confirm Delete Client
+  }
+</h2>
+<mat-dialog-content>
+  <mat-form-field>
+    <mat-label>Parent Name</mat-label>
+    <input matInput [(ngModel)]="parentName">
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions>
+  <button matButton (click)="cancel()">Cancel</button>
+  @if (dialogData.type === 'create') {
+    <button matButton (click)="createClient()">Create</button>
+  } @else if (dialogData.type === 'edit') {
+    <button matButton (click)="updateClient()">Update</button>
+  } @else if (dialogData.type === 'delete') {
+    <button matButton (click)="deleteClient()">Confirm</button>
+  }
+</mat-dialog-actions>
