@@ -152,7 +152,7 @@ export class EventCalendar implements OnInit {
           sessions.forEach((session: Session): void => {
             let color: EventColor = this.setColor(session.status as string);
             calEvents.push({
-              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:m a', this.locale)}`,
+              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`,
               start: new Date(session.start_datetime as string),
               end: new Date(session.end_datetime as string),
               meta: session,
@@ -183,7 +183,7 @@ export class EventCalendar implements OnInit {
           sessions.forEach((session: Session): void => {
             let color: EventColor = this.setColor(session.status as string);
             calEvents.push({
-              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:m a', this.locale)}`,
+              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`,
               start: new Date(session.start_datetime as string),
               end: new Date(session.end_datetime as string),
               meta: session,
