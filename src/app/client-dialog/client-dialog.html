@@ -1,3 +1,4 @@
+<div class="client-dialog-container">
 <h2 mat-dialog-title>
   @if (dialogData.type === 'create') {
     Create New Client
@@ -7,10 +8,98 @@
     Confirm Delete Client
   }
 </h2>
-<mat-dialog-content>
+<mat-dialog-content class="client-dialog-content">
   <mat-form-field>
     <mat-label>Parent Name</mat-label>
     <input matInput [(ngModel)]="parentName">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Student Name</mat-label>
+    <input matInput [(ngModel)]="studentName">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Email</mat-label>
+    <input matInput [(ngModel)]="email">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Select Tutor</mat-label>
+    <mat-select [(ngModel)]="assignedTutor">
+      @for (tutor of tutorOptions; track tutor) {
+        <mat-option [value]="tutor">{{tutor}}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Billing Cycle</mat-label>
+    <mat-select [(ngModel)]="billingCycle">
+      @for (cycle of billingCycleOptions; track cycle) {
+        <mat-option [value]="cycle">{{cycle}}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-checkbox [checked]="btcAndMeEnrolled">BTC & Me Enrolled</mat-checkbox>
+  <mat-form-field>
+    <mat-label>Completed Sessions</mat-label>
+    <input matInput [(ngModel)]="completedSessions">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Inquiry Date</mat-label>
+    <input matInput [matDatepicker]="datepicker" [(ngModel)]="inquiryDate">
+    <mat-datepicker #datepicker/>
+    <mat-datepicker-toggle [for]="datepicker" matSuffix/>
+  </mat-form-field>
+  <mat-checkbox [checked]="interviewScheduled">Interview Scheduled</mat-checkbox>
+  <mat-form-field>
+    <mat-label>Makeup Sessions</mat-label>
+    <input matInput [(ngModel)]="makeupSessions">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Notes</mat-label>
+    <textarea matInput [(ngModel)]="notes"></textarea>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Package</mat-label>
+    <mat-select [(ngModel)]="package">
+      @for (packageOption of packageOptions; track packageOption) {
+        <mat-option [value]="packageOption">{{packageOption}}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Phone Number</mat-label>
+    <input matInput [(ngModel)]="phoneNumber">
+  </mat-form-field>
+  <mat-checkbox [checked]="registrationReceived">Registration Received</mat-checkbox>
+  <mat-checkbox [checked]="scholarship">Scholarship</mat-checkbox>
+  <mat-form-field>
+    <mat-label>Scholarship Name</mat-label>
+    <input matInput [(ngModel)]="scholarshipName">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Service</mat-label>
+    <mat-select [(ngModel)]="service">
+      @for (serviceOption of serviceOptions; track serviceOption) {
+        <mat-option [value]="serviceOption">{{serviceOption}}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Sessions</mat-label>
+    <input matInput [(ngModel)]="sessions">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Status</mat-label>
+    <mat-select [(ngModel)]="status">
+      @for (statusOption of statusOptions; track statusOption) {
+        <mat-option [value]="statusOption">{{statusOption}}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Student Birthday</mat-label>
+    <input matInput [matDatepicker]="birthdaydatepicker" [(ngModel)]="studentBirthday">
+    <mat-datepicker #birthdaydatepicker/>
+    <mat-datepicker-toggle [for]="birthdaydatepicker" matSuffix/>
   </mat-form-field>
 </mat-dialog-content>
 <mat-dialog-actions>
@@ -23,3 +112,4 @@
     <button matButton (click)="deleteClient()">Confirm</button>
   }
 </mat-dialog-actions>
+</div>

@@ -80,6 +80,10 @@ export class ClientsTable implements OnInit {
     console.log('openCreateClientDialog');
     const clientDialogRef = this.clientDialog.open(ClientDialog, {
       data: {type: 'create', client: new Client()},
+      maxWidth: '80vw',
+      width: 'auto',
+      maxHeight: '80vh',
+      height: 'auto',
     });
 
     clientDialogRef.afterClosed().subscribe((result: Client): void => {
@@ -96,6 +100,10 @@ export class ClientsTable implements OnInit {
     console.log('openEditClientDialog');
     const clientDialogRef = this.clientDialog.open(ClientDialog, {
       data: {type: 'edit', client: item},
+      maxWidth: '80vw',
+      width: 'auto',
+      maxHeight: '80vh',
+      height: 'auto',
     });
 
     clientDialogRef.afterClosed().subscribe((result: Client): void => {
@@ -117,6 +125,10 @@ export class ClientsTable implements OnInit {
     console.log('openDeleteClientDialog');
     const clientDialogRef = this.clientDialog.open(ClientDialog, {
       data: {type: 'delete', client: item},
+      maxWidth: '80vw',
+      width: 'auto',
+      maxHeight: '80vh',
+      height: 'auto',
     });
 
     clientDialogRef.afterClosed().subscribe((result: Response): void => {
