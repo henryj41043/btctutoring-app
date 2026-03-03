@@ -43,7 +43,6 @@ export class ClientsTable implements OnInit {
     'completed_sessions',
     'billing_cycle',
     'inquiry_date',
-    'interview_scheduled',
     'student_birthday',
     'registration_received',
     'scholarship',

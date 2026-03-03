@@ -11,6 +11,7 @@ import {Router} from '@angular/router';
 export class AuthService {
   private baseUrl: string = environment.btctutoringServiceUrl;
   private _loggedIn: WritableSignal<boolean> = signal(false);
+  private _resetPassword: WritableSignal<boolean> = signal(false);
   private _user: WritableSignal<User> = signal({
     username: '',
     email: '',
@@ -20,28 +21,50 @@ export class AuthService {
   readonly loggedIn: Signal<boolean> = this._loggedIn.asReadonly();
   readonly user: Signal<User> = this._user.asReadonly();
   readonly hasError: Signal<boolean> = this._hasError.asReadonly();
+  readonly resetPassword: Signal<boolean> = this._resetPassword.asReadonly();
   httpClient: HttpClient = inject(HttpClient);
   router: Router = inject(Router);
 
   login(email: string, password: string): void {
     console.log('Attempting login with:', email, password);
     this._hasError.set(false);
-    this.httpClient.post(`${this.baseUrl}/auth/login`, {
-      email: email,
-      password: password
-    })
-      .pipe(
-        catchError( (error: any): any => {
+    if(this.resetPassword()) {
+      this.httpClient.post(`${this.baseUrl}/auth/complete-new-password`, {
+        username: email,
+        newPassword: password,
+        session: sessionStorage.getItem('sessionToken'),
+      }).pipe(
+        catchError((error: any): any => {
           console.log(error);
           this._hasError.set(true);
         })
-      )
-      .subscribe((response: any): void => {
-        // TODO: store tokens somewhere safer than session storage
-        sessionStorage.setItem('accessToken', response.accessToken);
-        sessionStorage.setItem('idToken', response.idToken);
+      ).subscribe((response: any): void => {
+        sessionStorage.setItem('accessToken', response.AccessToken);
+        sessionStorage.setItem('idToken', response.IdToken);
         this.getUser();
       });
+    } else {
+      this.httpClient.post(`${this.baseUrl}/auth/login`, {
+        email: email,
+        password: password
+      })
+        .pipe(
+          catchError((error: any): any => {
+            console.log(error);
+            this._hasError.set(true);
+          })
+        )
+        .subscribe((response: any): void => {
+          if(response.message === 'NEW_PASSWORD_REQUIRED') {
+            sessionStorage.setItem('sessionToken', response.session);
+            this._resetPassword.set(true);
+          } else {
+            sessionStorage.setItem('accessToken', response.AccessToken);
+            sessionStorage.setItem('idToken', response.IdToken);
+            this.getUser();
+          }
+        });
+    }
   }
 
   private getUser(): void {
@@ -54,6 +77,10 @@ export class AuthService {
       )
       .subscribe((response: any): void => {
         this._hasError.set(false);
+        if(this.resetPassword()) {
+          this._resetPassword.set(false);
+          sessionStorage.setItem('sessionToken', '');
+        }
         this._loggedIn.set(true);
         this._user.set(response as User);
         this.router.navigate(['/calendar']);

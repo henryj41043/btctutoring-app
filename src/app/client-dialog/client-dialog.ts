@@ -20,7 +20,7 @@ import {MatInputModule} from '@angular/material/input';
 import {MatTimepickerModule} from '@angular/material/timepicker';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {Package} from '../enums/package.enum';
-import {Service} from '../enums/service.enum';
+import {ClientService} from '../enums/client-service.enum';
 import {ClientStatus} from '../enums/client-status.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {provideNativeDateAdapter} from '@angular/material/core';
@@ -56,7 +56,6 @@ export class ClientDialog implements OnInit {
   btcAndMeEnrolled: boolean = false;
   completedSessions: number = 0;
   inquiryDate: Date = new Date();
-  interviewScheduled: boolean = false;
   makeupSessions: number = 0;
   notes: string = '';
   package: string = '';
@@ -72,7 +71,7 @@ export class ClientDialog implements OnInit {
 
   billingCycleOptions: string[] = Object.values(BillingCycle);
   packageOptions: string[] = Object.values(Package);
-  serviceOptions: string[] = Object.values(Service);
+  serviceOptions: string[] = Object.values(ClientService);
   statusOptions: string[] = Object.values(ClientStatus);
   tutorOptions: string[] = ['Yoshi', 'Mario']; // TODO: this should populate from employee table
 
@@ -85,7 +84,6 @@ export class ClientDialog implements OnInit {
       this.btcAndMeEnrolled = this.dialogData.client.btc_and_me_enrolled as boolean;
       this.completedSessions = this.dialogData.client.completed_sessions as number;
       this.inquiryDate = new Date(this.dialogData.client.inquiry_date as string);
-      this.interviewScheduled = this.dialogData.client.interview_scheduled as boolean;
       this.makeupSessions = this.dialogData.client.makeup_sessions as number;
       this.notes = this.dialogData.client.notes as string;
       this.package = this.dialogData.client.package as Package;
@@ -93,7 +91,7 @@ export class ClientDialog implements OnInit {
       this.registrationReceived = this.dialogData.client.registration_received as boolean;
       this.scholarship = this.dialogData.client.scholarship as boolean;
       this.scholarshipName = this.dialogData.client.scholarship_name as string;
-      this.service = this.dialogData.client.service as Service;
+      this.service = this.dialogData.client.service as ClientService;
       this.sessions = this.dialogData.client.sessions as number;
       this.status = this.dialogData.client.status as ClientStatus;
       this.studentBirthday = new Date(this.dialogData.client.student_birthday as string);
@@ -140,21 +138,20 @@ export class ClientDialog implements OnInit {
     client.parent_name = this.parentName;
     client.email = this.email;
     client.assigned_tutor = this.assignedTutor;
-    client.billing_cycle = this.billingCycle;
+    client.billing_cycle = this.billingCycle as BillingCycle;
     client.btc_and_me_enrolled = this.btcAndMeEnrolled;
     client.completed_sessions = Number(this.completedSessions);
     client.inquiry_date = this.inquiryDate.toISOString();
-    client.interview_scheduled = this.interviewScheduled;
     client.makeup_sessions = Number(this.makeupSessions);
     client.notes = this.notes;
-    client.package = this.package;
+    client.package = this.package as Package;
     client.phone_number = this.phoneNumber;
     client.registration_received = this.registrationReceived;
     client.scholarship = this.scholarship;
     client.scholarship_name = this.scholarshipName;
-    client.service = this.service;
+    client.service = this.service as ClientService;
     client.sessions = Number(this.sessions);
-    client.status = this.status;
+    client.status = this.status as ClientStatus
     client.student_birthday = this.studentBirthday.toISOString();
     client.student_name = this.studentName;
     console.log(client);

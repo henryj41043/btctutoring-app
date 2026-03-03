@@ -64,10 +64,6 @@
           <th mat-header-cell *matHeaderCellDef> Inquiry Date </th>
           <td mat-cell *matCellDef="let item"> {{item.inquiry_date | date:'MM/dd/yyyy'}} </td>
         </ng-container>
-        <ng-container matColumnDef="interview_scheduled">
-          <th mat-header-cell *matHeaderCellDef> Interview Scheduled </th>
-          <td mat-cell *matCellDef="let item"> {{item.interview_scheduled}} </td>
-        </ng-container>
         <ng-container matColumnDef="student_birthday">
           <th mat-header-cell *matHeaderCellDef> Birthday </th>
           <td mat-cell *matCellDef="let item"> {{item.student_birthday}} </td>

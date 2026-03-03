@@ -1,4 +1,4 @@
-import {Component, effect, inject} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, inject} from '@angular/core';
 import {MatButton} from "@angular/material/button";
 import {MatCard, MatCardContent, MatCardHeader, MatCardTitle} from "@angular/material/card";
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -22,7 +22,8 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
   ],
   templateUrl: './login.html',
   standalone: true,
-  styleUrl: './login.scss'
+  styleUrl: './login.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Login {
   authService: AuthService = inject(AuthService);
@@ -30,10 +31,15 @@ export class Login {
   password: string = '';
   loggingIn: boolean = false;
 
-  constructor() {
+  constructor(private cdr: ChangeDetectorRef) {
     effect(() => {
       if(this.authService.hasError()) {
         this.handleLoginError();
+      }
+    });
+    effect(() => {
+      if(this.authService.resetPassword()) {
+        this.handleResetPassword();
       }
     });
   }
@@ -45,5 +51,11 @@ export class Login {
 
   handleLoginError() {
     this.loggingIn = false;
+  }
+
+  handleResetPassword() {
+    this.loggingIn = false;
+    this.password = '';
+    this.cdr.markForCheck();
   }
 }

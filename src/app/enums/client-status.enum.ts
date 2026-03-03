@@ -1,8 +1,8 @@
 export enum ClientStatus {
-  CurrentCustomer = 'Current Customer',
-  PreviousCustomer = 'Previous Customer',
-  Onboarding = 'Onboarding',
+  CURRENT_CUSTOMER = 'Current Customer',
+  PREVIOUS_CUSTOMER = 'Previous Customer',
+  ONBOARDING = 'Onboarding',
   MIA = 'MIA',
-  Inquiry = 'Inquiry',
-  DeclinedServices = 'Declined Services',
+  INQUIRY = 'Inquiry',
+  DECLINED_SERVICES = 'Declined Services',
 }
