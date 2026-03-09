@@ -1,0 +1,9 @@
+.employee-form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.notes-form-field {
+  grid-column: span 2;
+}

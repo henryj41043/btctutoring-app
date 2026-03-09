@@ -123,6 +123,8 @@ export class EmployeeDialog implements OnInit {
   private updateEmployee(): void {
     if(this.employeeForm.invalid) return;
     let employee: Employee = this.employeeForm.value as Employee;
+    employee.email = this.dialogData.employee.email;
+    employee.group = this.dialogData.employee.group;
     this.employeeService.updateEmployee(employee).pipe(
       catchError(err =>  {
         console.log(err);
