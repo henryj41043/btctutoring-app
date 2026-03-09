@@ -1,0 +1,68 @@
+<div class="clients-table">
+  <mat-card class="event-card" appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Employees</mat-card-title>
+    </mat-card-header>
+    <mat-card-actions>
+      <button matButton (click)="openCreateEmployeeDialog()">New Employee</button>
+    </mat-card-actions>
+    <mat-card-content>
+      <table mat-table [dataSource]="employeeData" class="mat-elevation-z8">
+        <ng-container matColumnDef="email">
+          <th mat-header-cell *matHeaderCellDef> Email </th>
+          <td mat-cell *matCellDef="let item"> {{item.email}} </td>
+        </ng-container>
+        <ng-container matColumnDef="first_name">
+          <th mat-header-cell *matHeaderCellDef> First Name </th>
+          <td mat-cell *matCellDef="let item"> {{item.first_name}} </td>
+        </ng-container>
+        <ng-container matColumnDef="last_name">
+          <th mat-header-cell *matHeaderCellDef> Last Name </th>
+          <td mat-cell *matCellDef="let item"> {{item.last_name}} </td>
+        </ng-container>
+        <ng-container matColumnDef="phone_number">
+          <th mat-header-cell *matHeaderCellDef> Phone Number </th>
+          <td mat-cell *matCellDef="let item"> {{item.phone_number}} </td>
+        </ng-container>
+        <ng-container matColumnDef="group">
+          <th mat-header-cell *matHeaderCellDef> User Group </th>
+          <td mat-cell *matCellDef="let item"> {{item.group}} </td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef> Status </th>
+          <td mat-cell *matCellDef="let item"> {{item.status}} </td>
+        </ng-container>
+        <ng-container matColumnDef="service">
+          <th mat-header-cell *matHeaderCellDef> Service </th>
+          <td mat-cell *matCellDef="let item"> {{item.service}} </td>
+        </ng-container>
+        <ng-container matColumnDef="notes">
+          <th mat-header-cell *matHeaderCellDef> Notes </th>
+          <td mat-cell *matCellDef="let item"> {{item.notes}} </td>
+        </ng-container>
+        <ng-container matColumnDef="interview_scheduled">
+          <th mat-header-cell *matHeaderCellDef> Interview Scheduled </th>
+          <td mat-cell *matCellDef="let item"> {{item.interview_scheduled}} </td>
+        </ng-container>
+        <ng-container matColumnDef="edit">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let item">
+            <button matIconButton class="session-table-icon" (click)="openEditEmployeeDialog(item)" aria-label="Icon button with edit icon">
+              <mat-icon>edit</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="delete">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let item">
+            <button matIconButton class="session-table-icon" (click)="openDeleteEmployeeDialog(item)" aria-label="Icon button with delete icon">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="employeeColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: employeeColumns;"></tr>
+      </table>
+    </mat-card-content>
+  </mat-card>
+</div>

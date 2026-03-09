@@ -1,6 +1,7 @@
 import {Employee} from '../models/employee.model';
+import {DialogType} from '../enums/dialog-type.enum';
 
 export interface EmployeeDialogData {
-  type: string;
+  type: DialogType;
   employee: Employee;
 }

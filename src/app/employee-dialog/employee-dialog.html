@@ -1,1 +1,103 @@
-<p>employee-dialog works!</p>
+<div class="employee-dialog-container">
+  <h2 mat-dialog-title>
+    @if (dialogData.type === DialogType.CREATE) {
+      Create New Employee
+    } @else if (dialogData.type === DialogType.EDIT) {
+      Update Employee
+    } @else if (dialogData.type === DialogType.DELETE) {
+      Confirm Delete Employee
+    }
+  </h2>
+  <mat-dialog-content class="employee-dialog-content">
+    <form [formGroup]="employeeForm" (ngSubmit)="submitForm()">
+      <mat-form-field>
+        <mat-label>First Name</mat-label>
+        <input
+          matInput
+          placeholder="John"
+          formControlName="first_name"
+          required
+        />
+        @if (employeeForm.controls['first_name'].invalid && employeeForm.controls['first_name'].dirty) {
+          <mat-error>First Name is required</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Last Name</mat-label>
+        <input
+          matInput
+          placeholder="Doe"
+          formControlName="last_name"
+          required
+        />
+        @if (employeeForm.controls['last_name'].invalid && employeeForm.controls['last_name'].dirty) {
+          <mat-error>Last Name is required</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Phone number</mat-label>
+        <input
+          matInput
+          formControlName="phone_number"
+          required
+        />
+        <mat-icon matSuffix>phone</mat-icon>
+        <mat-hint>Include area code</mat-hint>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Email</mat-label>
+        <input
+          matInput
+          placeholder="john.doe@example.com"
+          formControlName="email"
+          (blur)="updateEmailErrorMessage()"
+          required
+        />
+        @if (employeeForm.controls['email'].invalid) {
+          <mat-error>{{emailErrorMessage()}}</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>User Group</mat-label>
+        <mat-select formControlName="group">
+          @for (groupOption of groupOptions; track groupOption) {
+            <mat-option [value]="groupOption">{{groupOption}}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Status</mat-label>
+        <mat-select formControlName="status">
+          @for (statusOption of statusOptions; track statusOption) {
+            <mat-option [value]="statusOption">{{statusOption}}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Service</mat-label>
+        <mat-select formControlName="service">
+          @for (serviceOption of serviceOptions; track serviceOption) {
+            <mat-option [value]="serviceOption">{{serviceOption}}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Notes</mat-label>
+        <textarea matInput formControlName="notes"></textarea>
+      </mat-form-field>
+      <mat-checkbox formControlName="interview_scheduled">Interview Scheduled</mat-checkbox>
+    </form>
+  </mat-dialog-content>
+  <mat-dialog-actions>
+    <button matButton (click)="cancel()">Cancel</button>
+    <button matButton (click)="submitForm()">
+      @if (dialogData.type === DialogType.CREATE) {
+        Create
+      } @else if (dialogData.type === DialogType.EDIT) {
+        Update
+      } @else if (dialogData.type === DialogType.DELETE) {
+        Confirm
+      }
+    </button>
+  </mat-dialog-actions>
+</div>

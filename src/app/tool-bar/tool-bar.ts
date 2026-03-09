@@ -36,4 +36,8 @@ export class ToolBar {
   clientsNav(): void {
     this.router.navigate(['/clients']);
   }
+
+  employeesNav(): void {
+    this.router.navigate(['/employees']);
+  }
 }

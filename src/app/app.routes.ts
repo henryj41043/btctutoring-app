@@ -4,6 +4,7 @@ import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
 import {SessionsTable} from './sessions-table/sessions-table';
 import {ClientsTable} from './clients-table/clients-table';
+import {EmployeesTable} from './employees-table/employees-table';
 
 export const routes: Routes = [
   {
@@ -28,6 +29,11 @@ export const routes: Routes = [
   {
     path: 'clients',
     component: ClientsTable,
+    canActivate: [AuthGuard],
+  },
+  {
+    path: 'employees',
+    component: EmployeesTable,
     canActivate: [AuthGuard],
   },
   {
