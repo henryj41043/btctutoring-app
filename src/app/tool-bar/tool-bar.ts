@@ -33,8 +33,8 @@ export class ToolBar {
     this.router.navigate(['/sessions']);
   }
 
-  clientsNav(): void {
-    this.router.navigate(['/clients']);
+  contactsNav(): void {
+    this.router.navigate(['/contacts']);
   }
 
   employeesNav(): void {
