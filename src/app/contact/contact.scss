@@ -18,8 +18,14 @@
   gap: 10px;
 }
 
+.student-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
 .student-card {
-  max-width: 200px;
+  max-width: 400px;
 }
 
 .note-card {
@@ -31,4 +37,20 @@
   background: var(--mat-sys-primary-container);
   color: var(--mat-sys-on-primary-container);
   border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.billing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.billing-textbox {
+  grid-row: span 2;
+}
+
+.scholarship-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
 }

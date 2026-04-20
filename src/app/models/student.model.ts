@@ -9,6 +9,7 @@ export class Student {
   status?: Status;
   assigned_tutor_id?: string;
   package?: Package;
+  scholarship?: boolean;
   available_minutes?: number;
   make_up_minutes?: number;
 }
