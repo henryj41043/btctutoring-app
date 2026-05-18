@@ -18,7 +18,7 @@
     <mat-label>Select Tutor</mat-label>
     <mat-select [(ngModel)]="selectedTutor">
       @for (tutor of tutors; track tutor) {
-        <mat-option [value]="tutor.name">{{tutor.name}}</mat-option>
+        <mat-option [value]="tutor.id">{{tutor.first_name}}</mat-option>
       }
     </mat-select>
   </mat-form-field>
@@ -36,7 +36,7 @@
     <mat-label>Select Student</mat-label>
     <mat-select [(ngModel)]="selectedStudent">
       @for (student of students; track student) {
-        <mat-option [value]="student.name">{{student.name}}</mat-option>
+        <mat-option [value]="student.id">{{student.name}}</mat-option>
       }
     </mat-select>
   </mat-form-field>
@@ -55,7 +55,7 @@
       <mat-label>Take Attendance</mat-label>
       <mat-select [(ngModel)]="selectedAttendance">
         @for (option of attendanceOptions; track option) {
-          <mat-option [value]="option.value">{{option.value}}</mat-option>
+          <mat-option [value]="option">{{option}}</mat-option>
         }
       </mat-select>
     </mat-form-field>

@@ -1,12 +1,12 @@
 import {
-  Component,
-  OnInit,
-  Inject,
-  Renderer2,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
+  Component,
+  Inject,
   inject,
-  LOCALE_ID
+  LOCALE_ID,
+  OnInit,
+  Renderer2
 } from '@angular/core';
 import {DOCUMENT, formatDate} from '@angular/common';
 import {
@@ -37,7 +37,8 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {Response} from '../models/response.model';
 import {isSameDay, isSameMonth} from 'date-fns';
-import { EventColor } from 'calendar-utils';
+import {EventColor} from 'calendar-utils';
+import {SessionStatus} from '../enums/session-status.enum';
 
 const colors: Record<string, EventColor> = {
   red: {
@@ -150,7 +151,7 @@ export class EventCalendar implements OnInit {
           let sessions: Session[] = response as Session[];
           let calEvents: CalendarEvent<Session>[] = [];
           sessions.forEach((session: Session): void => {
-            let color: EventColor = this.setColor(session.status as string);
+            let color: EventColor = this.setColor(session.status!);
             calEvents.push({
               title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`,
               start: new Date(session.start_datetime as string),
@@ -181,7 +182,7 @@ export class EventCalendar implements OnInit {
           let sessions: Session[] = response as Session[];
           let calEvents: CalendarEvent<Session>[] = [];
           sessions.forEach((session: Session): void => {
-            let color: EventColor = this.setColor(session.status as string);
+            let color: EventColor = this.setColor(session.status!);
             calEvents.push({
               title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`,
               start: new Date(session.start_datetime as string),
@@ -203,13 +204,15 @@ export class EventCalendar implements OnInit {
     }
   }
 
-  private setColor(status: string): EventColor {
+  private setColor(status: SessionStatus): EventColor {
     switch (status) {
-      case 'pending':
+      case SessionStatus.PENDING:
         return colors['yellow'];
-      case 'completed':
+      case SessionStatus.COMPLETED:
         return colors['green'];
-      case 'makeup':
+      case SessionStatus.MAKE_UP:
+        return colors['red'];
+      case SessionStatus.NO_CALL_NO_SHOW:
         return colors['red'];
       default:
         return colors['yellow'];

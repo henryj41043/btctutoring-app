@@ -32,4 +32,16 @@ export class ContactService {
   deleteContact(id: string): Observable<Response> {
     return this.httpClient.delete<Response>(`${this.baseUrl}/contacts/${id}`);
   }
+
+  adminCreateUser(email: string, group: string, id: string): Observable<any> {
+    return this.httpClient.post(`${this.baseUrl}/auth/user`, {
+      email: email,
+      group: group,
+      id: id,
+    });
+  }
+
+  adminDeleteUser(id: string): Observable<any> {
+    return this.httpClient.delete(`${this.baseUrl}/auth/user/${id}`);
+  }
 }

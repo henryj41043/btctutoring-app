@@ -8,11 +8,13 @@
       <button mat-menu-item (click)="sessionsNav()">Sessions</button>
       <button mat-menu-item (click)="contactsNav()">Contacts</button>
       <button mat-menu-item (click)="employeesNav()">Employees</button>
+      <button mat-menu-item>Student Roster</button>
+      <button mat-menu-item (click)="payrollNav()">Payroll</button>
     }
   </mat-menu>
   <img ngSrc="assets/BTC_Transparent_BG.png" alt="" height="100" width="100" priority/>
   @if (authService.loggedIn()) {
-    <span>Welcome, {{authService.user().email}}</span>
+    <span>Welcome {{authService.contact().first_name}}</span>
   } @else {
     <span>Beyond the Chalkboard Tutoring</span>
   }

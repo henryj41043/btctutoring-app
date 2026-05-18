@@ -18,7 +18,14 @@ import {MatSelectModule} from '@angular/material/select';
 import {SessionsService} from '../services/sessions.service';
 import {Session} from '../models/session.model';
 import {Response} from '../models/response.model';
-import {catchError, Observable} from 'rxjs';
+import {catchError, EMPTY, Observable} from 'rxjs';
+import {ContactService} from '../services/contact.service';
+import {StudentService} from '../services/student.service';
+import {Status} from '../enums/status.enum';
+import {Service} from '../enums/service.enum';
+import {Contact} from '../models/contact.model';
+import {Student} from '../models/student.model';
+import {SessionStatus} from '../enums/session-status.enum';
 
 @Component({
   selector: 'app-session-dialog',
@@ -46,41 +53,30 @@ export class SessionDialog implements OnInit {
   errorMessage: String = '';
   notes: string = '';
   hasError: boolean = false;
-  selectedTutor: any;
-  selectedStudent: any;
+  selectedTutor: string | undefined;
+  selectedStudent: string | undefined;
   selectedAttendance: any;
-  attendanceOptions = [
-    { value: 'pending' },
-    { value: 'completed' },
-    { value: 'makeup' },
-    { value: 'NCNS' },
-  ];
-  tutors = [
-    { name: 'Mario' },
-    { name: 'Peach' },
-    { name: 'Yoshi' },
-    { name: 'Luigi' },
-  ];
-  students = [
-    { name: 'Bowser' },
-    { name: 'Koopa' },
-    { name: 'Toad' },
-    { name: 'Boo' },
-  ];
+  attendanceOptions: SessionStatus[] = Object.values(SessionStatus);
+  tutors: Contact[] = [];
+  students: Student[] = [];
   readonly dialogRef = inject(MatDialogRef<SessionDialog>);
   readonly dialogData = inject<SessionDialogData>(MAT_DIALOG_DATA);
   sessionsService: SessionsService = inject(SessionsService);
+  contactService: ContactService = inject(ContactService);
+  studentService: StudentService = inject(StudentService);
 
   ngOnInit(): void {
     if(this.dialogData.type !== 'create') {
-      this.selectedStudent = this.dialogData.session.student_name;
-      this.selectedTutor = this.dialogData.session.tutor_name;
+      this.selectedStudent = this.dialogData.session.student_id;
+      this.selectedTutor = this.dialogData.session.tutor_id;
       this.date = new Date(this.dialogData.session.start_datetime as string);
       this.startTime = new Date(this.dialogData.session.start_datetime as string);
       this.endTime = new Date(this.dialogData.session.end_datetime as string);
       this.selectedAttendance = this.dialogData.session.status;
       this.notes = this.dialogData.session.notes as string;
     }
+    this.getTutors();
+    this.getStudents();
   }
 
   cancel(): void {
@@ -100,14 +96,20 @@ export class SessionDialog implements OnInit {
       let submitEndDate: Date = new Date(this.date);
       submitEndDate.setHours(this.endTime.getHours());
       submitEndDate.setMinutes(this.endTime.getMinutes());
+      let tutor: Contact = this.tutors.find(tutor => {
+        return tutor.id === this.selectedTutor;
+      })!;
+      let student: Student = this.students.find(student => {
+        return student.id === this.selectedStudent;
+      })!;
       let session: Session = new Session();
-      session.tutor_name = this.selectedTutor;
-      session.tutor_id = 'henry41043+' + this.selectedTutor.toLowerCase() + '@gmail.com';
-      session.student_name = this.selectedStudent;
-      session.student_id = 'henry41043+' + this.selectedStudent.toLowerCase() + '@gmail.com';
+      session.tutor_name = tutor.first_name;
+      session.tutor_id = tutor.id;
+      session.student_name = student.name;
+      session.student_id = student.id;
       session.start_datetime = submitStartDate.toISOString();
       session.end_datetime = submitEndDate.toISOString();
-      session.status = this.selectedAttendance;
+      session.status = SessionStatus.PENDING;
       session.notes = this.notes;
       console.log(session);
       this.sessionsService.createSession(session).pipe(
@@ -145,11 +147,17 @@ export class SessionDialog implements OnInit {
       let submitEndDate: Date = new Date(this.date);
       submitEndDate.setHours(this.endTime.getHours());
       submitEndDate.setMinutes(this.endTime.getMinutes());
+      let tutor: Contact = this.tutors.find(tutor => {
+        return tutor.id === this.selectedTutor;
+      })!;
+      let student: Student = this.students.find(student => {
+        return student.id === this.selectedStudent;
+      })!;
       let session: Session = new Session();
-      session.tutor_name = this.selectedTutor;
-      session.tutor_id = 'henry41043+' + this.selectedTutor.toLowerCase() + '@gmail.com';
-      session.student_name = this.selectedStudent;
-      session.student_id = 'henry41043+' + this.selectedStudent.toLowerCase() + '@gmail.com';
+      session.tutor_name = tutor.first_name;
+      session.tutor_id = tutor.id;
+      session.student_name = student.name;
+      session.student_id = student.id;
       session.start_datetime = submitStartDate.toISOString();
       session.end_datetime = submitEndDate.toISOString();
       session.status = this.selectedAttendance;
@@ -191,5 +199,33 @@ export class SessionDialog implements OnInit {
         this.dialogRef.close(response as Response);
       }
     );
+  }
+
+  private getTutors() {
+    this.contactService.getContacts()
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      )
+      .subscribe(contacts => {
+        this.tutors = [...contacts.filter(contact => {
+          return contact.status === Status.STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
+        })];
+      });
+  }
+
+  private getStudents() {
+    this.studentService.getStudents().pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      })
+    ).subscribe(students => {
+      this.students = [...students.filter(student => {
+        return student.status === Status.ACTIVE_STUDENT;
+      })];
+    });
   }
 }

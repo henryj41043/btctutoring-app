@@ -6,6 +6,7 @@ import {SessionsTable} from './sessions-table/sessions-table';
 import {ContactsTable} from './contacts-table/contacts-table';
 import {EmployeesTable} from './employees-table/employees-table';
 import {Contact} from './contact/contact';
+import {Payroll} from './payroll/payroll';
 
 export const routes: Routes = [
   {
@@ -40,6 +41,11 @@ export const routes: Routes = [
   {
     path: 'employees',
     component: EmployeesTable,
+    canActivate: [AuthGuard],
+  },
+  {
+    path: 'payroll',
+    component: Payroll,
     canActivate: [AuthGuard],
   },
   {

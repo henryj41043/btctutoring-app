@@ -4,6 +4,8 @@ import {catchError} from 'rxjs';
 import {environment} from '../../environments/environment';
 import {User} from '../models/user.model';
 import {Router} from '@angular/router';
+import {Contact} from '../models/contact.model';
+import {ContactService} from './contact.service';
 
 @Injectable({
   providedIn: 'root'
@@ -16,13 +18,17 @@ export class AuthService {
     username: '',
     email: '',
     groups: [],
+    contact: '',
   });
+  private _contact: WritableSignal<Contact> = signal(new Contact());
   private _hasError: WritableSignal<boolean> = signal(false);
   readonly loggedIn: Signal<boolean> = this._loggedIn.asReadonly();
   readonly user: Signal<User> = this._user.asReadonly();
+  readonly contact: Signal<Contact> = this._contact.asReadonly();
   readonly hasError: Signal<boolean> = this._hasError.asReadonly();
   readonly resetPassword: Signal<boolean> = this._resetPassword.asReadonly();
   httpClient: HttpClient = inject(HttpClient);
+  contactService: ContactService = inject(ContactService);
   router: Router = inject(Router);
 
   login(email: string, password: string): void {
@@ -76,14 +82,29 @@ export class AuthService {
         })
       )
       .subscribe((response: any): void => {
+        this._user.set(response as User);
+        this.getContact();
+      });
+  }
+
+  private getContact(): void {
+    this.contactService.getContact(this.user().contact)
+      .pipe(
+        catchError((error: any): any => {
+          console.log(error);
+          this._hasError.set(true);
+        })
+      )
+      .subscribe((response: any): void => {
+        console.log(response);
         this._hasError.set(false);
         if(this.resetPassword()) {
           this._resetPassword.set(false);
           sessionStorage.setItem('sessionToken', '');
         }
         this._loggedIn.set(true);
-        this._user.set(response as User);
-        this.router.navigate(['/calendar']);
+        this._contact.set(response[0] as Contact);
+        void this.router.navigate(['/calendar']);
       });
   }
 
@@ -96,9 +117,11 @@ export class AuthService {
         username: '',
         email: '',
         groups: [],
+        contact: '',
       });
+      this._contact.set(new Contact());
       this._loggedIn.set(false);
-      this.router.navigate(['/login']);
+      void this.router.navigate(['/login']);
     }
   }
 }

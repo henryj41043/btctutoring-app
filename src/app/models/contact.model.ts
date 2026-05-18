@@ -1,5 +1,7 @@
 import {Service} from '../enums/service.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
+import {Status} from '../enums/status.enum';
+import {UserGroup} from '../enums/user-group.enum';
 
 export class Contact {
   id?: string;
@@ -8,6 +10,7 @@ export class Contact {
   email?: string;
   phone_number?: string;
   service?: Service;
+  status?: Status;
   monthly_charge?: number;
   charge_per_billing_cycle?: number;
   amount_to_be_paid_this_month?: number;
@@ -21,8 +24,30 @@ export class Contact {
   special_circumstance?: string;
   scholarship_state?: string;
   invoice_Month?: string;
-  date_funds_requested_by_btc?: string;
-  date_funds_requested_by_family?: string;
+  date_funds_requested_by_btc?: Date;
+  date_funds_requested_by_family?: Date;
   invoice_number?: string;
-  invoice_paid_date?: string;
+  invoice_paid_date?: Date;
+  inquiry_received?: Date;
+  inquiry_note_from_parent?: string;
+  consult_date?: Date;
+  twenty_five_received?: boolean;
+  scholarship_student?: boolean;
+  scholarship_name?: string;
+  trial_date?: Date;
+  registration_sent?: Date;
+  registration_received?: Date;
+  title?: string;
+  currently_accepting_students?: boolean;
+  tutoring_availability?: string;
+  zoom_link?: string;
+  hourly_rate?: number;
+  hiring_inquiry_received?: Date;
+  interview_offer_sent?: Date;
+  interview_scheduled?: Date;
+  offer_sent?: Date;
+  onboarding_paperwork_received?: Date;
+  training_completed?: Date;
+  user_profile_created?: boolean;
+  user_group?: UserGroup;
 }

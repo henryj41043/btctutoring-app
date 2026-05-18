@@ -2,4 +2,5 @@ export class User {
   username!: string;
   email!: string;
   groups!: string[];
+  contact!: string;
 }

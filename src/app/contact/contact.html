@@ -1,6 +1,15 @@
 <form class="contact-form">
   <div class="contact-section">
     <h2>Contact</h2>
+    <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+      <mat-icon>save</mat-icon>
+    </button>
+    @if (updatedSuccessfully) {
+      <mat-icon style="color: green;">check</mat-icon>
+    }
+    @if (updateError) {
+      <mat-icon style="color: red;">close</mat-icon>
+    }
     <div class="contact-main" [formGroup]="contactForm">
       <mat-form-field>
         <mat-label>First Name</mat-label>
@@ -32,6 +41,32 @@
           }
         </mat-select>
       </mat-form-field>
+      @if (contactForm.controls['service'].value === Service.HIRING) {
+        <mat-form-field>
+          <mat-label>Select Status</mat-label>
+          <mat-select formControlName="status">
+            @for (statusOption of statusOptions; track statusOption) {
+              <mat-option [value]="statusOption">{{statusOption}}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-checkbox formControlName="user_profile_created">User Account</mat-checkbox>
+        @if (contactForm.controls['user_profile_created'].value) {
+          <mat-form-field>
+            <mat-label>Select Group</mat-label>
+            <mat-select formControlName="user_group">
+              @for (groupOption of groupOptions; track groupOption) {
+                <mat-option [value]="groupOption">{{groupOption}}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <button matButton type="button" (click)="createAccount()" [hidden]="accountCreated">Create Account</button>
+          <button matButton type="button" (click)="deleteAccount()" [hidden]="!accountCreated">Delete Account</button>
+          @if (accountError) {
+            <mat-error>Valid Email and Group Required</mat-error>
+          }
+        }
+      }
     </div>
   </div>
   <div class="contact-notes contact-section" [formGroup]="notesForm">
@@ -44,7 +79,7 @@
         <mat-card class="note-card" appearance="outlined" [formGroupName]="i">
           <mat-card-header>
             <mat-card-title>{{noteControl.get('author')?.value}}</mat-card-title>
-            <mat-card-subtitle>{{noteControl.get('date_time')?.value}}</mat-card-subtitle>
+            <mat-card-subtitle>{{noteControl.get('date_time')?.value | date:'short'}}</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             <p [hidden]="notesEditIndex === i">
@@ -72,103 +107,146 @@
       }
     </div>
   </div>
-  <div class="contact-tutoring contact-section" [formGroup]="studentsForm">
-    <h2>Students</h2>
-    <button matIconButton type="button" (click)="addStudent()">
-      <mat-icon>add</mat-icon>
-    </button>
-    <div formArrayName="students">
-      @for (studentControl of students.controls; track studentControl; let i = $index) {
-        <mat-card class="student-card" appearance="outlined" [formGroupName]="i">
-          <mat-card-header>
-            <div [hidden]="studentsEditIndex === i">
-              <mat-card-title>{{studentControl.get('name')?.value}}</mat-card-title>
-            </div>
-            <div [hidden]="studentsEditIndex !== i">
-              <mat-form-field>
-                <mat-label>Name</mat-label>
-                <input matInput formControlName="name">
-              </mat-form-field>
-            </div>
-          </mat-card-header>
-          <mat-card-content>
-            <div [hidden]="studentsEditIndex === i">
-              <div class="student-grid">
-                <div>Birthday: {{studentControl.get('birthday')?.value}}</div>
-                <div>Status: {{studentControl.get('status')?.value}}</div>
-                <div>Available Minutes: {{studentControl.get('available_minutes')?.value}}</div>
-                <div>Assigned Tutor: {{studentControl.get('assigned_tutor_id')?.value}}</div>
-                <div>Make Up Minutes: {{studentControl.get('make_up_minutes')?.value}}</div>
-                <div>Package: {{studentControl.get('package')?.value}}</div>
-                <div>Scholarship:
-                  @if (studentControl.get('scholarship')?.value) {
-                    <mat-icon style="color: green;">check</mat-icon>
-                  } @else {
-                    <mat-icon style="color: red;">close</mat-icon>
-                  }
+  <div class="contact-tutoring contact-section" [formGroup]="studentsForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
+    @if (contactForm.controls['service'].value === Service.HIRING) {
+      <h2>Student Roster</h2>
+    } @else {
+      <h2>Students</h2>
+      <button matIconButton type="button" (click)="addStudent()">
+        <mat-icon>add</mat-icon>
+      </button>
+      <div formArrayName="students">
+        @for (studentControl of students.controls; track studentControl; let i = $index) {
+          <mat-card class="student-card" appearance="outlined" [formGroupName]="i">
+            <mat-card-header>
+              <div [hidden]="studentsEditIndex === i">
+                <mat-card-title>{{studentControl.get('name')?.value}}</mat-card-title>
+              </div>
+              <div [hidden]="studentsEditIndex !== i">
+                <mat-form-field>
+                  <mat-label>Name</mat-label>
+                  <input matInput formControlName="name">
+                </mat-form-field>
+              </div>
+            </mat-card-header>
+            <mat-card-content>
+              <div [hidden]="studentsEditIndex === i">
+                <div class="student-grid">
+                  <div>Birthday: {{studentControl.get('birthday')?.value}}</div>
+                  <div>Status: {{studentControl.get('status')?.value}}</div>
+                  <div>Available Minutes: {{studentControl.get('available_minutes')?.value}}</div>
+                  <div>Assigned Tutor: {{studentControl.get('assigned_tutor_id')?.value}}</div>
+                  <div>Make Up Minutes: {{studentControl.get('make_up_minutes')?.value}}</div>
+                  <div>Package: {{studentControl.get('package')?.value}}</div>
+                  <div>Scholarship:
+                    @if (studentControl.get('scholarship')?.value) {
+                      <mat-icon style="color: green;">check</mat-icon>
+                    } @else {
+                      <mat-icon style="color: red;">close</mat-icon>
+                    }
+                  </div>
                 </div>
               </div>
-            </div>
-            <div [hidden]="studentsEditIndex !== i">
-              <div class="student-grid">
-                <mat-form-field>
-                  <mat-label>Birthday</mat-label>
-                  <input matInput formControlName="birthday">
-                </mat-form-field>
-                <mat-form-field>
-                  <mat-label>Select Status</mat-label>
-                  <mat-select formControlName="status">
-                    @for (statusOption of statusOptions; track statusOption) {
-                      <mat-option [value]="statusOption">{{statusOption}}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-                <mat-form-field>
-                  <mat-label>Available Minutes</mat-label>
-                  <input matInput formControlName="available_minutes">
-                </mat-form-field>
-                <mat-form-field>
-                  <mat-label>Assign Tutor</mat-label>
-                  <mat-select formControlName="assigned_tutor_id">
-                    @for (tutorOption of tutorOptions; track tutorOption) {
-                      <mat-option [value]="tutorOption">{{tutorOption}}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-                <mat-form-field>
-                  <mat-label>Make Up Minutes</mat-label>
-                  <input matInput formControlName="make_up_minutes">
-                </mat-form-field>
-                <mat-form-field>
-                  <mat-label>Select Package</mat-label>
-                  <mat-select formControlName="package">
-                    @for (packageOption of packageOptions; track packageOption) {
-                      <mat-option [value]="packageOption">{{packageOption}}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-                <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
+              <div [hidden]="studentsEditIndex !== i">
+                <div class="student-grid">
+                  <mat-form-field>
+                    <mat-label>Birthday</mat-label>
+                    <input matInput formControlName="birthday">
+                  </mat-form-field>
+                  <mat-form-field>
+                    <mat-label>Select Status</mat-label>
+                    <mat-select formControlName="status">
+                      @for (statusOption of statusOptions; track statusOption) {
+                        <mat-option [value]="statusOption">{{statusOption}}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field>
+                    <mat-label>Available Minutes</mat-label>
+                    <input matInput type="number" formControlName="available_minutes">
+                  </mat-form-field>
+                  <mat-form-field>
+                    <mat-label>Assign Tutor</mat-label>
+                    <mat-select formControlName="assigned_tutor_id">
+                      @for (tutorOption of tutors; track tutorOption) {
+                        <mat-option [value]="tutorOption.id">{{tutorOption.first_name}}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field>
+                    <mat-label>Make Up Minutes</mat-label>
+                    <input matInput type="number" formControlName="make_up_minutes">
+                  </mat-form-field>
+                  <mat-form-field>
+                    <mat-label>Select Package</mat-label>
+                    <mat-select formControlName="package" (selectionChange)="packageSelected($event)">
+                      @for (packageOption of packageOptions; track packageOption) {
+                        <mat-option [value]="packageOption">{{packageOption}}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
+                </div>
               </div>
-            </div>
-          </mat-card-content>
-          <mat-card-actions>
-            <button matIconButton type="button" (click)="setStudentsEditIndex(i)" [hidden]="studentsEditIndex === i">
-              <mat-icon>edit</mat-icon>
-            </button>
-            <button matIconButton type="button" (click)="saveStudentAt(i)" [hidden]="studentsEditIndex !== i">
-              <mat-icon>save</mat-icon>
-            </button>
-            <button matIconButton type="button" (click)="deleteStudentAt(i)">
-              <mat-icon>delete</mat-icon>
-            </button>
-          </mat-card-actions>
-        </mat-card>
-      }
-    </div>
+            </mat-card-content>
+            <mat-card-actions>
+              <button matIconButton type="button" (click)="setStudentsEditIndex(i)" [hidden]="studentsEditIndex === i">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button matIconButton type="button" (click)="saveStudentAt(i)" [hidden]="studentsEditIndex !== i">
+                <mat-icon>save</mat-icon>
+              </button>
+              <button matIconButton type="button" (click)="deleteStudentAt(i)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        }
+      </div>
+    }
   </div>
-  <div class="contact-billing contact-section" [formGroup]="contactForm">
-    @if (students.length > 0 && students.at(0).get('scholarship')?.value) {
+  <div class="contact-billing contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
+    @if (contactForm.controls['service'].value === Service.HIRING) {
+      <h2>BTC Tutor Information</h2>
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+        <mat-icon>save</mat-icon>
+      </button>
+      @if (updatedSuccessfully) {
+        <mat-icon style="color: green;">check</mat-icon>
+      }
+      @if (updateError) {
+        <mat-icon style="color: red;">close</mat-icon>
+      }
+      <div class="scholarship-grid">
+        <mat-form-field>
+          <mat-label>Title</mat-label>
+          <input matInput formControlName="title">
+        </mat-form-field>
+        <mat-checkbox formControlName="currently_accepting_students">Currently Accepting Students</mat-checkbox>
+        <mat-form-field>
+          <mat-label>Tutoring Availability</mat-label>
+          <input matInput formControlName="tutoring_availability">
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Zoom Link</mat-label>
+          <input matInput formControlName="zoom_link">
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Hourly Rate</mat-label>
+          <input matInput type="number" formControlName="hourly_rate">
+        </mat-form-field>
+      </div>
+    } @else if (students.length > 0 && students.at(0).get('scholarship')?.value) {
       <h2>Scholarship</h2>
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+        <mat-icon>save</mat-icon>
+      </button>
+      @if (updatedSuccessfully) {
+        <mat-icon style="color: green;">check</mat-icon>
+      }
+      @if (updateError) {
+        <mat-icon style="color: red;">close</mat-icon>
+      }
       <div class="scholarship-grid">
         <mat-form-field>
           <mat-label>Scholarship State</mat-label>
@@ -180,11 +258,15 @@
         </mat-form-field>
         <mat-form-field>
           <mat-label>Date Funds Requested By BTC</mat-label>
-          <input matInput formControlName="date_funds_requested_by_btc">
+          <input matInput [matDatepicker]="dfrbbtcDatepicker" formControlName="date_funds_requested_by_btc">
+          <mat-datepicker #dfrbbtcDatepicker/>
+          <mat-datepicker-toggle [for]="dfrbbtcDatepicker" matSuffix/>
         </mat-form-field>
         <mat-form-field>
           <mat-label>Date Funds Requested By Family</mat-label>
-          <input matInput formControlName="date_funds_requested_by_family">
+          <input matInput [matDatepicker]="dfrbfDatepicker" formControlName="date_funds_requested_by_family">
+          <mat-datepicker #dfrbfDatepicker/>
+          <mat-datepicker-toggle [for]="dfrbfDatepicker" matSuffix/>
         </mat-form-field>
         <mat-form-field>
           <mat-label>Amount To Be Paid This Month</mat-label>
@@ -196,7 +278,9 @@
         </mat-form-field>
         <mat-form-field>
           <mat-label>Invoice Paid Date</mat-label>
-          <input matInput formControlName="invoice_paid_date">
+          <input matInput [matDatepicker]="invoicePaidDatepicker" formControlName="invoice_paid_date">
+          <mat-datepicker #invoicePaidDatepicker/>
+          <mat-datepicker-toggle [for]="invoicePaidDatepicker" matSuffix/>
         </mat-form-field>
         <mat-form-field class="billing-textbox">
           <mat-label>Special Circumstance</mat-label>
@@ -205,6 +289,15 @@
       </div>
     } @else {
       <h2>Billing</h2>
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+        <mat-icon>save</mat-icon>
+      </button>
+      @if (updatedSuccessfully) {
+        <mat-icon style="color: green;">check</mat-icon>
+      }
+      @if (updateError) {
+        <mat-icon style="color: red;">close</mat-icon>
+      }
       <div class="billing-grid">
         <mat-form-field>
           <mat-label>Monthly Charge</mat-label>
@@ -239,7 +332,110 @@
       </div>
     }
   </div>
-  <div class="contact-onboarding contact-section">
-    <h2>Onboarding</h2>
+  <div class="contact-onboarding contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
+    @if (contactForm.controls['service'].value === Service.HIRING) {
+      <h2>Hiring Process</h2>
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+        <mat-icon>save</mat-icon>
+      </button>
+      @if (updatedSuccessfully) {
+        <mat-icon style="color: green;">check</mat-icon>
+      }
+      @if (updateError) {
+        <mat-icon style="color: red;">close</mat-icon>
+      }
+      <div class="onboarding-grid">
+        <mat-form-field>
+          <mat-label>Hiring Inquiry Received</mat-label>
+          <input matInput [matDatepicker]="hirDatepicker" formControlName="hiring_inquiry_received">
+          <mat-datepicker #hirDatepicker/>
+          <mat-datepicker-toggle [for]="hirDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Interview Offer Sent</mat-label>
+          <input matInput [matDatepicker]="iosDatepicker" formControlName="interview_offer_sent">
+          <mat-datepicker #iosDatepicker/>
+          <mat-datepicker-toggle [for]="iosDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Interview Scheduled</mat-label>
+          <input matInput [matDatepicker]="isDatepicker" formControlName="interview_scheduled">
+          <mat-datepicker #isDatepicker/>
+          <mat-datepicker-toggle [for]="isDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Offer Sent</mat-label>
+          <input matInput [matDatepicker]="osDatepicker" formControlName="offer_sent">
+          <mat-datepicker #osDatepicker/>
+          <mat-datepicker-toggle [for]="osDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Onboarding Paperwork Received</mat-label>
+          <input matInput [matDatepicker]="oprDatepicker" formControlName="onboarding_paperwork_received">
+          <mat-datepicker #oprDatepicker/>
+          <mat-datepicker-toggle [for]="oprDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Training Completed</mat-label>
+          <input matInput [matDatepicker]="tcDatepicker" formControlName="training_completed">
+          <mat-datepicker #tcDatepicker/>
+          <mat-datepicker-toggle [for]="tcDatepicker" matSuffix/>
+        </mat-form-field>
+      </div>
+    } @else {
+      <h2>Onboarding</h2>
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+        <mat-icon>save</mat-icon>
+      </button>
+      @if (updatedSuccessfully) {
+        <mat-icon style="color: green;">check</mat-icon>
+      }
+      @if (updateError) {
+        <mat-icon style="color: red;">close</mat-icon>
+      }
+      <div class="onboarding-grid">
+        <mat-form-field>
+          <mat-label>Inquiry Received</mat-label>
+          <input matInput [matDatepicker]="inquiryReceivedDatepicker" formControlName="inquiry_received">
+          <mat-datepicker #inquiryReceivedDatepicker/>
+          <mat-datepicker-toggle [for]="inquiryReceivedDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Inquiry Note From Parent</mat-label>
+          <input matInput formControlName="inquiry_note_from_parent">
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Consult Date</mat-label>
+          <input matInput [matDatepicker]="consultDatepicker" formControlName="consult_date">
+          <mat-datepicker #consultDatepicker/>
+          <mat-datepicker-toggle [for]="consultDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Scholarship Name</mat-label>
+          <input matInput formControlName="scholarship_name">
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Trial Date</mat-label>
+          <input matInput [matDatepicker]="trialDatepicker" formControlName="trial_date">
+          <mat-datepicker #trialDatepicker/>
+          <mat-datepicker-toggle [for]="trialDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Registration Sent</mat-label>
+          <input matInput [matDatepicker]="registrationSentDatepicker" formControlName="registration_sent">
+          <mat-datepicker #registrationSentDatepicker/>
+          <mat-datepicker-toggle [for]="registrationSentDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Registration Received</mat-label>
+          <input matInput formControlName="registration_received">
+          <input matInput [matDatepicker]="registrationReceivedDatepicker" formControlName="registration_received">
+          <mat-datepicker #registrationReceivedDatepicker/>
+          <mat-datepicker-toggle [for]="registrationReceivedDatepicker" matSuffix/>
+        </mat-form-field>
+        <mat-checkbox formControlName="scholarship_student">Scholarship Student</mat-checkbox>
+        <mat-checkbox formControlName="twenty_five_received">$25 Received</mat-checkbox>
+      </div>
+    }
   </div>
 </form>

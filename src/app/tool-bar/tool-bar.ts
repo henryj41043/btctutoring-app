@@ -26,18 +26,22 @@ export class ToolBar {
   }
 
   calendarNav(): void {
-    this.router.navigate(['/calendar']);
+    void this.router.navigate(['/calendar']);
   }
 
   sessionsNav(): void {
-    this.router.navigate(['/sessions']);
+    void this.router.navigate(['/sessions']);
   }
 
   contactsNav(): void {
-    this.router.navigate(['/contacts']);
+    void this.router.navigate(['/contacts']);
   }
 
   employeesNav(): void {
-    this.router.navigate(['/employees']);
+    void this.router.navigate(['/employees']);
+  }
+
+  payrollNav(): void {
+    void this.router.navigate(['/payroll']);
   }
 }

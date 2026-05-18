@@ -7,7 +7,7 @@ import {MatInputModule} from '@angular/material/input';
 import {Service} from '../enums/service.enum';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatButtonModule} from '@angular/material/button';
-import {MatSelectModule} from '@angular/material/select';
+import {MatSelectChange, MatSelectModule} from '@angular/material/select';
 import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
 import {StudentService} from '../services/student.service';
@@ -18,9 +18,16 @@ import {Status} from '../enums/status.enum';
 import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {BillingCycle} from '../enums/billing-cycle.enum';
+import {UserGroup} from '../enums/user-group.enum';
+import {AuthService} from '../services/auth.service';
+import {DatePipe} from '@angular/common';
+import {MatDatepickerModule} from '@angular/material/datepicker';
+import {provideNativeDateAdapter} from '@angular/material/core';
+import {packageMinutesMap} from '../utils/package-minutes-map';
 
 @Component({
   selector: 'app-contact',
+  providers: [provideNativeDateAdapter()],
   imports: [
     ReactiveFormsModule,
     MatCardModule,
@@ -30,6 +37,8 @@ import {BillingCycle} from '../enums/billing-cycle.enum';
     MatSelectModule,
     MatIconModule,
     MatCheckbox,
+    DatePipe,
+    MatDatepickerModule,
   ],
   templateUrl: './contact.html',
   styleUrl: './contact.scss',
@@ -41,16 +50,20 @@ export class Contact implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private studentService: StudentService = inject(StudentService);
   private noteService: NoteService = inject(NoteService);
+  private authService: AuthService = inject(AuthService);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   protected serviceOptions: string[] = Object.values(Service);
   protected statusOptions: string[] = Object.values(Status);
   protected packageOptions: string[] = Object.values(Package);
   protected billingCycleOptions: string[] = Object.values(BillingCycle);
-  protected tutorOptions: string[] = ['Peach', 'Yoshi'];
+  protected groupOptions: string[] = Object.values(UserGroup);
+  protected tutors: _Contact[] = [];
   protected contactLoading: boolean = true;
   protected studentsLoading: boolean = true;
   protected notesLoading: boolean = true;
+  protected accountCreated: boolean = false;
+  protected accountError: boolean = false;
   protected contactForm: FormGroup = this.formBuilder.group({
     id: ['', Validators.required],
     first_name: ['', Validators.required],
@@ -58,6 +71,7 @@ export class Contact implements OnInit {
     email: ['', [Validators.required, Validators.email]],
     phone_number: [''],
     service: ['', Validators.required],
+    status: '',
     monthly_charge: 0,
     charge_per_billing_cycle: 0,
     amount_to_be_paid_this_month: 0,
@@ -71,10 +85,32 @@ export class Contact implements OnInit {
     special_circumstance: '',
     scholarship_state: '',
     invoice_Month: '',
-    date_funds_requested_by_btc: '',
-    date_funds_requested_by_family: '',
+    date_funds_requested_by_btc: undefined,
+    date_funds_requested_by_family: undefined,
     invoice_number: '',
-    invoice_paid_date: '',
+    invoice_paid_date: undefined,
+    inquiry_received: undefined,
+    inquiry_note_from_parent: '',
+    consult_date: undefined,
+    twenty_five_received: false,
+    scholarship_student: false,
+    scholarship_name: '',
+    trial_date: undefined,
+    registration_sent: undefined,
+    registration_received: undefined,
+    title: '',
+    currently_accepting_students: false,
+    tutoring_availability: '',
+    zoom_link: '',
+    hourly_rate: 0,
+    hiring_inquiry_received: undefined,
+    interview_offer_sent: undefined,
+    interview_scheduled: undefined,
+    offer_sent: undefined,
+    onboarding_paperwork_received: undefined,
+    training_completed: undefined,
+    user_profile_created: false,
+    user_group: '',
   });
   protected studentsForm: FormGroup = this.formBuilder.group({
     students: this.formBuilder.array([])
@@ -84,11 +120,30 @@ export class Contact implements OnInit {
   });
   protected notesEditIndex: number = -1;
   protected studentsEditIndex: number = -1;
+  protected readonly Service = Service;
+  protected updatedSuccessfully: boolean = false;
+  protected updateError: boolean = false;
 
   ngOnInit() {
     this.loadContact();
     this.loadStudents();
     this.loadNotes();
+    this.getTutors();
+  }
+
+  private getTutors() {
+    this.contactService.getContacts()
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      )
+      .subscribe(contacts => {
+        this.tutors = [...contacts.filter(contact => {
+          return contact.status === Status.STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
+        })];
+      });
   }
 
   get notes(): FormArray {
@@ -135,7 +190,32 @@ export class Contact implements OnInit {
     this.contactForm.controls['date_funds_requested_by_family'].setValue(contact.date_funds_requested_by_family);
     this.contactForm.controls['invoice_number'].setValue(contact.invoice_number);
     this.contactForm.controls['invoice_paid_date'].setValue(contact.invoice_paid_date);
+    this.contactForm.controls['inquiry_received'].setValue(contact.inquiry_received);
+    this.contactForm.controls['inquiry_note_from_parent'].setValue(contact.inquiry_note_from_parent);
+    this.contactForm.controls['consult_date'].setValue(contact.consult_date);
+    this.contactForm.controls['twenty_five_received'].setValue(contact.twenty_five_received);
+    this.contactForm.controls['scholarship_student'].setValue(contact.scholarship_student);
+    this.contactForm.controls['scholarship_name'].setValue(contact.scholarship_name);
+    this.contactForm.controls['trial_date'].setValue(contact.trial_date);
+    this.contactForm.controls['registration_sent'].setValue(contact.registration_sent);
+    this.contactForm.controls['registration_received'].setValue(contact.registration_received);
+    this.contactForm.controls['status'].setValue(contact.status);
+    this.contactForm.controls['title'].setValue(contact.title);
+    this.contactForm.controls['currently_accepting_students'].setValue(contact.currently_accepting_students);
+    this.contactForm.controls['tutoring_availability'].setValue(contact.tutoring_availability);
+    this.contactForm.controls['zoom_link'].setValue(contact.zoom_link);
+    this.contactForm.controls['hourly_rate'].setValue(contact.hourly_rate);
+    this.contactForm.controls['hiring_inquiry_received'].setValue(contact.hiring_inquiry_received);
+    this.contactForm.controls['interview_offer_sent'].setValue(contact.interview_offer_sent);
+    this.contactForm.controls['interview_scheduled'].setValue(contact.interview_scheduled);
+    this.contactForm.controls['offer_sent'].setValue(contact.offer_sent);
+    this.contactForm.controls['onboarding_paperwork_received'].setValue(contact.onboarding_paperwork_received);
+    this.contactForm.controls['training_completed'].setValue(contact.training_completed);
+    this.contactForm.controls['user_profile_created'].setValue(contact.user_profile_created);
+    this.contactForm.controls['user_group'].setValue(contact.user_group);
     this.contactForm.updateValueAndValidity();
+    this.accountCreated = contact.user_profile_created ?? false;
+    this.cdr.markForCheck();
   }
 
   private loadStudents() {
@@ -147,6 +227,7 @@ export class Contact implements OnInit {
     ).subscribe(students => {
       this.buildStudentsFormArray(students);
       this.studentsLoading = false;
+      this.cdr.markForCheck();
     });
   }
 
@@ -177,6 +258,7 @@ export class Contact implements OnInit {
     ).subscribe(notes => {
       this.buildNotesFormArray(notes);
       this.notesLoading = false;
+      this.cdr.markForCheck();
     });
   }
 
@@ -193,6 +275,7 @@ export class Contact implements OnInit {
         type: note.type,
       }));
     });
+    this.notes.updateValueAndValidity();
   }
 
   setNotesEditIndex(index: number) {
@@ -206,56 +289,195 @@ export class Contact implements OnInit {
   }
 
   deleteNoteAt(index: number) {
-    this.notes.removeAt(index);
-    this.notes.updateValueAndValidity();
+    const noteToDelete: Note = this.notes.controls.at(index)?.value as Note;
+    this.noteService.deleteNote(noteToDelete.id!)
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      )
+      .subscribe(response => {
+        console.log(response.message);
+        this.notes.removeAt(index);
+        this.notes.updateValueAndValidity();
+        this.cdr.markForCheck();
+      });
   }
 
   deleteStudentAt(index: number) {
-    this.students.removeAt(index);
-    this.students.updateValueAndValidity();
+    const studentToDelete: Student = this.students.controls.at(index)?.value as Student;
+    this.studentService.deleteStudent(studentToDelete.id!)
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      )
+      .subscribe(response => {
+        console.log(response.message);
+        this.students.removeAt(index);
+        this.students.updateValueAndValidity();
+        this.cdr.markForCheck();
+      });
   }
 
   saveNoteAt(index: number) {
-    // make call to update note
-    this.setNotesEditIndex(-1);
-    console.log(this.notes.controls.at(index)?.value);
+    const noteToSave: Note = this.notes.controls.at(index)?.value as Note;
+    this.noteService.updateNote(noteToSave)
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      )
+      .subscribe(note => {
+        console.log(`Note ${note.id} updated successfully.`);
+        this.setNotesEditIndex(-1);
+      });
   }
 
   saveStudentAt(index: number) {
-    // make service call to update student
-    this.setStudentsEditIndex(-1);
-    console.log(this.students.controls.at(index)?.value);
+    const studentToSave: Student = this.students.controls.at(index)?.value as Student;
+    this.studentService.updateStudent(studentToSave)
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      )
+      .subscribe(student => {
+        console.log(`Student ${student.id} updated successfully.`);
+        this.setStudentsEditIndex(-1);
+      });
   }
 
   addNote() {
-    this.notes.push(this.formBuilder.group({
-      id: '',
-      message: '',
-      date_time: '',
-      author: 'This is a TEST',
-      author_id: '',
-      recipient: '',
-      recipient_id: '',
-      type: '',
-    }));
-    this.notes.updateValueAndValidity();
-    this.setNotesEditIndex(this.notes.controls.length - 1);
+    let date = new Date();
+    let note: Note = new Note();
+    const dateString = date.toISOString();
+    const author = this.authService.contact().first_name;
+    const authorId = this.authService.contact().id;
+    const recipient = this.contactForm.controls['first_name'].value;
+    const recipientId = this.contactForm.controls['id'].value;
+    note.date_time = dateString;
+    note.author = author;
+    note.author_id = authorId;
+    note.recipient = recipient;
+    note.recipient_id = recipientId;
+    this.noteService.createNote(note)
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      )
+      .subscribe(response => {
+        this.notes.push(this.formBuilder.group({
+          id: response.id,
+          message: response.message,
+          date_time: dateString,
+          author: author,
+          author_id: authorId,
+          recipient: recipient,
+          recipient_id: recipientId,
+          type: '',
+        }));
+        this.notes.updateValueAndValidity();
+        this.setNotesEditIndex(this.notes.controls.length - 1);
+      });
   }
 
   addStudent() {
-    this.students.push(this.formBuilder.group({
-      id: '',
-      contact_id: this.id,
-      name: ['', Validators.required],
-      birthday: '',
-      status: ['', Validators.required],
-      assigned_tutor_id: '',
-      package: ['', Validators.required],
-      scholarship: false,
-      available_minutes: 0,
-      make_up_minutes: 0
-    }));
+    let student: Student = new Student();
+    student.contact_id = this.id;
+    this.studentService.createStudent(student)
+    .pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      })
+    )
+    .subscribe(response => {
+      this.students.push(this.formBuilder.group({
+        id: response.id,
+        contact_id: this.id,
+        name: ['', Validators.required],
+        birthday: '',
+        status: ['', Validators.required],
+        assigned_tutor_id: '',
+        package: ['', Validators.required],
+        scholarship: false,
+        available_minutes: 0,
+        make_up_minutes: 0
+      }));
+      this.students.updateValueAndValidity();
+      this.setStudentsEditIndex(this.students.controls.length - 1);
+    });
+  }
+
+  createAccount() {
+    console.log(this.contactForm.controls['user_group'].value);
+    if (this.contactForm.controls['email'].valid && this.contactForm.controls['user_group'].value !== '') {
+      this.contactService.adminCreateUser(
+        this.contactForm.controls['email'].value,
+        this.contactForm.controls['user_group'].value,
+        this.id
+      ).pipe(
+        catchError(error => {
+          console.log(error);
+          this.accountError = true;
+          this.cdr.markForCheck();
+          return EMPTY;
+        })
+      ).subscribe(response => {
+        console.log(response);
+        this.accountError = false;
+        this.accountCreated = true;
+        this.cdr.markForCheck();
+      });
+    } else {
+      this.accountError = true;
+      this.cdr.markForCheck();
+    }
+  }
+
+  deleteAccount() {
+    this.contactService.adminDeleteUser(this.id).pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      })
+    ).subscribe(response => {
+      console.log(response);
+      this.accountCreated = false;
+      this.cdr.markForCheck();
+    });
+  }
+
+  updateContact() {
+    if (this.contactForm.valid) {
+      let contact: _Contact = this.contactForm.value as _Contact;
+      this.contactService.updateContact(contact)
+        .pipe(
+          catchError(error => {
+            console.log(error);
+            this.updatedSuccessfully = false;
+            this.updateError = true;
+            this.cdr.markForCheck();
+            return EMPTY;
+          })
+        )
+        .subscribe(() => {
+          this.updatedSuccessfully = true;
+          this.updateError = false;
+          this.cdr.markForCheck();
+        });
+    }
+  }
+
+  packageSelected($event: MatSelectChange) {
+    this.students.at(this.studentsEditIndex).get('available_minutes')?.setValue(packageMinutesMap[$event.value as Package]);
     this.students.updateValueAndValidity();
-    this.setStudentsEditIndex(this.students.controls.length - 1);
   }
 }
