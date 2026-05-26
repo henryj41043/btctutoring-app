@@ -50,7 +50,13 @@
             }
           </mat-select>
         </mat-form-field>
-        <mat-checkbox formControlName="user_profile_created">User Account</mat-checkbox>
+        <div>User Account:
+          @if (contactForm.controls['user_profile_created'].value) {
+            <mat-icon style="color: green;">check</mat-icon>
+          } @else {
+            <mat-icon style="color: red;">close</mat-icon>
+          }
+        </div>
         <mat-form-field>
           <mat-label>Select Group</mat-label>
           <mat-select formControlName="user_group">
@@ -113,6 +119,40 @@
   <div class="contact-tutoring contact-section" [formGroup]="studentsForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>Student Roster</h2>
+      <table mat-table [dataSource]="rosterStudents" class="mat-elevation-z8">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let item">{{item.name}}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let item">{{item.status}}</td>
+        </ng-container>
+        <ng-container matColumnDef="package">
+          <th mat-header-cell *matHeaderCellDef>Package</th>
+          <td mat-cell *matCellDef="let item">{{item.package}}</td>
+        </ng-container>
+        <ng-container matColumnDef="available_minutes">
+          <th mat-header-cell *matHeaderCellDef>Available Min</th>
+          <td mat-cell *matCellDef="let item">{{item.available_minutes}}</td>
+        </ng-container>
+        <ng-container matColumnDef="make_up_minutes">
+          <th mat-header-cell *matHeaderCellDef>Make Up Min</th>
+          <td mat-cell *matCellDef="let item">{{item.make_up_minutes}}</td>
+        </ng-container>
+        <ng-container matColumnDef="scholarship">
+          <th mat-header-cell *matHeaderCellDef>Scholarship</th>
+          <td mat-cell *matCellDef="let item">
+            @if (item.scholarship) {
+              <mat-icon style="color: green;">check</mat-icon>
+            } @else {
+              <mat-icon style="color: red;">close</mat-icon>
+            }
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="rosterColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: rosterColumns;"></tr>
+      </table>
     } @else {
       <h2>Students</h2>
       <button matIconButton type="button" (click)="addStudent()">

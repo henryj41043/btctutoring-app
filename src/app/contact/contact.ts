@@ -25,6 +25,7 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {packageMinutesMap} from '../utils/package-minutes-map';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatTableModule} from '@angular/material/table';
 
 @Component({
   selector: 'app-contact',
@@ -41,6 +42,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
     DatePipe,
     MatDatepickerModule,
     MatProgressSpinnerModule,
+    MatTableModule,
   ],
   templateUrl: './contact.html',
   styleUrl: './contact.scss',
@@ -126,12 +128,27 @@ export class Contact implements OnInit {
   protected readonly Service = Service;
   protected updatedSuccessfully: boolean = false;
   protected updateError: boolean = false;
+  protected rosterStudents: Student[] = [];
+  protected rosterColumns: string[] = ['name', 'status', 'package', 'available_minutes', 'make_up_minutes', 'scholarship'];
 
   ngOnInit() {
     this.loadContact();
     this.loadStudents();
     this.loadNotes();
     this.getTutors();
+    this.loadRosterStudents();
+  }
+
+  private loadRosterStudents() {
+    this.studentService.getStudentsByTutor(this.id).pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      })
+    ).subscribe(students => {
+      this.rosterStudents = students;
+      this.cdr.markForCheck();
+    });
   }
 
   private getTutors() {

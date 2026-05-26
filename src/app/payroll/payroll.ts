@@ -10,6 +10,7 @@ import {DatePipe} from '@angular/common';
 import {catchError, EMPTY} from 'rxjs';
 import {Service} from '../enums/service.enum';
 import {Status} from '../enums/status.enum';
+import {SessionStatus} from '../enums/session-status.enum';
 
 @Component({
   selector: 'app-payroll',
@@ -77,7 +78,9 @@ export class Payroll implements OnInit {
                 payrollEntry.administrative_time = 0;
                 payrollEntry.tutoring_hours = 0;
                 sessions.forEach(session => {
-                  payrollEntry.tutoring_hours = payrollEntry.tutoring_hours! + this.calculateTime(session.start_datetime!, session.end_datetime!);
+                  if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) {
+                    payrollEntry.tutoring_hours = payrollEntry.tutoring_hours! + this.calculateTime(session.start_datetime!, session.end_datetime!);
+                  }
                 });
                 payrollEntry.planning_time = Math.round((payrollEntry.tutoring_hours / 6) * 100) / 100;
                 payrollEntry.hours_subtotal = payrollEntry.tutoring_hours + payrollEntry.administrative_time;
