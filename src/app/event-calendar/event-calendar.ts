@@ -171,7 +171,7 @@ export class EventCalendar implements OnInit {
         }
       );
     } else {
-      this.sessionsService.getSessionsByTutor(this.authService.user().email).pipe(
+      this.sessionsService.getSessionsByTutor(this.authService.user().contact).pipe(
         catchError(error => {
           console.log(error);
           return new Observable();

@@ -24,6 +24,7 @@ import {DatePipe} from '@angular/common';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {packageMinutesMap} from '../utils/package-minutes-map';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 
 @Component({
   selector: 'app-contact',
@@ -39,6 +40,7 @@ import {packageMinutesMap} from '../utils/package-minutes-map';
     MatCheckbox,
     DatePipe,
     MatDatepickerModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './contact.html',
   styleUrl: './contact.scss',
@@ -64,6 +66,7 @@ export class Contact implements OnInit {
   protected notesLoading: boolean = true;
   protected accountCreated: boolean = false;
   protected accountError: boolean = false;
+  protected accountLoading: boolean = false;
   protected contactForm: FormGroup = this.formBuilder.group({
     id: ['', Validators.required],
     first_name: ['', Validators.required],
@@ -417,8 +420,10 @@ export class Contact implements OnInit {
   }
 
   createAccount() {
-    console.log(this.contactForm.controls['user_group'].value);
     if (this.contactForm.controls['email'].valid && this.contactForm.controls['user_group'].value !== '') {
+      this.accountLoading = true;
+      this.accountError = false;
+      this.cdr.markForCheck();
       this.contactService.adminCreateUser(
         this.contactForm.controls['email'].value,
         this.contactForm.controls['user_group'].value,
@@ -427,6 +432,7 @@ export class Contact implements OnInit {
         catchError(error => {
           console.log(error);
           this.accountError = true;
+          this.accountLoading = false;
           this.cdr.markForCheck();
           return EMPTY;
         })
@@ -434,7 +440,11 @@ export class Contact implements OnInit {
         console.log(response);
         this.accountError = false;
         this.accountCreated = true;
+        this.accountLoading = false;
+        this.contactForm.controls['user_profile_created'].setValue(true);
+        this.contactForm.controls['user_profile_created'].markAsDirty();
         this.cdr.markForCheck();
+        this.contactForm.updateValueAndValidity();
       });
     } else {
       this.accountError = true;
@@ -443,16 +453,26 @@ export class Contact implements OnInit {
   }
 
   deleteAccount() {
-    this.contactService.adminDeleteUser(this.id).pipe(
-      catchError(error => {
-        console.log(error);
-        return EMPTY;
-      })
-    ).subscribe(response => {
-      console.log(response);
-      this.accountCreated = false;
+    if (this.contactForm.controls['email'].valid) {
+      this.accountLoading = true;
       this.cdr.markForCheck();
-    });
+      this.contactService.adminDeleteUser(this.contactForm.controls['email'].value!).pipe(
+        catchError(error => {
+          console.log(error);
+          this.accountLoading = false;
+          this.cdr.markForCheck();
+          return EMPTY;
+        })
+      ).subscribe(response => {
+        console.log(response);
+        this.accountCreated = false;
+        this.accountLoading = false;
+        this.contactForm.controls['user_profile_created'].setValue(false);
+        this.contactForm.controls['user_profile_created'].markAsDirty();
+        this.cdr.markForCheck();
+        this.contactForm.updateValueAndValidity();
+      });
+    }
   }
 
   updateContact() {
@@ -465,13 +485,23 @@ export class Contact implements OnInit {
             this.updatedSuccessfully = false;
             this.updateError = true;
             this.cdr.markForCheck();
+            setTimeout(() => {
+              this.updateError = false;
+              this.cdr.markForCheck();
+            }, 1000);
             return EMPTY;
           })
         )
         .subscribe(() => {
           this.updatedSuccessfully = true;
           this.updateError = false;
+          this.contactForm.markAsPristine();
+          this.contactForm.markAsUntouched();
           this.cdr.markForCheck();
+          setTimeout(() => {
+            this.updatedSuccessfully = false;
+            this.cdr.markForCheck();
+          }, 1000);
         });
     }
   }

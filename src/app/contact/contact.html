@@ -1,7 +1,7 @@
 <form class="contact-form">
   <div class="contact-section">
     <h2>Contact</h2>
-    <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+    <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
       <mat-icon>save</mat-icon>
     </button>
     @if (updatedSuccessfully) {
@@ -51,20 +51,23 @@
           </mat-select>
         </mat-form-field>
         <mat-checkbox formControlName="user_profile_created">User Account</mat-checkbox>
-        @if (contactForm.controls['user_profile_created'].value) {
-          <mat-form-field>
-            <mat-label>Select Group</mat-label>
-            <mat-select formControlName="user_group">
-              @for (groupOption of groupOptions; track groupOption) {
-                <mat-option [value]="groupOption">{{groupOption}}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-          <button matButton type="button" (click)="createAccount()" [hidden]="accountCreated">Create Account</button>
-          <button matButton type="button" (click)="deleteAccount()" [hidden]="!accountCreated">Delete Account</button>
-          @if (accountError) {
-            <mat-error>Valid Email and Group Required</mat-error>
-          }
+        <mat-form-field>
+          <mat-label>Select Group</mat-label>
+          <mat-select formControlName="user_group">
+            @for (groupOption of groupOptions; track groupOption) {
+              <mat-option [value]="groupOption">{{groupOption}}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        @if (accountLoading) {
+          <mat-spinner diameter="24"></mat-spinner>
+        } @else if (!accountCreated) {
+          <button matButton type="button" (click)="createAccount()">Create Account</button>
+        } @else {
+          <button matButton type="button" (click)="deleteAccount()">Delete Account</button>
+        }
+        @if (accountError) {
+          <mat-error>Valid Email and Group Required</mat-error>
         }
       }
     </div>
@@ -208,7 +211,7 @@
   <div class="contact-billing contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>BTC Tutor Information</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
         <mat-icon>save</mat-icon>
       </button>
       @if (updatedSuccessfully) {
@@ -238,7 +241,7 @@
       </div>
     } @else if (students.length > 0 && students.at(0).get('scholarship')?.value) {
       <h2>Scholarship</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
         <mat-icon>save</mat-icon>
       </button>
       @if (updatedSuccessfully) {
@@ -289,7 +292,7 @@
       </div>
     } @else {
       <h2>Billing</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
         <mat-icon>save</mat-icon>
       </button>
       @if (updatedSuccessfully) {
@@ -335,7 +338,7 @@
   <div class="contact-onboarding contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>Hiring Process</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
         <mat-icon>save</mat-icon>
       </button>
       @if (updatedSuccessfully) {
@@ -384,7 +387,7 @@
       </div>
     } @else {
       <h2>Onboarding</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="contactForm.pristine && contactForm.untouched">
+      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
         <mat-icon>save</mat-icon>
       </button>
       @if (updatedSuccessfully) {
