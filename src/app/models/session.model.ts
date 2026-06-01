@@ -1,7 +1,9 @@
 import {SessionStatus} from '../enums/session-status.enum';
+import {SessionType} from '../enums/session-type.enum';
 
 export class Session {
   id?: string;
+  type?: SessionType;
   end_datetime?: string;
   notes?: string;
   start_datetime?: string;

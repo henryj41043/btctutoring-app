@@ -5,6 +5,12 @@
       <mat-card-subtitle>{{startDate | date:'shortDate'}} - {{endDate | date:'shortDate'}}</mat-card-subtitle>
     </mat-card-header>
     <mat-card-actions>
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>Pay period date</mat-label>
+        <input matInput [matDatepicker]="payrollDatepicker" [(ngModel)]="selectedDate" (dateChange)="onDateChange($event.value)">
+        <mat-datepicker-toggle [for]="payrollDatepicker" matSuffix/>
+        <mat-datepicker #payrollDatepicker/>
+      </mat-form-field>
       <button matButton (click)="exportPDF()">Export PDF</button>
     </mat-card-actions>
     <mat-card-content>

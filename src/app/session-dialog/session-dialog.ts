@@ -26,6 +26,7 @@ import {Service} from '../enums/service.enum';
 import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
 import {SessionStatus} from '../enums/session-status.enum';
+import {SessionType} from '../enums/session-type.enum';
 
 @Component({
   selector: 'app-session-dialog',
@@ -53,10 +54,13 @@ export class SessionDialog implements OnInit {
   errorMessage: String = '';
   notes: string = '';
   hasError: boolean = false;
+  selectedType: SessionType = SessionType.TUTORING;
   selectedTutor: string | undefined;
   selectedStudent: string | undefined;
   selectedAttendance: any;
   attendanceOptions: SessionStatus[] = Object.values(SessionStatus);
+  sessionTypeOptions: SessionType[] = Object.values(SessionType);
+  readonly SessionType = SessionType;
   tutors: Contact[] = [];
   students: Student[] = [];
   readonly dialogRef = inject(MatDialogRef<SessionDialog>);
@@ -67,6 +71,7 @@ export class SessionDialog implements OnInit {
 
   ngOnInit(): void {
     if(this.dialogData.type !== 'create') {
+      this.selectedType = this.dialogData.session.type ?? SessionType.TUTORING;
       this.selectedStudent = this.dialogData.session.student_id;
       this.selectedTutor = this.dialogData.session.tutor_id;
       this.date = new Date(this.dialogData.session.start_datetime as string);
@@ -99,14 +104,17 @@ export class SessionDialog implements OnInit {
       let tutor: Contact = this.tutors.find(tutor => {
         return tutor.id === this.selectedTutor;
       })!;
-      let student: Student = this.students.find(student => {
-        return student.id === this.selectedStudent;
-      })!;
       let session: Session = new Session();
+      session.type = this.selectedType;
       session.tutor_name = tutor.first_name;
       session.tutor_id = tutor.id;
-      session.student_name = student.name;
-      session.student_id = student.id;
+      if (this.selectedType === SessionType.TUTORING) {
+        let student: Student = this.students.find(student => {
+          return student.id === this.selectedStudent;
+        })!;
+        session.student_name = student.name;
+        session.student_id = student.id;
+      }
       session.start_datetime = submitStartDate.toISOString();
       session.end_datetime = submitEndDate.toISOString();
       session.status = SessionStatus.PENDING;
@@ -150,14 +158,17 @@ export class SessionDialog implements OnInit {
       let tutor: Contact = this.tutors.find(tutor => {
         return tutor.id === this.selectedTutor;
       })!;
-      let student: Student = this.students.find(student => {
-        return student.id === this.selectedStudent;
-      })!;
       let session: Session = new Session();
+      session.type = this.selectedType;
       session.tutor_name = tutor.first_name;
       session.tutor_id = tutor.id;
-      session.student_name = student.name;
-      session.student_id = student.id;
+      if (this.selectedType === SessionType.TUTORING) {
+        let student: Student = this.students.find(student => {
+          return student.id === this.selectedStudent;
+        })!;
+        session.student_name = student.name;
+        session.student_id = student.id;
+      }
       session.start_datetime = submitStartDate.toISOString();
       session.end_datetime = submitEndDate.toISOString();
       session.status = this.selectedAttendance;

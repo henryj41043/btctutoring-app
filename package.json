@@ -35,6 +35,8 @@
     "angular-draggable-droppable": "^9.0.1",
     "angular-resizable-element": "^8.0.0",
     "date-fns": "^4.0.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.15.0"

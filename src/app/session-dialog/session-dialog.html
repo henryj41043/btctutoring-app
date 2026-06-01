@@ -8,6 +8,17 @@
   }
 </h2>
 <mat-dialog-content>
+  @if (dialogData.type !== 'delete') {
+    <mat-form-field>
+      <mat-label>Session Type</mat-label>
+      <mat-select [(ngModel)]="selectedType">
+        @for (type of sessionTypeOptions; track type) {
+          <mat-option [value]="type">{{type}}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <br/>
+  }
   <mat-form-field>
     <mat-label>Enter date</mat-label>
     <input matInput [matDatepicker]="datepicker" [(ngModel)]="date">
@@ -32,14 +43,16 @@
     <mat-timepicker interval="15min" #starttimepicker/>
     <mat-timepicker-toggle [for]="starttimepicker" matSuffix/>
   </mat-form-field>
-  <mat-form-field>
-    <mat-label>Select Student</mat-label>
-    <mat-select [(ngModel)]="selectedStudent">
-      @for (student of students; track student) {
-        <mat-option [value]="student.id">{{student.name}}</mat-option>
-      }
-    </mat-select>
-  </mat-form-field>
+  @if (selectedType === SessionType.TUTORING) {
+    <mat-form-field>
+      <mat-label>Select Student</mat-label>
+      <mat-select [(ngModel)]="selectedStudent">
+        @for (student of students; track student) {
+          <mat-option [value]="student.id">{{student.name}}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  }
   <br/>
   <mat-form-field>
     <mat-label>Enter end time</mat-label>

@@ -39,6 +39,7 @@ import {Response} from '../models/response.model';
 import {isSameDay, isSameMonth} from 'date-fns';
 import {EventColor} from 'calendar-utils';
 import {SessionStatus} from '../enums/session-status.enum';
+import {SessionType} from '../enums/session-type.enum';
 
 const colors: Record<string, EventColor> = {
   red: {
@@ -56,6 +57,10 @@ const colors: Record<string, EventColor> = {
   green: {
     primary: '#18c100',
     secondary: '#87ff78',
+  },
+  purple: {
+    primary: '#7b2fbe',
+    secondary: '#d8b4fe',
   },
 };
 
@@ -149,24 +154,7 @@ export class EventCalendar implements OnInit {
         response => {
           console.log(response);
           let sessions: Session[] = response as Session[];
-          let calEvents: CalendarEvent<Session>[] = [];
-          sessions.forEach((session: Session): void => {
-            let color: EventColor = this.setColor(session.status!);
-            calEvents.push({
-              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`,
-              start: new Date(session.start_datetime as string),
-              end: new Date(session.end_datetime as string),
-              meta: session,
-              actions: this.actions,
-              color: color,
-              resizable: {
-                beforeStart: true,
-                afterEnd: true,
-              },
-              draggable: true,
-            });
-          });
-          this.events = calEvents;
+          this.events = this.buildCalendarEvents(sessions);
           this.cdr.markForCheck();
         }
       );
@@ -180,31 +168,36 @@ export class EventCalendar implements OnInit {
         response => {
           console.log(response);
           let sessions: Session[] = response as Session[];
-          let calEvents: CalendarEvent<Session>[] = [];
-          sessions.forEach((session: Session): void => {
-            let color: EventColor = this.setColor(session.status!);
-            calEvents.push({
-              title: `${session.tutor_name} with ${session.student_name} - ${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`,
-              start: new Date(session.start_datetime as string),
-              end: new Date(session.end_datetime as string),
-              meta: session,
-              actions: this.actions,
-              color: color,
-              resizable: {
-                beforeStart: true,
-                afterEnd: true,
-              },
-              draggable: true,
-            });
-          });
-          this.events = calEvents;
+          this.events = this.buildCalendarEvents(sessions);
           this.cdr.markForCheck();
         }
       );
     }
   }
 
-  private setColor(status: SessionStatus): EventColor {
+  private buildCalendarEvents(sessions: Session[]): CalendarEvent<Session>[] {
+    return sessions.map((session: Session) => {
+      const isAdmin = session.type === SessionType.ADMIN;
+      const timeRange = `${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`;
+      return {
+        title: isAdmin
+          ? `${session.tutor_name} - Admin Time - ${timeRange}`
+          : `${session.tutor_name} with ${session.student_name} - ${timeRange}`,
+        start: new Date(session.start_datetime as string),
+        end: new Date(session.end_datetime as string),
+        meta: session,
+        actions: this.actions,
+        color: this.setColor(session.type, session.status),
+        resizable: { beforeStart: true, afterEnd: true },
+        draggable: true,
+      };
+    });
+  }
+
+  private setColor(type: SessionType | undefined, status: SessionStatus | undefined): EventColor {
+    if (type === SessionType.ADMIN) {
+      return colors['purple'];
+    }
     switch (status) {
       case SessionStatus.PENDING:
         return colors['yellow'];
