@@ -26,6 +26,8 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {packageMinutesMap} from '../utils/package-minutes-map';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTableModule} from '@angular/material/table';
+import {MatDialog} from '@angular/material/dialog';
+import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 
 @Component({
   selector: 'app-contact',
@@ -57,6 +59,7 @@ export class Contact implements OnInit {
   private authService: AuthService = inject(AuthService);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  private dialog: MatDialog = inject(MatDialog);
   protected serviceOptions: string[] = Object.values(Service);
   protected statusOptions: string[] = Object.values(Status);
   protected packageOptions: string[] = Object.values(Package);
@@ -521,6 +524,13 @@ export class Contact implements OnInit {
           }, 1000);
         });
     }
+  }
+
+  openSessionsDialog(student: Student): void {
+    this.dialog.open(StudentSessionsDialog, {
+      data: student,
+      width: '700px',
+    });
   }
 
   packageSelected($event: MatSelectChange) {

@@ -2,10 +2,12 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit} f
 import {MatCardModule} from '@angular/material/card';
 import {MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
+import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {StudentService} from '../services/student.service';
 import {AuthService} from '../services/auth.service';
 import {Student} from '../models/student.model';
+import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 
 @Component({
   selector: 'app-student-roster',
@@ -23,6 +25,7 @@ export class StudentRoster implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  private dialog: MatDialog = inject(MatDialog);
 
   protected rosterColumns: string[] = ['name', 'status', 'package', 'available_minutes', 'make_up_minutes', 'scholarship'];
   protected rosterStudents: Student[] = [];
@@ -41,6 +44,13 @@ export class StudentRoster implements OnInit {
     ).subscribe(students => {
       this.rosterStudents = students;
       this.cdr.markForCheck();
+    });
+  }
+
+  openSessionsDialog(student: Student): void {
+    this.dialog.open(StudentSessionsDialog, {
+      data: student,
+      width: '700px',
     });
   }
 }
