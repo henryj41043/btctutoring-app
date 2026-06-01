@@ -4,7 +4,6 @@ import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
 import {SessionsTable} from './sessions-table/sessions-table';
 import {ContactsTable} from './contacts-table/contacts-table';
-import {EmployeesTable} from './employees-table/employees-table';
 import {Contact} from './contact/contact';
 import {Payroll} from './payroll/payroll';
 import {StudentRoster} from './student-roster/student-roster';
@@ -37,11 +36,6 @@ export const routes: Routes = [
   {
     path: 'contacts/:id',
     component: Contact,
-    canActivate: [AuthGuard],
-  },
-  {
-    path: 'employees',
-    component: EmployeesTable,
     canActivate: [AuthGuard],
   },
   {

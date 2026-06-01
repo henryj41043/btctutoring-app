@@ -37,10 +37,6 @@ export class ToolBar {
     void this.router.navigate(['/contacts']);
   }
 
-  employeesNav(): void {
-    void this.router.navigate(['/employees']);
-  }
-
   rosterNav(): void {
     void this.router.navigate(['/roster']);
   }
