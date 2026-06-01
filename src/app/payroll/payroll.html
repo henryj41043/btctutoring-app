@@ -14,9 +14,9 @@
       <button matButton (click)="exportPDF()">Export PDF</button>
     </mat-card-actions>
     <mat-card-content>
-      <table mat-table [dataSource]="payrollData" class="mat-elevation-z8">
+      <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
         <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef> Staff Name </th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header> Staff Name </th>
           <td mat-cell *matCellDef="let item"> {{item.name}} </td>
         </ng-container>
         <ng-container matColumnDef="tutoring_hours">
@@ -58,6 +58,7 @@
         <tr mat-header-row *matHeaderRowDef="payrollColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: payrollColumns;"></tr>
       </table>
+      <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
     </mat-card-content>
   </mat-card>
 </div>

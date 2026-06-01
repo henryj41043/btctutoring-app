@@ -1,9 +1,11 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
-import {MatTableModule} from '@angular/material/table';
+import {MatTableDataSource, MatTableModule} from '@angular/material/table';
+import {MatSort, MatSortModule} from '@angular/material/sort';
+import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -27,6 +29,8 @@ import {SessionType} from '../enums/session-type.enum';
     MatButtonModule,
     MatCardModule,
     MatTableModule,
+    MatSortModule,
+    MatPaginatorModule,
     MatDatepickerModule,
     MatFormFieldModule,
     MatInputModule,
@@ -37,11 +41,15 @@ import {SessionType} from '../enums/session-type.enum';
   styleUrl: './payroll.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class Payroll implements OnInit {
+export class Payroll implements OnInit, AfterViewInit {
   private authService: AuthService = inject(AuthService);
   private sessionsService: SessionsService = inject(SessionsService);
   private contactService: ContactService = inject(ContactService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+
+  @ViewChild(MatSort) sort!: MatSort;
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+
   protected payrollColumns: string[] = [
     'name',
     'tutoring_hours',
@@ -54,13 +62,18 @@ export class Payroll implements OnInit {
     'planning_compensation',
     'total_compensation',
   ];
-  protected payrollData: PayrollEntry[] = [];
+  protected dataSource = new MatTableDataSource<PayrollEntry>([]);
   protected startDate: Date | undefined;
   protected endDate: Date | undefined;
   protected selectedDate: Date = new Date();
 
   ngOnInit(): void {
     this.loadPayroll(this.selectedDate);
+  }
+
+  ngAfterViewInit(): void {
+    this.dataSource.sort = this.sort;
+    this.dataSource.paginator = this.paginator;
   }
 
   onDateChange(date: Date | null): void {
@@ -93,7 +106,7 @@ export class Payroll implements OnInit {
         'Pay Rate', 'Tutoring Comp', 'Planning (hrs)', 'Planning Rate',
         'Planning Comp', 'Total Comp',
       ]],
-      body: this.payrollData.map(entry => [
+      body: this.dataSource.data.map(entry => [
         entry.name ?? '',
         entry.tutoring_hours ?? 0,
         entry.administrative_time ?? 0,
@@ -119,7 +132,7 @@ export class Payroll implements OnInit {
     } else {
       this.startDate = new Date(date.getFullYear(), date.getMonth(), 16);
     }
-    this.payrollData = [];
+    this.dataSource.data = [];
 
     this.contactService.getContacts()
       .pipe(catchError(error => { console.log(error); return EMPTY; }))
@@ -147,7 +160,7 @@ export class Payroll implements OnInit {
                 payrollEntry.planning_compensation = Math.round((payrollEntry.planning_time * payrollEntry.planning_rate) * 100) / 100;
                 payrollEntry.tutoring_compensation = Math.round((payrollEntry.hours_subtotal * payrollEntry.pay_rate!) * 100) / 100;
                 payrollEntry.total_compensation = payrollEntry.planning_compensation + payrollEntry.tutoring_compensation;
-                this.payrollData = [...this.payrollData, payrollEntry];
+                this.dataSource.data = [...this.dataSource.data, payrollEntry];
                 this.cdr.markForCheck();
               });
           }

@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {DatePipe} from '@angular/common';
 import {MatButtonModule} from '@angular/material/button';
 import {
@@ -8,7 +8,9 @@ import {
   MatDialogContent,
   MatDialogTitle
 } from '@angular/material/dialog';
-import {MatTableModule} from '@angular/material/table';
+import {MatTableDataSource, MatTableModule} from '@angular/material/table';
+import {MatSort, MatSortModule} from '@angular/material/sort';
+import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {catchError, EMPTY} from 'rxjs';
 import {SessionsService} from '../services/sessions.service';
@@ -24,6 +26,8 @@ import {Student} from '../models/student.model';
     MatDialogActions,
     MatButtonModule,
     MatTableModule,
+    MatSortModule,
+    MatPaginatorModule,
     MatProgressSpinnerModule,
     DatePipe,
     MatDialogClose,
@@ -33,15 +37,31 @@ import {Student} from '../models/student.model';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
 })
-export class StudentSessionsDialog implements OnInit {
+export class StudentSessionsDialog implements OnInit, AfterViewInit {
   private sessionsService: SessionsService = inject(SessionsService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   readonly student = inject<Student>(MAT_DIALOG_DATA);
 
-  protected sessions: Session[] = [];
+  @ViewChild(MatSort) sort!: MatSort;
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+
+  protected dataSource = new MatTableDataSource<Session>([]);
   protected loading = true;
   protected sessionColumns = ['date', 'time', 'tutor_name', 'status', 'notes'];
+
+  ngAfterViewInit(): void {
+    this.dataSource.sort = this.sort;
+    this.dataSource.paginator = this.paginator;
+    this.dataSource.sortingDataAccessor = (item, property) => {
+      switch (property) {
+        case 'date': return item.start_datetime ?? '';
+        case 'tutor_name': return item.tutor_name ?? '';
+        case 'status': return item.status ?? '';
+        default: return (item as any)[property];
+      }
+    };
+  }
 
   ngOnInit(): void {
     const isAdmin = this.authService.user().groups.includes('Admins');
@@ -57,7 +77,7 @@ export class StudentSessionsDialog implements OnInit {
         return EMPTY;
       })
     ).subscribe(sessions => {
-      this.sessions = sessions.sort((a, b) =>
+      this.dataSource.data = sessions.sort((a, b) =>
         new Date(b.start_datetime!).getTime() - new Date(a.start_datetime!).getTime()
       );
       this.loading = false;

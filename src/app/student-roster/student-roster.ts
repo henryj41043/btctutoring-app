@@ -1,7 +1,9 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {MatCardModule} from '@angular/material/card';
-import {MatTableModule} from '@angular/material/table';
+import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
+import {MatSort, MatSortModule} from '@angular/material/sort';
+import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {StudentService} from '../services/student.service';
@@ -15,20 +17,25 @@ import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions
     MatCardModule,
     MatTableModule,
     MatIconModule,
+    MatSortModule,
+    MatPaginatorModule,
   ],
   templateUrl: './student-roster.html',
   styleUrl: './student-roster.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
 })
-export class StudentRoster implements OnInit {
+export class StudentRoster implements OnInit, AfterViewInit {
   private studentService: StudentService = inject(StudentService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
 
+  @ViewChild(MatSort) sort!: MatSort;
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+
   protected rosterColumns: string[] = ['name', 'status', 'package', 'available_minutes', 'make_up_minutes', 'scholarship'];
-  protected rosterStudents: Student[] = [];
+  protected dataSource = new MatTableDataSource<Student>([]);
 
   ngOnInit(): void {
     const isAdmin = this.authService.user().groups.includes('Admins');
@@ -42,9 +49,14 @@ export class StudentRoster implements OnInit {
         return EMPTY;
       })
     ).subscribe(students => {
-      this.rosterStudents = students;
+      this.dataSource.data = students;
       this.cdr.markForCheck();
     });
+  }
+
+  ngAfterViewInit(): void {
+    this.dataSource.sort = this.sort;
+    this.dataSource.paginator = this.paginator;
   }
 
   openSessionsDialog(student: Student): void {

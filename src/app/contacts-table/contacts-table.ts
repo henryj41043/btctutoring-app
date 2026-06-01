@@ -1,8 +1,10 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
-import {MatTableModule} from '@angular/material/table';
+import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
+import {MatSort, MatSortModule} from '@angular/material/sort';
+import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {ContactDialog} from '../contact-dialog/contact-dialog';
@@ -19,48 +21,47 @@ import {Router} from '@angular/router';
     MatCardModule,
     MatTableModule,
     MatIconModule,
+    MatSortModule,
+    MatPaginatorModule,
   ],
   templateUrl: './contacts-table.html',
   styleUrl: './contacts-table.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true
 })
-export class ContactsTable implements OnInit {
+export class ContactsTable implements OnInit, AfterViewInit {
   readonly contactDialog: MatDialog = inject(MatDialog);
   private contactService: ContactService = inject(ContactService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private router: Router = inject(Router);
 
-  contactColumns: string[] = [
-    'first_name',
-    'last_name',
-    'email',
-    'phone_number',
-    'service',
-  ];
-  contactData: Contact[] = [];
+  @ViewChild(MatSort) sort!: MatSort;
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+
+  contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service'];
+  dataSource = new MatTableDataSource<Contact>([]);
 
   ngOnInit(): void {
     this.updateClientData();
   }
 
+  ngAfterViewInit(): void {
+    this.dataSource.sort = this.sort;
+    this.dataSource.paginator = this.paginator;
+  }
+
   private updateClientData(): void {
-    if(this.authService.user().groups.includes('Admins')) {
+    if (this.authService.user().groups.includes('Admins')) {
       this.contactService.getContacts().pipe(
         catchError(error => {
           console.log(error);
           return EMPTY;
         })
-      ).subscribe(
-        response => {
-          console.log(response);
-          this.contactData = response as Contact[];
-          this.cdr.markForCheck();
-        }
-      );
-    } else {
-      // TODO: figure out what to do with non admins
+      ).subscribe(response => {
+        this.dataSource.data = response as Contact[];
+        this.cdr.markForCheck();
+      });
     }
   }
 

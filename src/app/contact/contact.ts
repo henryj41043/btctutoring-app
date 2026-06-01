@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, Input, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, Input, OnInit, ViewChild} from '@angular/core';
 import {ContactService} from '../services/contact.service';
 import {catchError, EMPTY} from 'rxjs';
 import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
@@ -25,7 +25,9 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {packageMinutesMap} from '../utils/package-minutes-map';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatTableModule} from '@angular/material/table';
+import {MatTableDataSource, MatTableModule} from '@angular/material/table';
+import {MatSort, MatSortModule} from '@angular/material/sort';
+import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDialog} from '@angular/material/dialog';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 
@@ -45,6 +47,8 @@ import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions
     MatDatepickerModule,
     MatProgressSpinnerModule,
     MatTableModule,
+    MatSortModule,
+    MatPaginatorModule,
   ],
   templateUrl: './contact.html',
   styleUrl: './contact.scss',
@@ -60,6 +64,13 @@ export class Contact implements OnInit {
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
+
+  @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
+    if (sort) { this.rosterDataSource.sort = sort; }
+  }
+  @ViewChild('rosterPaginator') set rosterPaginator(paginator: MatPaginator) {
+    if (paginator) { this.rosterDataSource.paginator = paginator; }
+  }
   protected serviceOptions: string[] = Object.values(Service);
   protected statusOptions: string[] = Object.values(Status);
   protected packageOptions: string[] = Object.values(Package);
@@ -131,7 +142,7 @@ export class Contact implements OnInit {
   protected readonly Service = Service;
   protected updatedSuccessfully: boolean = false;
   protected updateError: boolean = false;
-  protected rosterStudents: Student[] = [];
+  protected rosterDataSource = new MatTableDataSource<Student>([]);
   protected rosterColumns: string[] = ['name', 'status', 'package', 'available_minutes', 'make_up_minutes', 'scholarship'];
 
   ngOnInit() {
@@ -149,7 +160,7 @@ export class Contact implements OnInit {
         return EMPTY;
       })
     ).subscribe(students => {
-      this.rosterStudents = students;
+      this.rosterDataSource.data = students;
       this.cdr.markForCheck();
     });
   }
