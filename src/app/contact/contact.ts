@@ -60,7 +60,7 @@ export class Contact implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private studentService: StudentService = inject(StudentService);
   private noteService: NoteService = inject(NoteService);
-  private authService: AuthService = inject(AuthService);
+  protected authService: AuthService = inject(AuthService);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
@@ -247,6 +247,16 @@ export class Contact implements OnInit {
     this.contactForm.controls['training_completed'].setValue(contact.training_completed);
     this.contactForm.controls['user_profile_created'].setValue(contact.user_profile_created);
     this.contactForm.controls['user_group'].setValue(contact.user_group);
+
+    // Tutors cannot edit their own service, status, group, or hiring process fields
+    if (!this.authService.isAdmin()) {
+      [
+        'service', 'status', 'user_group',
+        'hiring_inquiry_received', 'interview_offer_sent', 'interview_scheduled',
+        'offer_sent', 'onboarding_paperwork_received', 'training_completed',
+      ].forEach(ctrl => this.contactForm.controls[ctrl].disable());
+    }
+
     this.contactForm.updateValueAndValidity();
     this.accountCreated = contact.user_profile_created ?? false;
     this.cdr.markForCheck();

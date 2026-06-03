@@ -65,15 +65,17 @@
             }
           </mat-select>
         </mat-form-field>
-        @if (accountLoading) {
-          <mat-spinner diameter="24"></mat-spinner>
-        } @else if (!accountCreated) {
-          <button matButton type="button" (click)="createAccount()">Create Account</button>
-        } @else {
-          <button matButton type="button" (click)="deleteAccount()">Delete Account</button>
-        }
-        @if (accountError) {
-          <mat-error>Valid Email and Group Required</mat-error>
+        @if (authService.isAdmin()) {
+          @if (accountLoading) {
+            <mat-spinner diameter="24"></mat-spinner>
+          } @else if (!accountCreated) {
+            <button matButton type="button" (click)="createAccount()">Create Account</button>
+          } @else {
+            <button matButton type="button" (click)="deleteAccount()">Delete Account</button>
+          }
+          @if (accountError) {
+            <mat-error>Valid Email and Group Required</mat-error>
+          }
         }
       }
     </div>
@@ -275,10 +277,12 @@
           <mat-label>Zoom Link</mat-label>
           <input matInput formControlName="zoom_link">
         </mat-form-field>
-        <mat-form-field>
-          <mat-label>Hourly Rate</mat-label>
-          <input matInput type="number" formControlName="hourly_rate">
-        </mat-form-field>
+        @if (authService.isAdmin()) {
+          <mat-form-field>
+            <mat-label>Hourly Rate</mat-label>
+            <input matInput type="number" formControlName="hourly_rate">
+          </mat-form-field>
+        }
       </div>
     } @else if (students.length > 0 && students.at(0).get('scholarship')?.value) {
       <h2>Scholarship</h2>

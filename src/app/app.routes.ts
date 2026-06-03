@@ -3,6 +3,7 @@ import {EventCalendar} from './event-calendar/event-calendar';
 import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
 import {AdminGuard} from './guards/admin.guard';
+import {ContactAccessGuard} from './guards/contact-access.guard';
 import {SessionsTable} from './sessions-table/sessions-table';
 import {ContactsTable} from './contacts-table/contacts-table';
 import {Contact} from './contact/contact';
@@ -32,12 +33,12 @@ export const routes: Routes = [
   {
     path: 'contacts',
     component: ContactsTable,
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, ContactAccessGuard],
   },
   {
     path: 'contacts/:id',
     component: Contact,
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, ContactAccessGuard],
   },
   {
     path: 'roster',
