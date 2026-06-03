@@ -50,7 +50,7 @@ export class DeleteContactDialog {
     // If this contact has a Cognito account, delete it first.
     // Only proceed to delete the contact record if Cognito deletion succeeds.
     const delete$ = this.contact.user_profile_created
-      ? this.contactService.adminDeleteUser(this.contact.email).pipe(
+      ? this.contactService.adminDeleteUser(this.contact.email!).pipe(
           switchMap(response => {
             if (response?.message !== 'Deleted user successfully.') {
               throw new Error('Failed to delete user account.');
