@@ -1,4 +1,4 @@
-import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {DatePipe} from '@angular/common';
 import {MatButtonModule} from '@angular/material/button';
 import {
@@ -38,22 +38,29 @@ import {UserGroup} from '../enums/user-group.enum';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
 })
-export class StudentSessionsDialog implements OnInit, AfterViewInit {
+export class StudentSessionsDialog implements OnInit {
   private sessionsService: SessionsService = inject(SessionsService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   readonly student = inject<Student>(MAT_DIALOG_DATA);
 
-  @ViewChild(MatSort) sort!: MatSort;
-  @ViewChild(MatPaginator) paginator!: MatPaginator;
+  @ViewChild(MatSort) set sort(sort: MatSort) {
+    if (sort) {
+      this.dataSource.sort = sort;
+    }
+  }
+
+  @ViewChild(MatPaginator) set paginator(paginator: MatPaginator) {
+    if (paginator) {
+      this.dataSource.paginator = paginator;
+    }
+  }
 
   protected dataSource = new MatTableDataSource<Session>([]);
   protected loading = true;
   protected sessionColumns = ['date', 'time', 'tutor_name', 'status', 'notes'];
 
-  ngAfterViewInit(): void {
-    this.dataSource.sort = this.sort;
-    this.dataSource.paginator = this.paginator;
+  constructor() {
     this.dataSource.sortingDataAccessor = (item, property) => {
       switch (property) {
         case 'date': return item.start_datetime ?? '';
