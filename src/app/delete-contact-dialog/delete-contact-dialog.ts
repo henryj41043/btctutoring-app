@@ -2,6 +2,7 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject} from '@an
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
+  MatDialogClose,
   MatDialogContent,
   MatDialogRef,
   MatDialogTitle,
@@ -9,9 +10,11 @@ import {
 import {MatButtonModule} from '@angular/material/button';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatIconModule} from '@angular/material/icon';
-import {catchError, EMPTY, switchMap} from 'rxjs';
+import {catchError, EMPTY, forkJoin, of, switchMap} from 'rxjs';
 import {Contact} from '../models/contact.model';
 import {ContactService} from '../services/contact.service';
+import {StudentService} from '../services/student.service';
+import {NoteService} from '../services/note.service';
 import {AuthService} from '../services/auth.service';
 
 @Component({
@@ -20,6 +23,7 @@ import {AuthService} from '../services/auth.service';
     MatDialogTitle,
     MatDialogContent,
     MatDialogActions,
+    MatDialogClose,
     MatButtonModule,
     MatProgressSpinnerModule,
     MatIconModule,
@@ -32,6 +36,8 @@ import {AuthService} from '../services/auth.service';
 export class DeleteContactDialog {
   readonly contact = inject<Contact>(MAT_DIALOG_DATA);
   private contactService = inject(ContactService);
+  private studentService = inject(StudentService);
+  private noteService = inject(NoteService);
   private authService = inject(AuthService);
   private dialogRef = inject(MatDialogRef<DeleteContactDialog>);
   private cdr = inject(ChangeDetectorRef);
@@ -47,20 +53,38 @@ export class DeleteContactDialog {
     this.error = null;
     this.cdr.markForCheck();
 
-    // If this contact has a Cognito account, delete it first.
-    // Only proceed to delete the contact record if Cognito deletion succeeds.
-    const delete$ = this.contact.user_profile_created
+    // Step 1: Delete Cognito account first (if the contact has one).
+    const cognitoDelete$ = this.contact.user_profile_created
       ? this.contactService.adminDeleteUser(this.contact.email!).pipe(
           switchMap(response => {
             if (response?.message !== 'Deleted user successfully.') {
               throw new Error('Failed to delete user account.');
             }
-            return this.contactService.deleteContact(this.contact.id!);
+            return of(null);
           })
         )
-      : this.contactService.deleteContact(this.contact.id!);
+      : of(null);
 
-    delete$.pipe(
+    // Step 2 → 3 → 4: Delete students + notes in parallel, then delete the contact.
+    cognitoDelete$.pipe(
+      switchMap(() => {
+        const students$ = this.studentService.getStudentsByContact(this.contact.id!).pipe(
+          switchMap(students =>
+            students.length > 0
+              ? forkJoin(students.map(s => this.studentService.deleteStudent(s.id!)))
+              : of([])
+          )
+        );
+        const notes$ = this.noteService.getNotesByRecipient(this.contact.id!).pipe(
+          switchMap(notes =>
+            notes.length > 0
+              ? forkJoin(notes.map(n => this.noteService.deleteNote(n.id!)))
+              : of([])
+          )
+        );
+        return forkJoin([students$, notes$]);
+      }),
+      switchMap(() => this.contactService.deleteContact(this.contact.id!)),
       catchError(() => {
         this.error = this.contact.user_profile_created
           ? 'Failed to delete the user account. The contact was not deleted.'
