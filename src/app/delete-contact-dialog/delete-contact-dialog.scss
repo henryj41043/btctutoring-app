@@ -1,0 +1,33 @@
+.self-delete-warning,
+.cognito-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 4px;
+  background: rgba(var(--mat-warn-rgb, 244, 67, 54), 0.08);
+  margin-bottom: 8px;
+
+  mat-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.delete-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mat-warn-color, #f44336);
+  margin-top: 8px;
+}
+
+mat-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

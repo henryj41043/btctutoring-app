@@ -30,6 +30,8 @@ import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDialog} from '@angular/material/dialog';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
+import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
+import {Router} from '@angular/router';
 
 @Component({
   selector: 'app-contact',
@@ -64,6 +66,7 @@ export class Contact implements OnInit {
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
+  private router: Router = inject(Router);
 
   @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
     if (sort) { this.rosterDataSource.sort = sort; }
@@ -545,6 +548,24 @@ export class Contact implements OnInit {
           }, 1000);
         });
     }
+  }
+
+  openDeleteDialog(): void {
+    const contact = this.contactForm.value as _Contact;
+    // Populate fields that may be disabled (disabled controls are excluded from .value)
+    contact.id = this.contactForm.controls['id'].value;
+    contact.email = this.contactForm.controls['email'].value;
+    contact.user_profile_created = this.contactForm.controls['user_profile_created'].value;
+
+    const ref = this.dialog.open(DeleteContactDialog, {
+      data: contact,
+      width: '420px',
+    });
+    ref.afterClosed().subscribe((deleted: boolean) => {
+      if (deleted) {
+        void this.router.navigate(['/contacts']);
+      }
+    });
   }
 
   openSessionsDialog(student: Student): void {

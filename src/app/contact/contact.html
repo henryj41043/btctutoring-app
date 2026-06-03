@@ -10,6 +10,11 @@
     @if (updateError) {
       <mat-icon style="color: red;">close</mat-icon>
     }
+    @if (authService.isAdmin()) {
+      <button matIconButton type="button" color="warn" (click)="openDeleteDialog()" aria-label="Delete contact">
+        <mat-icon>delete</mat-icon>
+      </button>
+    }
     <div class="contact-main" [formGroup]="contactForm">
       <mat-form-field>
         <mat-label>First Name</mat-label>

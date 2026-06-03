@@ -8,6 +8,7 @@ import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {ContactDialog} from '../contact-dialog/contact-dialog';
+import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
 import {AuthService} from '../services/auth.service';
 import {Contact} from '../models/contact.model';
 import {UserGroup} from '../enums/user-group.enum';
@@ -40,7 +41,7 @@ export class ContactsTable implements OnInit, AfterViewInit {
   @ViewChild(MatSort) sort!: MatSort;
   @ViewChild(MatPaginator) paginator!: MatPaginator;
 
-  contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service'];
+  contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'actions'];
   dataSource = new MatTableDataSource<Contact>([]);
 
   ngOnInit(): void {
@@ -82,5 +83,18 @@ export class ContactsTable implements OnInit, AfterViewInit {
 
   protected contactClicked(contact: Contact): void {
     void this.router.navigate([`/contacts`, contact.id]);
+  }
+
+  protected openDeleteDialog(contact: Contact): void {
+    const ref = this.contactDialog.open(DeleteContactDialog, {
+      data: contact,
+      width: '420px',
+    });
+    ref.afterClosed().subscribe((deleted: boolean) => {
+      if (deleted) {
+        this.dataSource.data = this.dataSource.data.filter(c => c.id !== contact.id);
+        this.cdr.markForCheck();
+      }
+    });
   }
 }

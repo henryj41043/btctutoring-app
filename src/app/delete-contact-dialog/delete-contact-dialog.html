@@ -1,0 +1,44 @@
+<h2 mat-dialog-title>Delete Contact</h2>
+<mat-dialog-content>
+  @if (isSelf) {
+    <div class="self-delete-warning">
+      <mat-icon color="warn">block</mat-icon>
+      <p>You cannot delete your own contact. Please ask another Admin to remove your account.</p>
+    </div>
+  } @else {
+    <p>
+      Are you sure you want to permanently delete
+      <strong>{{contact.first_name}} {{contact.last_name}}</strong>?
+      This action cannot be undone.
+    </p>
+    @if (contact.user_profile_created) {
+      <div class="cognito-warning">
+        <mat-icon color="warn">warning</mat-icon>
+        <p>
+          This contact has an associated user account. The user account will be
+          <strong>permanently deleted</strong> first, then the contact record will be removed.
+        </p>
+      </div>
+    }
+    @if (error) {
+      <p class="delete-error">
+        <mat-icon color="warn">error</mat-icon>
+        {{error}}
+      </p>
+    }
+  }
+</mat-dialog-content>
+<mat-dialog-actions>
+  @if (isSelf) {
+    <button matButton mat-dialog-close>Close</button>
+  } @else {
+    <button matButton mat-dialog-close [disabled]="deleting">Cancel</button>
+    <button mat-raised-button color="warn" (click)="confirm()" [disabled]="deleting">
+      @if (deleting) {
+        <mat-spinner diameter="18"/>
+      } @else {
+        Delete
+      }
+    </button>
+  }
+</mat-dialog-actions>
