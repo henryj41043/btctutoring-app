@@ -10,6 +10,7 @@ import {catchError, EMPTY} from 'rxjs';
 import {ContactDialog} from '../contact-dialog/contact-dialog';
 import {AuthService} from '../services/auth.service';
 import {Contact} from '../models/contact.model';
+import {UserGroup} from '../enums/user-group.enum';
 import {ContactService} from '../services/contact.service';
 import {Response} from '../models/response.model';
 import {Router} from '@angular/router';
@@ -52,7 +53,7 @@ export class ContactsTable implements OnInit, AfterViewInit {
   }
 
   private updateClientData(): void {
-    if (this.authService.user().groups.includes('Admins')) {
+    if (this.authService.isAdmin()) {
       this.contactService.getContacts().pipe(
         catchError(error => {
           console.log(error);

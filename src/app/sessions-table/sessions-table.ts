@@ -9,6 +9,7 @@ import {MatDialog} from '@angular/material/dialog';
 import {SessionsService} from '../services/sessions.service';
 import {AuthService} from '../services/auth.service';
 import {Session} from '../models/session.model';
+import {UserGroup} from '../enums/user-group.enum';
 import {catchError, Observable} from 'rxjs';
 import {SessionDialog} from '../session-dialog/session-dialog';
 import {Response} from '../models/response.model';
@@ -62,27 +63,30 @@ export class SessionsTable implements OnInit, AfterViewInit {
   }
 
   private updateSessionsData(): void {
-    if (this.authService.user().groups.includes('Admins')) {
-      this.sessionsService.getAllSessions().pipe(
-        catchError(error => {
-          console.log(error);
-          return new Observable();
-        })
-      ).subscribe(response => {
-        this.dataSource.data = response as Session[];
-        this.cdr.markForCheck();
-      });
-    } else {
-      this.sessionsService.getSessionsByTutor(this.authService.user().contact).pipe(
-        catchError(error => {
-          console.log(error);
-          return new Observable();
-        })
-      ).subscribe(response => {
-        this.dataSource.data = response as Session[];
-        this.cdr.markForCheck();
-      });
+    const isAdmin = this.authService.isAdmin();
+    const isTutor = this.authService.user().groups.includes(UserGroup.TUTORS);
+
+    const source$ = isAdmin
+      ? this.sessionsService.getAllSessions()
+      : isTutor
+        ? this.sessionsService.getSessionsByTutor(this.authService.contact().id!)
+        : null;
+
+    if (!source$) {
+      this.dataSource.data = [];
+      this.cdr.markForCheck();
+      return;
     }
+
+    source$.pipe(
+      catchError(error => {
+        console.log(error);
+        return new Observable();
+      })
+    ).subscribe(response => {
+      this.dataSource.data = response as Session[];
+      this.cdr.markForCheck();
+    });
   }
 
   openCreateSessionDialog(): void {

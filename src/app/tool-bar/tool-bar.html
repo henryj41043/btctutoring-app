@@ -8,7 +8,9 @@
       <button mat-menu-item (click)="sessionsNav()">Sessions</button>
       <button mat-menu-item (click)="contactsNav()">Contacts</button>
       <button mat-menu-item (click)="rosterNav()">Student Roster</button>
-      <button mat-menu-item (click)="payrollNav()">Payroll</button>
+      @if (authService.isAdmin()) {
+        <button mat-menu-item (click)="payrollNav()">Payroll</button>
+      }
     }
   </mat-menu>
   <img ngSrc="assets/BTC_Transparent_BG.png" alt="" height="100" width="100" priority/>

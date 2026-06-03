@@ -17,6 +17,7 @@ import {SessionsService} from '../services/sessions.service';
 import {AuthService} from '../services/auth.service';
 import {Session} from '../models/session.model';
 import {Student} from '../models/student.model';
+import {UserGroup} from '../enums/user-group.enum';
 
 @Component({
   selector: 'app-student-sessions-dialog',
@@ -64,7 +65,7 @@ export class StudentSessionsDialog implements OnInit, AfterViewInit {
   }
 
   ngOnInit(): void {
-    const isAdmin = this.authService.user().groups.includes('Admins');
+    const isAdmin = this.authService.isAdmin();
     const source$ = isAdmin
       ? this.sessionsService.getSessionsByStudent(this.student.id!)
       : this.sessionsService.getSessions(this.authService.contact().id!, this.student.id!);

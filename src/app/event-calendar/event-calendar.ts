@@ -40,6 +40,7 @@ import {isSameDay, isSameMonth} from 'date-fns';
 import {EventColor} from 'calendar-utils';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
+import {UserGroup} from '../enums/user-group.enum';
 
 const colors: Record<string, EventColor> = {
   red: {
@@ -144,35 +145,31 @@ export class EventCalendar implements OnInit {
   }
 
   private updateSessionsData(): void {
-    if(this.authService.user().groups.includes('Admins')) {
-      this.sessionsService.getAllSessions().pipe(
-        catchError(error => {
-          console.log(error);
-          return new Observable();
-        })
-      ).subscribe(
-        response => {
-          console.log(response);
-          let sessions: Session[] = response as Session[];
-          this.events = this.buildCalendarEvents(sessions);
-          this.cdr.markForCheck();
-        }
-      );
-    } else {
-      this.sessionsService.getSessionsByTutor(this.authService.user().contact).pipe(
-        catchError(error => {
-          console.log(error);
-          return new Observable();
-        })
-      ).subscribe(
-        response => {
-          console.log(response);
-          let sessions: Session[] = response as Session[];
-          this.events = this.buildCalendarEvents(sessions);
-          this.cdr.markForCheck();
-        }
-      );
+    const isAdmin = this.authService.isAdmin();
+    const isTutor = this.authService.user().groups.includes(UserGroup.TUTORS);
+
+    const source$ = isAdmin
+      ? this.sessionsService.getAllSessions()
+      : isTutor
+        ? this.sessionsService.getSessionsByTutor(this.authService.contact().id!)
+        : null;
+
+    if (!source$) {
+      this.events = [];
+      this.cdr.markForCheck();
+      return;
     }
+
+    source$.pipe(
+      catchError(error => {
+        console.log(error);
+        return new Observable();
+      })
+    ).subscribe(response => {
+      const sessions: Session[] = response as Session[];
+      this.events = this.buildCalendarEvents(sessions);
+      this.cdr.markForCheck();
+    });
   }
 
   private buildCalendarEvents(sessions: Session[]): CalendarEvent<Session>[] {

@@ -9,6 +9,7 @@ import {catchError, EMPTY} from 'rxjs';
 import {StudentService} from '../services/student.service';
 import {AuthService} from '../services/auth.service';
 import {Student} from '../models/student.model';
+import {UserGroup} from '../enums/user-group.enum';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 
 @Component({
@@ -38,7 +39,7 @@ export class StudentRoster implements OnInit, AfterViewInit {
   protected dataSource = new MatTableDataSource<Student>([]);
 
   ngOnInit(): void {
-    const isAdmin = this.authService.user().groups.includes('Admins');
+    const isAdmin = this.authService.isAdmin();
     const source$ = isAdmin
       ? this.studentService.getStudents()
       : this.studentService.getStudentsByTutor(this.authService.contact().id!);

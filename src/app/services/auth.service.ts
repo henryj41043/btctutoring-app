@@ -1,4 +1,4 @@
-import {inject, Injectable, Signal, signal, WritableSignal} from '@angular/core';
+import {computed, inject, Injectable, Signal, signal, WritableSignal} from '@angular/core';
 import {HttpClient} from '@angular/common/http';
 import {catchError} from 'rxjs';
 import {environment} from '../../environments/environment';
@@ -6,6 +6,7 @@ import {User} from '../models/user.model';
 import {Router} from '@angular/router';
 import {Contact} from '../models/contact.model';
 import {ContactService} from './contact.service';
+import {UserGroup} from '../enums/user-group.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -27,6 +28,9 @@ export class AuthService {
   readonly contact: Signal<Contact> = this._contact.asReadonly();
   readonly hasError: Signal<boolean> = this._hasError.asReadonly();
   readonly resetPassword: Signal<boolean> = this._resetPassword.asReadonly();
+  /** True when the logged-in user belongs to the Admins group.
+   *  Admins access overrides Tutors even if both groups are present. */
+  readonly isAdmin = computed(() => this._user().groups.includes(UserGroup.ADMINS));
   httpClient: HttpClient = inject(HttpClient);
   contactService: ContactService = inject(ContactService);
   router: Router = inject(Router);
