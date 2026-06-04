@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  btctutoringServiceUrl: 'https://bitshiftstudio.io',
+  btctutoringServiceUrl: 'https://btchub-api.bitshiftstudio.io',
 };
