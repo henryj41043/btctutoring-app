@@ -186,7 +186,7 @@
                   <div>Birthday: {{studentControl.get('birthday')?.value}}</div>
                   <div>Status: {{studentControl.get('status')?.value}}</div>
                   <div>Available Minutes: {{studentControl.get('available_minutes')?.value}}</div>
-                  <div>Assigned Tutor: {{studentControl.get('assigned_tutor_id')?.value}}</div>
+                  <div>Assigned Tutor: {{getTutorName(studentControl.get('assigned_tutor_id')?.value)}}</div>
                   <div>Make Up Minutes: {{studentControl.get('make_up_minutes')?.value}}</div>
                   <div>Package: {{studentControl.get('package')?.value}}</div>
                   <div>Scholarship:

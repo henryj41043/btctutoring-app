@@ -575,6 +575,18 @@ export class Contact implements OnInit {
     });
   }
 
+  getTutorName(id: string): string {
+    if (!id) return '—';
+    const tutor = this.tutors.find(t => t.id === id);
+    return tutor ? `${tutor.first_name} ${tutor.last_name}`.trim() : id;
+  }
+
+  getTutorName(id: string): string {
+    if (!id) return '—';
+    const tutor = this.tutors.find(t => t.id === id);
+    return tutor ? `${tutor.first_name} ${tutor.last_name}`.trim() : id;
+  }
+
   packageSelected($event: MatSelectChange) {
     this.students.at(this.studentsEditIndex).get('available_minutes')?.setValue(packageMinutesMap[$event.value as Package]);
     this.students.updateValueAndValidity();
