@@ -27,7 +27,7 @@
   </mat-form-field>
   <mat-form-field>
     <mat-label>Select Tutor</mat-label>
-    <mat-select [(ngModel)]="selectedTutor">
+    <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)">
       @for (tutor of tutors; track tutor) {
         <mat-option [value]="tutor.id">{{tutor.first_name}}</mat-option>
       }
@@ -47,7 +47,7 @@
     <mat-form-field>
       <mat-label>Select Student</mat-label>
       <mat-select [(ngModel)]="selectedStudent">
-        @for (student of students; track student) {
+        @for (student of filteredStudents; track student) {
           <mat-option [value]="student.id">{{student.name}}</mat-option>
         }
       </mat-select>

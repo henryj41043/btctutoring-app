@@ -64,6 +64,7 @@ export class SessionDialog implements OnInit {
   readonly SessionStatus = SessionStatus;
   tutors: Contact[] = [];
   students: Student[] = [];
+  filteredStudents: Student[] = [];
   showStatusConfirm: boolean = false;
   private pendingSession: Session | null = null;
   private pendingStudentUpdate: Student | null = null;
@@ -299,11 +300,21 @@ export class SessionDialog implements OnInit {
       });
   }
 
+  onTutorChange(tutorId: string): void {
+    this.selectedTutor = tutorId;
+    this.selectedStudent = undefined;
+    this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === tutorId);
+  }
+
   private getStudents() {
     this.studentService.getStudents().pipe(
       catchError(error => { console.log(error); return EMPTY; })
     ).subscribe(students => {
       this.students = students.filter(s => s.status === Status.ACTIVE_STUDENT);
+      // Pre-filter for edit mode where tutor is already selected when students load
+      if (this.selectedTutor) {
+        this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === this.selectedTutor);
+      }
     });
   }
 }
