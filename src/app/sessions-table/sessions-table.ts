@@ -9,6 +9,7 @@ import {MatDialog} from '@angular/material/dialog';
 import {SessionsService} from '../services/sessions.service';
 import {AuthService} from '../services/auth.service';
 import {Session} from '../models/session.model';
+import {SessionType} from '../enums/session-type.enum';
 import {UserGroup} from '../enums/user-group.enum';
 import {catchError, Observable} from 'rxjs';
 import {SessionDialog} from '../session-dialog/session-dialog';
@@ -84,7 +85,7 @@ export class SessionsTable implements OnInit, AfterViewInit {
         return new Observable();
       })
     ).subscribe(response => {
-      this.dataSource.data = response as Session[];
+      this.dataSource.data = (response as Session[]).filter(s => s.type !== SessionType.ADMIN);
       this.cdr.markForCheck();
     });
   }
@@ -97,7 +98,7 @@ export class SessionsTable implements OnInit, AfterViewInit {
 
     sessionDialogRef.afterClosed().subscribe((result: Session): void => {
       console.log('The dialog was closed');
-      if (result !== undefined) {
+      if (result !== undefined && result.type !== SessionType.ADMIN) {
         this.dataSource.data = [...this.dataSource.data, result];
         this.cdr.markForCheck();
       }
