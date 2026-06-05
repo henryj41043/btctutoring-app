@@ -1,22 +1,98 @@
+.btc-toolbar.mat-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 72px;
+  padding: 0 20px;
+  gap: 4px;
+  background: var(--btc-gradient-bar);
+  color: #fff;
+  border: none;
+  box-shadow: var(--btc-shadow-md);
+}
+
 .toolbar-spacer {
   flex: 1 1 auto;
 }
 
-.mat-toolbar {
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
-  border: 1px solid var(--mat-sys-outline-variant);
-}
-
 .toolbar-icon {
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container) !important;
+  background: rgba(255, 255, 255, .14);
+  color: #fff !important;
+  transition: background .2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, .26);
+  }
 }
 
-img {
+/* Brand lockup ─ logo + Playfair wordmark */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 6px;
+  user-select: none;
+
+  &--link {
+    cursor: pointer;
+  }
+}
+
+.brand-logo {
+  height: 52px;
+  width: 52px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: #fff;
+  padding: 3px;
+  box-shadow: 0 2px 8px rgba(6, 46, 59, .25);
   z-index: 1;
 }
 
+.brand-name {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.45rem;
+  letter-spacing: .3px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.welcome {
+  font-size: .95rem;
+  font-weight: 400;
+  margin-right: 10px;
+  opacity: .95;
+  white-space: nowrap;
+}
+
+/* Account dropdown */
 .profile-container {
-  padding: 16px;
+  padding: 18px 20px;
+  min-width: 180px;
+
+  h3 {
+    margin: 0 0 4px;
+    color: var(--btc-ink);
+  }
+}
+
+.profile-name {
+  margin: 0 0 14px;
+  color: var(--btc-teal-deep);
+  font-weight: 700;
+}
+
+/* Responsive: hide the wordmark + welcome text on small screens */
+@media (max-width: 700px) {
+  .brand-name { display: none; }
+  .welcome { display: none; }
+}
+
+@media (max-width: 600px) {
+  .btc-toolbar.mat-toolbar {
+    height: 64px;
+    padding: 0 12px;
+  }
+  .brand-logo { height: 44px; width: 44px; }
 }

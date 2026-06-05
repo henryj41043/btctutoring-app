@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
+import {MatIconModule} from '@angular/material/icon';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
@@ -28,6 +29,7 @@ import {SessionType} from '../enums/session-type.enum';
   imports: [
     MatButtonModule,
     MatCardModule,
+    MatIconModule,
     MatTableModule,
     MatSortModule,
     MatPaginatorModule,

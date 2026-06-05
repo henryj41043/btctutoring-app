@@ -1,0 +1,40 @@
+.payroll {
+  .payroll-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    h2 {
+      margin: 0;
+      font-size: 1.9rem;
+    }
+  }
+
+  .payroll-period {
+    color: var(--btc-teal-deep);
+    font-weight: 700;
+    font-size: .9rem;
+  }
+
+  .payroll-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  // Many columns — allow horizontal scroll instead of squashing
+  mat-card-content {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    min-width: 900px;
+  }
+
+  .total-cell {
+    font-weight: 800;
+    color: var(--btc-teal-deep);
+  }
+}

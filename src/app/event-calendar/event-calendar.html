@@ -1,16 +1,29 @@
 <div class="event-calendar-header">
-  <button matButton mwlCalendarPreviousView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()">Previous</button>
-  <button matButton mwlCalendarToday [(viewDate)]="viewDate">Today</button>
-  <button matButton mwlCalendarNextView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()">Next</button>
-  <span class="calendar-spacer"></span>
+  <div class="cal-nav">
+    <button matIconButton mwlCalendarPreviousView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()" aria-label="Previous">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <button matButton mwlCalendarToday [(viewDate)]="viewDate" class="cal-today-btn">Today</button>
+    <button matIconButton mwlCalendarNextView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()" aria-label="Next">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+  </div>
+
   <span class="calendar-title">{{ viewDate | calendarDate: view + 'ViewTitle' : 'en' }}</span>
-  <span class="calendar-spacer"></span>
-  @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
-    <button matButton (click)="openCreateSessionDialog()">Add Session</button>
-  }
-  <button matButton (click)="setView(CalendarView.Month)" [class.active]="view === CalendarView.Month">Month</button>
-  <button matButton (click)="setView(CalendarView.Week)" [class.active]="view === CalendarView.Week">Week</button>
-  <button matButton (click)="setView(CalendarView.Day)" [class.active]="view === CalendarView.Day">Day</button>
+
+  <div class="cal-actions">
+    @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+      <button mat-raised-button color="primary" (click)="openCreateSessionDialog()" class="cal-add-btn">
+        <mat-icon>add</mat-icon>
+        Add Session
+      </button>
+    }
+    <div class="cal-view-toggle">
+      <button matButton (click)="setView(CalendarView.Month)" [class.active]="view === CalendarView.Month">Month</button>
+      <button matButton (click)="setView(CalendarView.Week)" [class.active]="view === CalendarView.Week">Week</button>
+      <button matButton (click)="setView(CalendarView.Day)" [class.active]="view === CalendarView.Day">Day</button>
+    </div>
+  </div>
 </div>
 <div class="event-calendar">
   @switch (view) {

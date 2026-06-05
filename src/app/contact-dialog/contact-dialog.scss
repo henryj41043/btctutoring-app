@@ -1,5 +1,27 @@
+.contact-dialog-container {
+  min-width: min(480px, 80vw);
+}
+
 .contact-dialog-content {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 12px;
+  padding-top: 8px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+mat-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px 16px;
+}
+
+@media (max-width: 560px) {
+  .contact-dialog-content {
+    grid-template-columns: 1fr;
+  }
 }

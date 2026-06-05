@@ -1,41 +1,47 @@
 <div class="login-main">
-  @if (loggingIn && !authService.hasError()) {
-    <div class="spinner-container">
-      <mat-spinner></mat-spinner>
+  <mat-card class="login-card" appearance="outlined">
+    <div class="login-hero">
+      <img class="login-logo" src="assets/BTC_Transparent_BG.png" alt="Beyond the Chalkboard Tutoring"/>
+      <h1 class="login-title">Beyond the Chalkboard Hub</h1>
+      <p class="login-tagline">Where we see the abilities in all dis<span>abilities</span></p>
     </div>
-  } @else {
-    <mat-card class="login-card" appearance="outlined">
-      <mat-card-header>
-        <mat-card-title>Login</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-          <form (ngSubmit)="login()">
-            <div>
-              <mat-form-field appearance="outline">
-                <mat-label>Email</mat-label>
-                <input matInput type="email" [(ngModel)]="email" name="email" required>
-              </mat-form-field>
-            </div>
-            <div>
-              <mat-form-field appearance="outline">
-                @if (authService.resetPassword()) {
-                  <mat-label>New Password Required</mat-label>
-                } @else {
-                  <mat-label>Password</mat-label>
-                }
-                <input matInput type="password" [(ngModel)]="password" name="password" required>
-              </mat-form-field>
-            </div>
-            <div class="login-button-container">
-              <button mat-raised-button color="primary" type="submit">Login</button>
-            </div>
-            @if (authService.hasError()) {
-              <div class="login-error-message">
-                login failed
-              </div>
+
+    <mat-card-content class="login-body">
+      @if (loggingIn && !authService.hasError()) {
+        <div class="spinner-container">
+          <mat-spinner [diameter]="44"></mat-spinner>
+          <span class="spinner-label">Signing you in…</span>
+        </div>
+      } @else {
+        <form (ngSubmit)="login()">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Email</mat-label>
+            <input matInput type="email" [(ngModel)]="email" name="email" required>
+            <mat-icon matSuffix>mail_outline</mat-icon>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            @if (authService.resetPassword()) {
+              <mat-label>New Password Required</mat-label>
+            } @else {
+              <mat-label>Password</mat-label>
             }
-          </form>
-      </mat-card-content>
-    </mat-card>
-  }
+            <input matInput type="password" [(ngModel)]="password" name="password" required>
+            <mat-icon matSuffix>lock_outline</mat-icon>
+          </mat-form-field>
+
+          <div class="login-button-container">
+            <button mat-raised-button color="primary" type="submit" class="login-submit">Login</button>
+          </div>
+
+          @if (authService.hasError()) {
+            <div class="login-error-message">
+              <mat-icon>error_outline</mat-icon>
+              <span>Login failed. Please check your credentials and try again.</span>
+            </div>
+          }
+        </form>
+      }
+    </mat-card-content>
+  </mat-card>
 </div>

@@ -126,22 +126,10 @@ export class EventCalendar implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.applySystemTheme();
-    // Listen for changes in system theme preference
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-      this.applySystemTheme();
-    });
+    // App is locked to a single light theme to stay consistent with the brand.
+    this.renderer.addClass(this.document.body, 'light-theme');
+    this.renderer.removeClass(this.document.body, 'dark-theme');
     this.updateSessionsData();
-  }
-
-  private applySystemTheme(): void {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      this.renderer.addClass(this.document.body, 'dark-theme');
-      this.renderer.removeClass(this.document.body, 'light-theme');
-    } else {
-      this.renderer.addClass(this.document.body, 'light-theme');
-      this.renderer.removeClass(this.document.body, 'dark-theme');
-    }
   }
 
   private updateSessionsData(): void {

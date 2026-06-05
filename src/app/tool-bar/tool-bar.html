@@ -1,31 +1,49 @@
-<mat-toolbar>
-  <button matIconButton class="toolbar-icon" [matMenuTriggerFor]="actionMenu" aria-label="Icon-button with menu icon">
-    <mat-icon>menu</mat-icon>
-  </button>
-  <mat-menu #actionMenu="matMenu">
-    @if (authService.loggedIn()) {
-      <button mat-menu-item (click)="calendarNav()">Calendar</button>
-      <button mat-menu-item (click)="sessionsNav()">Sessions</button>
-      <button mat-menu-item (click)="contactsNav()">Contacts</button>
-      <button mat-menu-item (click)="rosterNav()">Student Roster</button>
-      @if (authService.isAdmin()) {
-        <button mat-menu-item (click)="payrollNav()">Payroll</button>
-      }
-    }
-  </mat-menu>
-  <img ngSrc="assets/BTC_Transparent_BG.png" alt="" height="100" width="100" priority/>
+<mat-toolbar class="btc-toolbar">
   @if (authService.loggedIn()) {
-    <span>Welcome {{authService.contact().first_name}}</span>
-  } @else {
-    <span>Beyond the Chalkboard Tutoring</span>
+    <button matIconButton class="toolbar-icon" [matMenuTriggerFor]="actionMenu" aria-label="Open navigation menu">
+      <mat-icon>menu</mat-icon>
+    </button>
+    <mat-menu #actionMenu="matMenu">
+      <button mat-menu-item (click)="calendarNav()">
+        <mat-icon>calendar_month</mat-icon><span>Calendar</span>
+      </button>
+      <button mat-menu-item (click)="sessionsNav()">
+        <mat-icon>event_note</mat-icon><span>Sessions</span>
+      </button>
+      <button mat-menu-item (click)="contactsNav()">
+        <mat-icon>contacts</mat-icon><span>Contacts</span>
+      </button>
+      <button mat-menu-item (click)="rosterNav()">
+        <mat-icon>groups</mat-icon><span>Student Roster</span>
+      </button>
+      @if (authService.isAdmin()) {
+        <button mat-menu-item (click)="payrollNav()">
+          <mat-icon>payments</mat-icon><span>Payroll</span>
+        </button>
+      }
+    </mat-menu>
   }
+
+  <div class="brand" [class.brand--link]="authService.loggedIn()" (click)="authService.loggedIn() && calendarNav()">
+    <img class="brand-logo" ngSrc="assets/BTC_Transparent_BG.png" alt="Beyond the Chalkboard Tutoring" height="100" width="100" priority/>
+    <span class="brand-name">Beyond the Chalkboard Hub</span>
+  </div>
+
   <span class="toolbar-spacer"></span>
-  <button matIconButton class="toolbar-icon"  [matMenuTriggerFor]="accountMenu" aria-label="Icon-button with account icon">
+
+  @if (authService.loggedIn()) {
+    <span class="welcome">Welcome, {{authService.contact().first_name}}</span>
+  }
+
+  <button matIconButton class="toolbar-icon" [matMenuTriggerFor]="accountMenu" aria-label="Account menu">
     <mat-icon>account_circle</mat-icon>
   </button>
   <mat-menu #accountMenu="matMenu" [hasBackdrop]="true">
     <div class="profile-container">
       <h3>Profile</h3>
+      @if (authService.loggedIn()) {
+        <p class="profile-name">{{authService.contact().first_name}} {{authService.contact().last_name}}</p>
+      }
       <form (ngSubmit)="logout()">
         <button mat-raised-button color="primary" type="submit">Logout</button>
       </form>

@@ -1,9 +1,10 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, inject} from '@angular/core';
 import {MatButton} from "@angular/material/button";
-import {MatCard, MatCardContent, MatCardHeader, MatCardTitle} from "@angular/material/card";
+import {MatCard, MatCardContent} from "@angular/material/card";
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {FormsModule} from '@angular/forms';
 import {MatInput} from '@angular/material/input';
+import {MatIconModule} from '@angular/material/icon';
 import {AuthService} from '../services/auth.service';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 
@@ -13,11 +14,10 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
     MatButton,
     MatCard,
     MatCardContent,
-    MatCardHeader,
-    MatCardTitle,
     FormsModule,
     MatFormFieldModule,
     MatInput,
+    MatIconModule,
     MatProgressSpinnerModule,
   ],
   templateUrl: './login.html',

@@ -1,28 +1,112 @@
-.login-card {
-  max-width: 400px;
-  padding: 10px;
-  margin-top: 20px;
-}
-
-.spinner-container {
-  margin-top: 20px;
-}
-
 .login-main {
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  padding: 48px 16px;
+  min-height: calc(100vh - 160px);
 }
 
-mat-card-header {
-  padding-bottom: 16px;
-  justify-content: center;
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--btc-radius) !important;
+  box-shadow: var(--btc-shadow-lg) !important;
+}
+
+/* Branded gradient hero at the top of the card */
+.login-hero {
+  background: var(--btc-gradient-hero);
+  color: #fff;
+  text-align: center;
+  padding: 32px 24px 28px;
+}
+
+.login-logo {
+  height: 84px;
+  width: 84px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 4px 14px rgba(6, 46, 59, .3);
+}
+
+.login-title {
+  margin: 16px 0 6px;
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: .3px;
+}
+
+.login-tagline {
+  margin: 0;
+  font-size: .9rem;
+  font-weight: 300;
+  opacity: .95;
+
+  span {
+    color: var(--btc-accent);
+    font-weight: 700;
+  }
+}
+
+.login-body {
+  padding: 28px 28px 24px;
+}
+
+.full-width {
+  width: 100%;
 }
 
 .login-button-container {
   display: flex;
-  justify-content: right;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.login-submit {
+  min-width: 160px;
+  height: 46px;
+  font-size: 1rem;
+  background: var(--btc-teal) !important;
+  color: #fff !important;
+  box-shadow: var(--btc-shadow-sm);
+  transition: background .2s ease, box-shadow .2s ease;
+
+  &:hover {
+    background: var(--btc-teal-deep) !important;
+    box-shadow: var(--btc-shadow-md);
+  }
+}
+
+.spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 32px 0;
+}
+
+.spinner-label {
+  color: var(--btc-teal-deep);
+  font-weight: 700;
 }
 
 .login-error-message {
-  color: red;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: var(--btc-radius-sm);
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+  font-size: .875rem;
+
+  mat-icon {
+    flex: 0 0 auto;
+  }
 }

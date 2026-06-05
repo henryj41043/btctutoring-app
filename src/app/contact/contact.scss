@@ -1,72 +1,101 @@
 .contact-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(4, minmax(150px, auto));
-  gap: 10px;
-  padding-top: 10px;
+  gap: 20px;
+  padding-top: 4px;
 }
 
 .contact-notes {
   grid-column: 2;
   grid-row: span 4;
-  padding-top: 10px;
+}
+
+/* Each form group becomes a clean, branded card */
+.contact-section {
+  padding: 22px 24px;
+  background: var(--btc-card);
+  color: var(--mat-sys-on-surface);
+  border: 1px solid color-mix(in srgb, var(--btc-sky) 45%, transparent);
+  border-radius: var(--btc-radius);
+  box-shadow: var(--btc-shadow-sm);
+
+  h2 {
+    margin: 0 0 18px;
+    padding-bottom: 10px;
+    font-size: 1.4rem;
+    color: var(--btc-ink);
+    border-bottom: 2px solid color-mix(in srgb, var(--btc-sky) 60%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
 }
 
 .contact-main {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .student-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
-.student-card {
-  max-width: 400px;
-}
-
-.mat-mdc-row .mat-mdc-cell {
-  border-bottom: 1px solid transparent;
-  border-top: 1px solid transparent;
-  cursor: pointer;
-}
-
-.mat-mdc-row:hover .mat-mdc-cell {
-  border-color: currentColor;
-}
-
+.student-card,
 .note-card {
-  max-width: 400px;
+  max-width: 100%;
+  margin-bottom: 14px;
 }
 
-.contact-section {
-  padding: 10px;
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
-  border: 1px solid var(--mat-sys-outline-variant);
+.mat-mdc-row {
+  cursor: pointer;
 }
 
 .billing-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .billing-textbox {
   grid-row: span 2;
 }
 
-.scholarship-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-
+.scholarship-grid,
 .onboarding-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 12px;
+}
+
+/* Make form fields fill their grid cell */
+.contact-section mat-form-field {
+  width: 100%;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .contact-form {
+    grid-template-columns: 1fr;
+  }
+  .contact-notes {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .billing-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .contact-main,
+  .student-grid,
+  .billing-grid,
+  .scholarship-grid,
+  .onboarding-grid {
+    grid-template-columns: 1fr;
+  }
 }

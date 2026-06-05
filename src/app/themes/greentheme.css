@@ -1,7 +1,8 @@
-/* Note: Color palettes are generated from primary: #118ab2 */
+/* Note: Color palettes are generated from primary: #118ab2 (brand teal).
+   Locked to light only — all light-dark() pairs resolve to their light value. */
 html {
   /* COLOR SYSTEM VARIABLES */
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* Primary palette variables */
   --mat-sys-primary: light-dark(#006686, #73d2fd);
@@ -24,15 +25,15 @@ html {
   --mat-sys-on-secondary-fixed: light-dark(#001f2a, #001f2a);
   --mat-sys-on-secondary-fixed-variant: light-dark(#2a4b5a, #2a4b5a);
 
-  /* Tertiary palette variables */
-  --mat-sys-tertiary: light-dark(#7a4b91, #e8b3ff);
-  --mat-sys-on-tertiary: light-dark(#ffffff, #481b5f);
-  --mat-sys-tertiary-container: light-dark(#f6d9ff, #603378);
-  --mat-sys-on-tertiary-container: light-dark(#310049, #f6d9ff);
-  --mat-sys-tertiary-fixed: light-dark(#f6d9ff, #f6d9ff);
-  --mat-sys-tertiary-fixed-dim: light-dark(#e8b3ff, #e8b3ff);
-  --mat-sys-on-tertiary-fixed: light-dark(#310049, #310049);
-  --mat-sys-on-tertiary-fixed-variant: light-dark(#603378, #603378);
+  /* Tertiary palette variables — brand orange accent (#ff9000) */
+  --mat-sys-tertiary: light-dark(#8f4c00, #ffb877);
+  --mat-sys-on-tertiary: light-dark(#ffffff, #4a2800);
+  --mat-sys-tertiary-container: light-dark(#ffdcc0, #6c3a00);
+  --mat-sys-on-tertiary-container: light-dark(#2e1500, #ffdcc0);
+  --mat-sys-tertiary-fixed: light-dark(#ffdcc0, #ffdcc0);
+  --mat-sys-tertiary-fixed-dim: light-dark(#ffb877, #ffb877);
+  --mat-sys-on-tertiary-fixed: light-dark(#2e1500, #2e1500);
+  --mat-sys-on-tertiary-fixed-variant: light-dark(#6c3a00, #6c3a00);
 
   /* Neutral palette variables */
   --mat-sys-background: light-dark(#f6fafd, #101416);
@@ -69,8 +70,8 @@ html {
   /* TYPOGRAPHY SYSTEM VARIABLES */
 
   /* Typography variables. Only used in the different typescale system variables. */
-  --mat-sys-brand-font-family: Roboto; /* The font-family to use for brand text. */
-  --mat-sys-plain-font-family: Roboto; /* The font-family to use for plain text. */
+  --mat-sys-brand-font-family: 'Playfair Display', Georgia, serif; /* Display/headline/title-large — elegant serif, matches marketing site. */
+  --mat-sys-plain-font-family: 'Lato', 'Helvetica Neue', Arial, sans-serif; /* Body, labels, buttons, form fields — clean sans. */
   --mat-sys-bold-font-weight: 700; /* The font-weight to use for bold text. */
   --mat-sys-medium-font-weight: 500; /* The font-weight to use for medium text. */
   --mat-sys-regular-font-weight: 400; /* The font-weight to use for regular text. */

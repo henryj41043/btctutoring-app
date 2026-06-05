@@ -1,13 +1,15 @@
 <div class="sessions-table">
+  <div class="btc-page-header">
+    <h2>Sessions</h2>
+    @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+      <button mat-raised-button color="primary" (click)="openCreateSessionDialog()">
+        <mat-icon>add</mat-icon>
+        Add Session
+      </button>
+    }
+  </div>
+
   <mat-card class="event-card" appearance="outlined">
-    <mat-card-header>
-      <mat-card-title>Sessions</mat-card-title>
-    </mat-card-header>
-    <mat-card-actions>
-      @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
-        <button matButton (click)="openCreateSessionDialog()">Add Session</button>
-      }
-    </mat-card-actions>
     <mat-card-content>
       <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
         <ng-container matColumnDef="date">
@@ -32,7 +34,15 @@
         </ng-container>
         <ng-container matColumnDef="attendance">
           <th mat-header-cell *matHeaderCellDef mat-sort-header> Attendance </th>
-          <td mat-cell *matCellDef="let item"> {{item.status}} </td>
+          <td mat-cell *matCellDef="let item">
+            @if (item.status) {
+              <span class="btc-chip"
+                    [class.btc-chip--ok]="item.status === 'Completed'"
+                    [class.btc-chip--warn]="item.status === 'Pending'"
+                    [class.btc-chip--info]="item.status === 'Make Up'"
+                    [class.btc-chip--bad]="item.status === 'NCNS'">{{item.status}}</span>
+            }
+          </td>
         </ng-container>
         <ng-container matColumnDef="notes">
           <th mat-header-cell *matHeaderCellDef> Notes </th>

@@ -1,17 +1,18 @@
 .student-roster {
-  padding: 16px;
-
   table {
     width: 100%;
   }
-}
 
-.mat-mdc-row .mat-mdc-cell {
-  border-bottom: 1px solid transparent;
-  border-top: 1px solid transparent;
-  cursor: pointer;
-}
+  .mat-mdc-row {
+    cursor: pointer;
+  }
 
-.mat-mdc-row:hover .mat-mdc-cell {
-  border-color: currentColor;
+  .icon-yes {
+    color: #1c7a45;
+  }
+
+  .icon-no {
+    color: var(--mat-sys-error);
+    opacity: .65;
+  }
 }
