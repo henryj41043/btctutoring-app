@@ -16,11 +16,9 @@
       <button mat-menu-item (click)="rosterNav()">
         <mat-icon>groups</mat-icon><span>Student Roster</span>
       </button>
-      @if (authService.isAdmin()) {
-        <button mat-menu-item (click)="payrollNav()">
-          <mat-icon>payments</mat-icon><span>Payroll</span>
-        </button>
-      }
+      <button mat-menu-item (click)="payrollNav()">
+        <mat-icon>payments</mat-icon><span>Payroll</span>
+      </button>
     </mat-menu>
   }
 

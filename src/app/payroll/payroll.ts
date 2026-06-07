@@ -16,6 +16,7 @@ import {AuthService} from '../services/auth.service';
 import {SessionsService} from '../services/sessions.service';
 import {ContactService} from '../services/contact.service';
 import {PayrollEntry} from '../models/payroll-entry.model';
+import {Contact} from '../models/contact.model';
 import {CurrencyPipe, DatePipe} from '@angular/common';
 import {catchError, EMPTY} from 'rxjs';
 import {Service} from '../enums/service.enum';
@@ -161,37 +162,49 @@ export class Payroll implements OnInit, AfterViewInit {
     }
     this.dataSource.data = [];
 
-    this.contactService.getContacts()
+    if (this.authService.isAdmin()) {
+      // Admins see payroll for every staff tutor.
+      this.contactService.getContacts()
+        .pipe(catchError(error => { console.log(error); return EMPTY; }))
+        .subscribe(contacts => {
+          contacts
+            .filter(contact => contact.service === Service.HIRING && contact.status === Status.STAFF)
+            .forEach(contact => this.buildPayrollEntry(contact));
+        });
+    } else {
+      // Tutors only ever see their own payroll. Use the already-loaded contact
+      // record (the backend blocks non-admins from listing all contacts).
+      const self = this.authService.contact();
+      if (self?.id) {
+        this.buildPayrollEntry(self);
+      }
+    }
+  }
+
+  private buildPayrollEntry(contact: Contact): void {
+    this.sessionsService.getSessionsByTutor(contact.id!)
       .pipe(catchError(error => { console.log(error); return EMPTY; }))
-      .subscribe(contacts => {
-        contacts.forEach(contact => {
-          if (contact.service === Service.HIRING && contact.status === Status.STAFF) {
-            this.sessionsService.getSessionsByTutor(contact.id!)
-              .pipe(catchError(error => { console.log(error); return EMPTY; }))
-              .subscribe(sessions => {
-                let payrollEntry: PayrollEntry = new PayrollEntry();
-                payrollEntry.name = contact.first_name;
-                payrollEntry.pay_rate = contact.hourly_rate ?? 0;
-                payrollEntry.planning_rate = 15;
-                payrollEntry.administrative_time = 0;
-                payrollEntry.tutoring_hours = 0;
-                sessions.forEach(session => {
-                  if (session.type === SessionType.ADMIN) {
-                    payrollEntry.administrative_time = payrollEntry.administrative_time! + this.calculateTime(session.start_datetime!, session.end_datetime!);
-                  } else if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) {
-                    payrollEntry.tutoring_hours = payrollEntry.tutoring_hours! + this.calculateTime(session.start_datetime!, session.end_datetime!);
-                  }
-                });
-                payrollEntry.planning_time = Math.round((payrollEntry.tutoring_hours / 6) * 100) / 100;
-                payrollEntry.hours_subtotal = payrollEntry.tutoring_hours + payrollEntry.administrative_time;
-                payrollEntry.planning_compensation = Math.round((payrollEntry.planning_time * payrollEntry.planning_rate) * 100) / 100;
-                payrollEntry.tutoring_compensation = Math.round((payrollEntry.hours_subtotal * payrollEntry.pay_rate!) * 100) / 100;
-                payrollEntry.total_compensation = payrollEntry.planning_compensation + payrollEntry.tutoring_compensation;
-                this.dataSource.data = [...this.dataSource.data, payrollEntry];
-                this.cdr.markForCheck();
-              });
+      .subscribe(sessions => {
+        let payrollEntry: PayrollEntry = new PayrollEntry();
+        payrollEntry.name = contact.first_name;
+        payrollEntry.pay_rate = contact.hourly_rate ?? 0;
+        payrollEntry.planning_rate = 15;
+        payrollEntry.administrative_time = 0;
+        payrollEntry.tutoring_hours = 0;
+        sessions.forEach(session => {
+          if (session.type === SessionType.ADMIN) {
+            payrollEntry.administrative_time = payrollEntry.administrative_time! + this.calculateTime(session.start_datetime!, session.end_datetime!);
+          } else if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) {
+            payrollEntry.tutoring_hours = payrollEntry.tutoring_hours! + this.calculateTime(session.start_datetime!, session.end_datetime!);
           }
         });
+        payrollEntry.planning_time = Math.round((payrollEntry.tutoring_hours / 6) * 100) / 100;
+        payrollEntry.hours_subtotal = payrollEntry.tutoring_hours + payrollEntry.administrative_time;
+        payrollEntry.planning_compensation = Math.round((payrollEntry.planning_time * payrollEntry.planning_rate) * 100) / 100;
+        payrollEntry.tutoring_compensation = Math.round((payrollEntry.hours_subtotal * payrollEntry.pay_rate!) * 100) / 100;
+        payrollEntry.total_compensation = payrollEntry.planning_compensation + payrollEntry.tutoring_compensation;
+        this.dataSource.data = [...this.dataSource.data, payrollEntry];
+        this.cdr.markForCheck();
       });
   }
 
