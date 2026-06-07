@@ -189,3 +189,22 @@ table.mat-elevation-z8 {
   today-bg:             #fff3e3,
   event-color-primary:  #118ab2,
 ));
+
+// angular-calendar hard-codes white text + a dark inset shadow on the expanded
+// day panel, both unreadable against our light brand background. Override to a
+// readable dark color and a clean light surface.
+.cal-month-view .cal-open-day-events {
+  color: var(--btc-ink);
+  background-color: var(--btc-sky-tint);
+  box-shadow: inset 0 1px 0 0 #cfe6ef;
+
+  .cal-event-title,
+  a,
+  span {
+    color: var(--btc-ink) !important;
+  }
+
+  .cal-event-title:hover {
+    color: var(--btc-teal-deep) !important;
+  }
+}

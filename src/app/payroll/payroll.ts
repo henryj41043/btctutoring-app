@@ -16,7 +16,7 @@ import {AuthService} from '../services/auth.service';
 import {SessionsService} from '../services/sessions.service';
 import {ContactService} from '../services/contact.service';
 import {PayrollEntry} from '../models/payroll-entry.model';
-import {DatePipe} from '@angular/common';
+import {CurrencyPipe, DatePipe} from '@angular/common';
 import {catchError, EMPTY} from 'rxjs';
 import {Service} from '../enums/service.enum';
 import {Status} from '../enums/status.enum';
@@ -38,6 +38,7 @@ import {SessionType} from '../enums/session-type.enum';
     MatInputModule,
     FormsModule,
     DatePipe,
+    CurrencyPipe,
   ],
   templateUrl: './payroll.html',
   styleUrl: './payroll.scss',
@@ -103,6 +104,8 @@ export class Payroll implements OnInit, AfterViewInit {
 
     autoTable(doc, {
       startY: 28,
+      margin: { top: 28, bottom: 18 },
+      showHead: 'everyPage',
       head: [[
         'Staff Name', 'Tutoring (hrs)', 'Admin Time (hrs)', 'Subtotal (hrs)',
         'Pay Rate', 'Tutoring Comp', 'Planning (hrs)', 'Planning Rate',
@@ -113,18 +116,40 @@ export class Payroll implements OnInit, AfterViewInit {
         entry.tutoring_hours ?? 0,
         entry.administrative_time ?? 0,
         entry.hours_subtotal ?? 0,
-        `$${entry.pay_rate}/hr`,
-        `$${entry.tutoring_compensation}`,
+        `${this.formatMoney(entry.pay_rate)}/hr`,
+        this.formatMoney(entry.tutoring_compensation),
         entry.planning_time ?? 0,
-        `$${entry.planning_rate}/hr`,
-        `$${entry.planning_compensation}`,
-        `$${entry.total_compensation}`,
+        `${this.formatMoney(entry.planning_rate)}/hr`,
+        this.formatMoney(entry.planning_compensation),
+        this.formatMoney(entry.total_compensation),
       ]),
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [66, 66, 66] },
+      headStyles: { fillColor: [17, 138, 178] },
     });
 
+    // Add total page count to each page's footer ("Page X of Y").
+    const totalPages = doc.getNumberOfPages();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(120);
+      doc.text(`Page ${i} of ${totalPages}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
+      doc.setTextColor(0);
+    }
+
     doc.save(`payroll-${startStr}-${endStr}.pdf`);
+  }
+
+  /** Formats a numeric amount as USD with dollars and cents, e.g. $40.20 / $1,250.00. */
+  private formatMoney(value: number | undefined | null): string {
+    return (value ?? 0).toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }
 
   private loadPayroll(date: Date): void {
