@@ -275,10 +275,6 @@
         </mat-form-field>
         <mat-checkbox formControlName="currently_accepting_students">Currently Accepting Students</mat-checkbox>
         <mat-form-field>
-          <mat-label>Tutoring Availability</mat-label>
-          <input matInput formControlName="tutoring_availability">
-        </mat-form-field>
-        <mat-form-field>
           <mat-label>Zoom Link</mat-label>
           <input matInput formControlName="zoom_link">
         </mat-form-field>
@@ -287,6 +283,53 @@
             <mat-label>Hourly Rate</mat-label>
             <input matInput type="number" formControlName="hourly_rate">
           </mat-form-field>
+        }
+      </div>
+
+      <div class="availability-editor" formArrayName="availability">
+        <div class="availability-header">
+          <h3>Tutoring Availability</h3>
+          <button matButton type="button" (click)="addAvailabilityBlock()">
+            <mat-icon>add</mat-icon>
+            Add Availability
+          </button>
+        </div>
+
+        @if (availabilityBlocks.length === 0) {
+          <p class="availability-empty">No availability set.</p>
+        }
+
+        @for (block of availabilityBlocks.controls; track block; let i = $index) {
+          <div class="availability-row" [formGroupName]="i">
+            <mat-form-field class="availability-days">
+              <mat-label>Days</mat-label>
+              <mat-select formControlName="days" multiple>
+                @for (day of weekdayOptions; track day) {
+                  <mat-option [value]="day">{{weekdayLabels[day]}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field class="availability-time">
+              <mat-label>From</mat-label>
+              <mat-select formControlName="start_time">
+                @for (time of timeOptions; track time.value) {
+                  <mat-option [value]="time.value">{{time.label}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field class="availability-time">
+              <mat-label>To</mat-label>
+              <mat-select formControlName="end_time">
+                @for (time of timeOptions; track time.value) {
+                  <mat-option [value]="time.value">{{time.label}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <button matIconButton type="button" color="warn"
+                    (click)="removeAvailabilityBlockAt(i)" aria-label="Remove availability">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
         }
       </div>
     } @else if (students.length > 0 && students.at(0).get('scholarship')?.value) {

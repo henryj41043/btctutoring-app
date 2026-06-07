@@ -76,6 +76,54 @@
   width: 100%;
 }
 
+/* Tutoring availability editor */
+.availability-editor {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 2px solid color-mix(in srgb, var(--btc-sky) 60%, transparent);
+
+  .availability-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+
+    h3 {
+      margin: 0;
+      font-size: 1.15rem;
+      color: var(--btc-ink);
+    }
+  }
+
+  .availability-empty {
+    margin: 4px 0 0;
+    color: var(--mat-sys-on-surface-variant);
+    font-style: italic;
+  }
+
+  .availability-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .availability-days,
+  .availability-time {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .availability-editor .availability-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .availability-editor .availability-days {
+    grid-column: 1 / -1;
+  }
+}
+
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 960px) {
   .contact-form {

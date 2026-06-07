@@ -2,6 +2,7 @@ import {Service} from '../enums/service.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {Status} from '../enums/status.enum';
 import {UserGroup} from '../enums/user-group.enum';
+import {AvailabilityBlock} from './availability-block.model';
 
 export class Contact {
   id?: string;
@@ -39,7 +40,7 @@ export class Contact {
   registration_received?: Date;
   title?: string;
   currently_accepting_students?: boolean;
-  tutoring_availability?: string;
+  availability?: AvailabilityBlock[];
   zoom_link?: string;
   hourly_rate?: number;
   hiring_inquiry_received?: Date;

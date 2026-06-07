@@ -27,6 +27,8 @@ import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
+import {AuthService} from '../services/auth.service';
+import {WEEKDAY_BY_JS_DAY} from '../enums/weekday.enum';
 
 @Component({
   selector: 'app-session-dialog',
@@ -66,6 +68,10 @@ export class SessionDialog implements OnInit {
   students: Student[] = [];
   filteredStudents: Student[] = [];
   showStatusConfirm: boolean = false;
+  showAvailabilityConfirm: boolean = false;
+  availabilityTutorName: string = '';
+  private availabilityOverridden: boolean = false;
+  private pendingAction: (() => void) | null = null;
   private pendingSession: Session | null = null;
   private pendingStudentUpdate: Student | null = null;
   readonly dialogRef = inject(MatDialogRef<SessionDialog>);
@@ -73,6 +79,7 @@ export class SessionDialog implements OnInit {
   sessionsService: SessionsService = inject(SessionsService);
   contactService: ContactService = inject(ContactService);
   studentService: StudentService = inject(StudentService);
+  authService: AuthService = inject(AuthService);
 
   get selectedStudentObj(): Student | undefined {
     return this.students.find(s => s.id === this.selectedStudent);
@@ -106,6 +113,67 @@ export class SessionDialog implements OnInit {
 
   cancel(): void {
     this.dialogRef.close();
+  }
+
+  /**
+   * Returns true if the session may proceed. For TUTORING sessions that fall
+   * outside the assigned tutor's availability: Tutors get a hard error (returns
+   * false); Admins get an override confirm (returns false now, `proceed` runs on
+   * confirm). Returns true when availability is satisfied, not applicable, or
+   * already overridden.
+   */
+  private passesAvailabilityGate(proceed: () => void): boolean {
+    if (this.selectedType !== SessionType.TUTORING || this.availabilityOverridden) {
+      return true;
+    }
+    if (this.isWithinAvailability()) {
+      return true;
+    }
+    const tutor = this.tutors.find(t => t.id === this.selectedTutor);
+    this.availabilityTutorName = tutor?.first_name ?? 'this tutor';
+    if (this.authService.isAdmin()) {
+      this.pendingAction = () => { this.availabilityOverridden = true; proceed(); };
+      this.showAvailabilityConfirm = true;
+    } else {
+      this.errorMessage = `This session falls outside ${this.availabilityTutorName}'s availability.`;
+      this.hasError = true;
+    }
+    return false;
+  }
+
+  /** True if the tutor has no availability set (skip) or the session fits within a block. */
+  private isWithinAvailability(): boolean {
+    if (!this.date || !this.startTime || !this.endTime) return true;
+    const tutor = this.tutors.find(t => t.id === this.selectedTutor);
+    if (!tutor || !tutor.availability || tutor.availability.length === 0) return true;
+
+    const weekday = WEEKDAY_BY_JS_DAY[this.date.getDay()];
+    const startMin = this.startTime.getHours() * 60 + this.startTime.getMinutes();
+    const endMin = this.endTime.getHours() * 60 + this.endTime.getMinutes();
+
+    return tutor.availability.some(block =>
+      block.days.includes(weekday) &&
+      this.timeStringToMinutes(block.start_time) <= startMin &&
+      this.timeStringToMinutes(block.end_time) >= endMin,
+    );
+  }
+
+  private timeStringToMinutes(time: string): number {
+    const [h, m] = (time ?? '').split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  }
+
+  confirmAvailabilityOverride(): void {
+    this.showAvailabilityConfirm = false;
+    const action = this.pendingAction;
+    this.pendingAction = null;
+    action?.();
+  }
+
+  cancelAvailabilityOverride(): void {
+    this.showAvailabilityConfirm = false;
+    this.pendingAction = null;
+    this.availabilityOverridden = false;
   }
 
   cancelStatusChange(): void {
@@ -147,6 +215,9 @@ export class SessionDialog implements OnInit {
       if(this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
         this.hasError = true;
+        return;
+      }
+      if (!this.passesAvailabilityGate(() => this.createSession())) {
         return;
       }
       if (this.selectedType === SessionType.TUTORING) {
@@ -203,6 +274,9 @@ export class SessionDialog implements OnInit {
       if (this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
         this.hasError = true;
+        return;
+      }
+      if (!this.passesAvailabilityGate(() => this.updateSession())) {
         return;
       }
       let submitStartDate: Date = new Date(this.date);

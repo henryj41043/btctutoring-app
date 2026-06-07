@@ -95,12 +95,21 @@
       <p>Changing the status will update the student's available and make-up minutes and cannot be undone. Are you sure you want to continue?</p>
     </div>
   }
+  @if (showAvailabilityConfirm) {
+    <div class="status-confirm-warning">
+      <p><strong>⚠ Outside tutor availability.</strong></p>
+      <p>This session falls outside {{availabilityTutorName}}'s set availability. Do you want to save it anyway?</p>
+    </div>
+  }
   @if (hasError) {
     <mat-error>{{errorMessage}}</mat-error>
   }
 </mat-dialog-content>
 <mat-dialog-actions>
-  @if (showStatusConfirm) {
+  @if (showAvailabilityConfirm) {
+    <button matButton (click)="cancelAvailabilityOverride()">Go Back</button>
+    <button matButton color="warn" (click)="confirmAvailabilityOverride()">Save Anyway</button>
+  } @else if (showStatusConfirm) {
     <button matButton (click)="cancelStatusChange()">Go Back</button>
     <button matButton color="warn" (click)="confirmStatusChange()">Confirm Update</button>
   } @else {

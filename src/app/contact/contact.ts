@@ -3,6 +3,8 @@ import {ContactService} from '../services/contact.service';
 import {catchError, EMPTY} from 'rxjs';
 import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
+import {AvailabilityBlock} from '../models/availability-block.model';
+import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {MatInputModule} from '@angular/material/input';
 import {Service} from '../enums/service.enum';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -122,7 +124,7 @@ export class Contact implements OnInit {
     registration_received: undefined,
     title: '',
     currently_accepting_students: false,
-    tutoring_availability: '',
+    availability: this.formBuilder.array([]),
     zoom_link: '',
     hourly_rate: 0,
     hiring_inquiry_received: undefined,
@@ -191,6 +193,48 @@ export class Contact implements OnInit {
     return this.studentsForm.controls['students'] as FormArray;
   }
 
+  // ── Tutoring availability ────────────────────────────────────────────────
+  protected readonly weekdayOptions: Weekday[] = Object.values(Weekday);
+  protected readonly weekdayLabels = WEEKDAY_LABELS;
+  /** 30-min increments from 6:00 AM to 9:00 PM as { value: 'HH:mm', label: '1:00 PM' }. */
+  protected readonly timeOptions: { value: string; label: string }[] = this.buildTimeOptions();
+
+  get availabilityBlocks(): FormArray {
+    return this.contactForm.controls['availability'] as FormArray;
+  }
+
+  private createAvailabilityGroup(block?: AvailabilityBlock): FormGroup {
+    return this.formBuilder.group({
+      days: [block?.days ?? [], Validators.required],
+      start_time: [block?.start_time ?? '', Validators.required],
+      end_time: [block?.end_time ?? '', Validators.required],
+    });
+  }
+
+  addAvailabilityBlock(): void {
+    this.availabilityBlocks.push(this.createAvailabilityGroup());
+    this.contactForm.markAsDirty();
+  }
+
+  removeAvailabilityBlockAt(index: number): void {
+    this.availabilityBlocks.removeAt(index);
+    this.contactForm.markAsDirty();
+  }
+
+  private buildTimeOptions(): { value: string; label: string }[] {
+    const options: { value: string; label: string }[] = [];
+    for (let minutes = 6 * 60; minutes <= 21 * 60; minutes += 30) {
+      const h24 = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      const value = `${h24.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      const period = h24 < 12 ? 'AM' : 'PM';
+      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+      const label = `${h12}:${m.toString().padStart(2, '0')} ${period}`;
+      options.push({ value, label });
+    }
+    return options;
+  }
+
   private loadContact() {
     this.contactService.getContact(this.id).pipe(
       catchError(error => {
@@ -239,7 +283,10 @@ export class Contact implements OnInit {
     this.contactForm.controls['status'].setValue(contact.status);
     this.contactForm.controls['title'].setValue(contact.title);
     this.contactForm.controls['currently_accepting_students'].setValue(contact.currently_accepting_students);
-    this.contactForm.controls['tutoring_availability'].setValue(contact.tutoring_availability);
+    this.availabilityBlocks.clear();
+    (contact.availability ?? []).forEach(block =>
+      this.availabilityBlocks.push(this.createAvailabilityGroup(block)),
+    );
     this.contactForm.controls['zoom_link'].setValue(contact.zoom_link);
     this.contactForm.controls['hourly_rate'].setValue(contact.hourly_rate);
     this.contactForm.controls['hiring_inquiry_received'].setValue(contact.hiring_inquiry_received);
@@ -310,7 +357,10 @@ export class Contact implements OnInit {
   }
 
   private buildNotesFormArray(notes: Note[]) {
-    notes.forEach(note => {
+    const sortedNotes = [...notes].sort(
+      (a, b) => new Date(b.date_time ?? 0).getTime() - new Date(a.date_time ?? 0).getTime(),
+    );
+    sortedNotes.forEach(note => {
       this.notes.push(this.formBuilder.group({
         id: [note.id, Validators.required],
         message: note.message,
@@ -420,7 +470,8 @@ export class Contact implements OnInit {
         })
       )
       .subscribe(response => {
-        this.notes.push(this.formBuilder.group({
+        // Newest note goes to the top so it matches the most-recent-first order.
+        this.notes.insert(0, this.formBuilder.group({
           id: response.id,
           message: response.message,
           date_time: dateString,
@@ -431,7 +482,7 @@ export class Contact implements OnInit {
           type: '',
         }));
         this.notes.updateValueAndValidity();
-        this.setNotesEditIndex(this.notes.controls.length - 1);
+        this.setNotesEditIndex(0);
       });
   }
 
