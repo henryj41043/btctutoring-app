@@ -22,7 +22,12 @@
         </ng-container>
         <ng-container matColumnDef="student">
           <th mat-header-cell *matHeaderCellDef mat-sort-header> Student </th>
-          <td mat-cell *matCellDef="let item"> {{item.student_name}} </td>
+          <td mat-cell *matCellDef="let item">
+            {{item.student_name}}
+            @if (item.type === SessionType.MAKE_UP) {
+              <span class="btc-chip btc-chip--warn make-up-chip">Make-up</span>
+            }
+          </td>
         </ng-container>
         <ng-container matColumnDef="start">
           <th mat-header-cell *matHeaderCellDef> Start </th>

@@ -12,4 +12,5 @@ export class Session {
   student_name?: string;
   tutor_id?: string;
   tutor_name?: string;
+  series_id?: string;
 }

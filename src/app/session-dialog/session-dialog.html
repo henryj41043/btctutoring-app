@@ -13,7 +13,7 @@
       <mat-label>Session Type</mat-label>
       <mat-select [(ngModel)]="selectedType">
         @for (type of sessionTypeOptions; track type) {
-          <mat-option [value]="type">{{type}}</mat-option>
+          <mat-option [value]="type">{{typeLabels[type]}}</mat-option>
         }
       </mat-select>
     </mat-form-field>
@@ -43,7 +43,7 @@
     <mat-timepicker interval="15min" #starttimepicker/>
     <mat-timepicker-toggle [for]="starttimepicker" matSuffix/>
   </mat-form-field>
-  @if (selectedType === SessionType.TUTORING) {
+  @if (hasStudent) {
     <mat-form-field>
       <mat-label>Select Student</mat-label>
       <mat-select [(ngModel)]="selectedStudent">
@@ -84,6 +84,38 @@
     }
   }
   <br/>
+
+  @if (dialogData.type === 'create' && selectedType === SessionType.TUTORING) {
+    <div class="series-section">
+      <mat-checkbox [(ngModel)]="repeatWeekly">Repeat weekly (create a series)</mat-checkbox>
+      @if (repeatWeekly) {
+        <div class="series-controls">
+          <mat-form-field>
+            <mat-label>Repeat on</mat-label>
+            <mat-select [(ngModel)]="repeatDays" multiple>
+              @for (day of weekdayOptions; track day) {
+                <mat-option [value]="day">{{weekdayLabels[day]}}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>End</mat-label>
+            <mat-select [(ngModel)]="repeatEndMode">
+              <mat-option value="count">After N sessions</mat-option>
+              <mat-option value="fill">Fill available minutes</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (repeatEndMode === 'count') {
+            <mat-form-field>
+              <mat-label>Number of sessions</mat-label>
+              <input matInput type="number" min="1" [(ngModel)]="repeatCount">
+            </mat-form-field>
+          }
+        </div>
+      }
+    </div>
+    <br/>
+  }
   <mat-form-field>
     <mat-label>Notes</mat-label>
     <textarea matInput [(ngModel)]="notes"></textarea>
@@ -101,12 +133,22 @@
       <p>This session falls outside {{availabilityTutorName}}'s set availability. Do you want to save it anyway?</p>
     </div>
   }
+  @if (showSeriesScopePrompt) {
+    <div class="status-confirm-warning">
+      <p><strong>This session is part of a series.</strong></p>
+      <p>Apply this {{seriesActionLabel}} to just this occurrence, or to this and all future pending occurrences?</p>
+    </div>
+  }
   @if (hasError) {
     <mat-error>{{errorMessage}}</mat-error>
   }
 </mat-dialog-content>
 <mat-dialog-actions>
-  @if (showAvailabilityConfirm) {
+  @if (showSeriesScopePrompt) {
+    <button matButton (click)="cancelSeriesScope()">Cancel</button>
+    <button matButton (click)="chooseSeriesScope('single')">This occurrence</button>
+    <button matButton color="warn" (click)="chooseSeriesScope('future')">This &amp; future</button>
+  } @else if (showAvailabilityConfirm) {
     <button matButton (click)="cancelAvailabilityOverride()">Go Back</button>
     <button matButton color="warn" (click)="confirmAvailabilityOverride()">Save Anyway</button>
   } @else if (showStatusConfirm) {

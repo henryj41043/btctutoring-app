@@ -63,6 +63,10 @@ const colors: Record<string, EventColor> = {
     primary: '#7b2fbe',
     secondary: '#d8b4fe',
   },
+  orange: {
+    primary: '#e07b00',
+    secondary: '#ffd9ad',
+  },
 };
 
 @Component({
@@ -100,6 +104,7 @@ export class EventCalendar implements OnInit {
   view: CalendarView = CalendarView.Month;
   viewDate: Date = new Date();
   events: CalendarEvent<Session>[] = [];
+  private allSessions: Session[] = [];
   actions: CalendarEventAction[] = [
     {
       label: '<i class="fas fa-fw fa-pencil-alt"></i>',
@@ -155,6 +160,7 @@ export class EventCalendar implements OnInit {
       })
     ).subscribe(response => {
       const sessions: Session[] = response as Session[];
+      this.allSessions = sessions;
       this.events = this.buildCalendarEvents(sessions);
       this.cdr.markForCheck();
     });
@@ -163,11 +169,12 @@ export class EventCalendar implements OnInit {
   private buildCalendarEvents(sessions: Session[]): CalendarEvent<Session>[] {
     return sessions.map((session: Session) => {
       const isAdmin = session.type === SessionType.ADMIN;
+      const isMakeUp = session.type === SessionType.MAKE_UP;
       const timeRange = `${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`;
       return {
         title: isAdmin
           ? `${session.tutor_name} - Admin Time - ${timeRange}`
-          : `${session.tutor_name} with ${session.student_name} - ${timeRange}`,
+          : `${isMakeUp ? '[Make-up] ' : ''}${session.tutor_name} with ${session.student_name} - ${timeRange}`,
         start: new Date(session.start_datetime as string),
         end: new Date(session.end_datetime as string),
         meta: session,
@@ -182,6 +189,9 @@ export class EventCalendar implements OnInit {
   private setColor(type: SessionType | undefined, status: SessionStatus | undefined): EventColor {
     if (type === SessionType.ADMIN) {
       return colors['purple'];
+    }
+    if (type === SessionType.MAKE_UP) {
+      return colors['orange'];
     }
     switch (status) {
       case SessionStatus.PENDING:
@@ -251,7 +261,7 @@ export class EventCalendar implements OnInit {
   openCreateSessionDialog(): void {
     console.log('openCreateSessionDialog');
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
-      data: {type: 'create', session: new Session()},
+      data: {type: 'create', session: new Session(), existingSessions: this.allSessions},
     });
 
     sessionDialogRef.afterClosed().subscribe((result: Session): void => {
@@ -266,7 +276,7 @@ export class EventCalendar implements OnInit {
   openEditSessionDialog(item: any): void {
     console.log('openEditSessionDialog');
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
-      data: {type: 'edit', session: item},
+      data: {type: 'edit', session: item, existingSessions: this.allSessions},
     });
 
     sessionDialogRef.afterClosed().subscribe((result: Session): void => {

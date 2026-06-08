@@ -40,6 +40,7 @@ export class SessionsTable implements OnInit, AfterViewInit {
   @ViewChild(MatSort) sort!: MatSort;
   @ViewChild(MatPaginator) paginator!: MatPaginator;
 
+  readonly SessionType = SessionType;
   eventColumns: string[] = ['date', 'tutor', 'student', 'start', 'end', 'attendance', 'notes', 'edit', 'delete'];
   dataSource = new MatTableDataSource<Session>([]);
 
@@ -93,44 +94,37 @@ export class SessionsTable implements OnInit, AfterViewInit {
   openCreateSessionDialog(): void {
     console.log('openCreateSessionDialog');
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
-      data: {type: 'create', session: new Session()},
+      data: {type: 'create', session: new Session(), existingSessions: this.dataSource.data},
     });
 
     sessionDialogRef.afterClosed().subscribe((result: Session): void => {
-      console.log('The dialog was closed');
-      if (result !== undefined && result.type !== SessionType.ADMIN) {
-        this.dataSource.data = [...this.dataSource.data, result];
-        this.cdr.markForCheck();
+      // Reload on any change so single and series operations both reflect.
+      if (result !== undefined) {
+        this.updateSessionsData();
       }
     });
   }
 
   openEditSessionDialog(item: any): void {
-    console.log('openEditSessionDialog');
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
-      data: {type: 'edit', session: item},
+      data: {type: 'edit', session: item, existingSessions: this.dataSource.data},
     });
 
     sessionDialogRef.afterClosed().subscribe((result: Session): void => {
-      console.log('The dialog was closed');
       if (result !== undefined) {
-        this.dataSource.data = this.dataSource.data.map(s => s.id === result.id ? result : s);
-        this.cdr.markForCheck();
+        this.updateSessionsData();
       }
     });
   }
 
   openDeleteSessionDialog(item: any): void {
-    console.log('openDeleteSessionDialog');
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
       data: {type: 'delete', session: item},
     });
 
     sessionDialogRef.afterClosed().subscribe((result: Response): void => {
-      console.log('The dialog was closed');
       if (result !== undefined) {
-        this.dataSource.data = this.dataSource.data.filter(s => s.id !== result.id);
-        this.cdr.markForCheck();
+        this.updateSessionsData();
       }
     });
   }

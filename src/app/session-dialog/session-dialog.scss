@@ -26,3 +26,15 @@
     font-size: 13px;
   }
 }
+
+.series-section {
+  margin: 6px 5px 0;
+
+  .series-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+  }
+}

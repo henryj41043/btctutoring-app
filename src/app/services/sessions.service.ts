@@ -16,6 +16,11 @@ export class SessionsService {
     return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`);
   }
 
+  getSessionsBySeries(seriesId: string): Observable<Session[]> {
+    let params: HttpParams = new HttpParams().set('series', seriesId);
+    return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params: params });
+  }
+
   getSessionsByTutor(tutor: string): Observable<Session[]> {
     let params: HttpParams = new HttpParams().set('tutor', tutor);
     return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params: params });
@@ -35,6 +40,10 @@ export class SessionsService {
 
   createSession(session: Session): Observable<Response> {
     return this.httpClient.post<Response>(`${this.baseUrl}/sessions`, session);
+  }
+
+  createSessions(sessions: Session[]): Observable<Response> {
+    return this.httpClient.post<Response>(`${this.baseUrl}/sessions/batch`, sessions);
   }
 
   updateSession(session: Session): Observable<Session> {
