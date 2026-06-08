@@ -5,6 +5,8 @@ import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from
 import {Contact as _Contact} from '../models/contact.model';
 import {AvailabilityBlock} from '../models/availability-block.model';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
+import {PhoneFormatDirective} from '../directives/phone-format.directive';
+import {phoneValidator} from '../utils/phone.util';
 import {MatInputModule} from '@angular/material/input';
 import {Service} from '../enums/service.enum';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -53,6 +55,7 @@ import {Router} from '@angular/router';
     MatTableModule,
     MatSortModule,
     MatPaginatorModule,
+    PhoneFormatDirective,
   ],
   templateUrl: './contact.html',
   styleUrl: './contact.scss',
@@ -93,7 +96,7 @@ export class Contact implements OnInit {
     first_name: ['', Validators.required],
     last_name: [''],
     email: ['', [Validators.required, Validators.email]],
-    phone_number: [''],
+    phone_number: ['', phoneValidator],
     service: ['', Validators.required],
     status: '',
     monthly_charge: 0,

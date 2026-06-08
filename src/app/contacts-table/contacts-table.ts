@@ -15,6 +15,7 @@ import {UserGroup} from '../enums/user-group.enum';
 import {ContactService} from '../services/contact.service';
 import {Response} from '../models/response.model';
 import {Router} from '@angular/router';
+import {PhonePipe} from '../pipes/phone.pipe';
 
 @Component({
   selector: 'app-contacts-table',
@@ -25,6 +26,7 @@ import {Router} from '@angular/router';
     MatIconModule,
     MatSortModule,
     MatPaginatorModule,
+    PhonePipe,
   ],
   templateUrl: './contacts-table.html',
   styleUrl: './contacts-table.scss',

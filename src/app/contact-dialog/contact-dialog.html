@@ -12,14 +12,14 @@
     <mat-form-field>
       <mat-label>Email Address</mat-label>
       <input matInput formControlName="email" [type]="'email'">
-      @if (contactForm.hasError('emailAddress')) {
+      @if (contactForm.controls['email'].hasError('email') || contactForm.controls['email'].hasError('required')) {
         <mat-error>Valid Email Required</mat-error>
       }
     </mat-form-field>
     <mat-form-field>
       <mat-label>Phone Number</mat-label>
-      <input matInput formControlName="phone_number" [type]="'tel'">
-      @if (contactForm.hasError('phoneNumber')) {
+      <input matInput appPhoneFormat formControlName="phone_number" [type]="'tel'">
+      @if (contactForm.controls['phone_number'].hasError('phoneNumber')) {
         <mat-error>Valid Phone Number Required</mat-error>
       }
     </mat-form-field>

@@ -15,6 +15,8 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {Service} from '../enums/service.enum';
 import {ContactService} from '../services/contact.service';
 import {Contact} from '../models/contact.model';
+import {PhoneFormatDirective} from '../directives/phone-format.directive';
+import {phoneValidator} from '../utils/phone.util';
 
 @Component({
   selector: 'app-contact-dialog',
@@ -28,6 +30,7 @@ import {Contact} from '../models/contact.model';
     ReactiveFormsModule,
     MatButtonModule,
     MatSelectModule,
+    PhoneFormatDirective,
   ],
   templateUrl: './contact-dialog.html',
   styleUrl: './contact-dialog.scss'
@@ -41,7 +44,7 @@ export class ContactDialog {
     first_name: ['', Validators.required],
     last_name: [''],
     email: ['', [Validators.required, Validators.email]],
-    phone_number: [''],
+    phone_number: ['', phoneValidator],
     service: [undefined, Validators.required],
   });
   protected serviceOptions: string[] = Object.values(Service);
