@@ -10,4 +10,5 @@ export const packageMinutesMap: Record<Package, number> = {
   [Package.THRIVE]: 120,
   [Package.EXCEL]: 180,
   [Package.CUSTOM]: 240,
+  [Package.TRIUMPH]: 120,
 }

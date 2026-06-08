@@ -8,4 +8,5 @@ export enum Package {
   THRIVE = 'Thrive',
   EXCEL = 'Excel',
   CUSTOM = 'Custom',
+  TRIUMPH = 'Triumph',
 }
