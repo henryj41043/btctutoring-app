@@ -5,9 +5,11 @@ import {MatToolbarModule} from '@angular/material/toolbar';
 import {NgOptimizedImage} from '@angular/common';
 import {MatMenuModule} from '@angular/material/menu';
 import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatDialog} from '@angular/material/dialog';
 import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
 import {Router} from '@angular/router';
+import {ChangePasswordDialog} from '../change-password-dialog/change-password-dialog';
 
 @Component({
   selector: 'app-tool-bar',
@@ -20,9 +22,14 @@ import {Router} from '@angular/router';
 export class ToolBar {
   authService: AuthService = inject(AuthService);
   router: Router = inject(Router);
+  private dialog: MatDialog = inject(MatDialog);
 
   logout(): void {
     this.authService.logout();
+  }
+
+  openChangePassword(): void {
+    this.dialog.open(ChangePasswordDialog);
   }
 
   calendarNav(): void {

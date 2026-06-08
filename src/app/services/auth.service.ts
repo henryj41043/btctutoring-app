@@ -1,6 +1,6 @@
 import {computed, inject, Injectable, Signal, signal, WritableSignal} from '@angular/core';
 import {HttpClient} from '@angular/common/http';
-import {catchError} from 'rxjs';
+import {catchError, Observable} from 'rxjs';
 import {environment} from '../../environments/environment';
 import {User} from '../models/user.model';
 import {Router} from '@angular/router';
@@ -110,6 +110,28 @@ export class AuthService {
         this._contact.set(response[0] as Contact);
         void this.router.navigate(['/calendar']);
       });
+  }
+
+  /** Change the password for the logged-in user (access token sent by the interceptor). */
+  changePassword(previousPassword: string, proposedPassword: string): Observable<any> {
+    return this.httpClient.post(`${this.baseUrl}/auth/change-password`, {
+      previousPassword,
+      proposedPassword,
+    });
+  }
+
+  /** Start the forgot-password flow — Cognito emails a reset code. */
+  forgotPassword(email: string): Observable<any> {
+    return this.httpClient.post(`${this.baseUrl}/auth/forgot-password`, { email });
+  }
+
+  /** Complete the forgot-password flow with the emailed code and a new password. */
+  confirmForgotPassword(email: string, code: string, newPassword: string): Observable<any> {
+    return this.httpClient.post(`${this.baseUrl}/auth/confirm-forgot-password`, {
+      email,
+      code,
+      newPassword,
+    });
   }
 
   logout() {

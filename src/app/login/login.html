@@ -7,12 +7,19 @@
     </div>
 
     <mat-card-content class="login-body">
+      @if (infoMessage) {
+        <div class="login-info-message">
+          <mat-icon>check_circle</mat-icon>
+          <span>{{infoMessage}}</span>
+        </div>
+      }
+
       @if (loggingIn && !authService.hasError()) {
         <div class="spinner-container">
           <mat-spinner [diameter]="44"></mat-spinner>
           <span class="spinner-label">Signing you in…</span>
         </div>
-      } @else {
+      } @else if (mode === 'login') {
         <form (ngSubmit)="login()">
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Email</mat-label>
@@ -34,12 +41,83 @@
             <button mat-raised-button color="primary" type="submit" class="login-submit">Login</button>
           </div>
 
+          @if (!authService.resetPassword()) {
+            <div class="login-link-row">
+              <button matButton type="button" (click)="showForgot()">Forgot password?</button>
+            </div>
+          }
+
           @if (authService.hasError()) {
             <div class="login-error-message">
               <mat-icon>error_outline</mat-icon>
               <span>Login failed. Please check your credentials and try again.</span>
             </div>
           }
+        </form>
+      } @else if (mode === 'forgot') {
+        <form (ngSubmit)="sendResetCode()">
+          <p class="login-step-hint">Enter your account email and we'll send you a reset code.</p>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Email</mat-label>
+            <input matInput type="email" [(ngModel)]="email" name="forgotEmail" required>
+            <mat-icon matSuffix>mail_outline</mat-icon>
+          </mat-form-field>
+
+          <div class="login-button-container">
+            <button mat-raised-button color="primary" type="submit" class="login-submit" [disabled]="working">
+              @if (working) { <mat-spinner [diameter]="20"></mat-spinner> } @else { Send reset code }
+            </button>
+          </div>
+
+          @if (forgotError) {
+            <div class="login-error-message">
+              <mat-icon>error_outline</mat-icon>
+              <span>{{forgotError}}</span>
+            </div>
+          }
+
+          <div class="login-link-row">
+            <button matButton type="button" (click)="backToLogin()">Back to login</button>
+          </div>
+        </form>
+      } @else if (mode === 'reset') {
+        <form (ngSubmit)="submitReset()">
+          <p class="login-step-hint">Enter the code sent to your email along with a new password.</p>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Reset code</mat-label>
+            <input matInput type="text" [(ngModel)]="resetCode" name="resetCode" required>
+            <mat-icon matSuffix>pin</mat-icon>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>New password</mat-label>
+            <input matInput type="password" [(ngModel)]="newPassword" name="newPassword" required>
+            <mat-icon matSuffix>lock_outline</mat-icon>
+            <mat-hint>At least 8 characters.</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Confirm new password</mat-label>
+            <input matInput type="password" [(ngModel)]="confirmPassword" name="confirmPassword" required>
+            <mat-icon matSuffix>lock_outline</mat-icon>
+          </mat-form-field>
+
+          <div class="login-button-container">
+            <button mat-raised-button color="primary" type="submit" class="login-submit" [disabled]="working">
+              @if (working) { <mat-spinner [diameter]="20"></mat-spinner> } @else { Reset password }
+            </button>
+          </div>
+
+          @if (forgotError) {
+            <div class="login-error-message">
+              <mat-icon>error_outline</mat-icon>
+              <span>{{forgotError}}</span>
+            </div>
+          }
+
+          <div class="login-link-row">
+            <button matButton type="button" (click)="backToLogin()">Back to login</button>
+          </div>
         </form>
       }
     </mat-card-content>

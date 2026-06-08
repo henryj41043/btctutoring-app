@@ -110,3 +110,31 @@
     flex: 0 0 auto;
   }
 }
+
+.login-info-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: var(--btc-radius-sm);
+  background: #e3f6ec;
+  color: #1c7a45;
+  font-size: .875rem;
+
+  mat-icon {
+    flex: 0 0 auto;
+  }
+}
+
+.login-step-hint {
+  margin: 0 0 14px;
+  color: var(--btc-teal-deep);
+  font-size: .9rem;
+}
+
+.login-link-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}

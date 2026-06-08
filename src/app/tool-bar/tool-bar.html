@@ -41,6 +41,10 @@
       <h3>Profile</h3>
       @if (authService.loggedIn()) {
         <p class="profile-name">{{authService.contact().first_name}} {{authService.contact().last_name}}</p>
+        <button matButton class="profile-action" (click)="openChangePassword()">
+          <mat-icon>lock_reset</mat-icon>
+          Change Password
+        </button>
       }
       <form (ngSubmit)="logout()">
         <button mat-raised-button color="primary" type="submit">Logout</button>
