@@ -12,6 +12,9 @@
 
 /* Each form group becomes a clean, branded card */
 .contact-section {
+  // Allow grid/flex children to shrink below content width so wide inner
+  // content (e.g. the roster table) scrolls instead of widening the page.
+  min-width: 0;
   padding: 22px 24px;
   background: var(--btc-card);
   color: var(--mat-sys-on-surface);
@@ -74,6 +77,19 @@
 /* Make form fields fill their grid cell */
 .contact-section mat-form-field {
   width: 100%;
+}
+
+/* Wide tables (e.g. the hiring Student Roster) scroll within their card
+   instead of stretching the page on narrow screens. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+
+  table {
+    width: 100%;
+    min-width: 640px;
+  }
 }
 
 /* Tutoring availability editor */

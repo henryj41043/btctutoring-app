@@ -1,6 +1,13 @@
 .student-roster {
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   table {
     width: 100%;
+    min-width: 640px;
   }
 
   .mat-mdc-row {

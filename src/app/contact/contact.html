@@ -126,6 +126,7 @@
   <div class="contact-tutoring contact-section" [formGroup]="studentsForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>Student Roster</h2>
+      <div class="table-scroll">
       <table mat-table [dataSource]="rosterDataSource" matSort #rosterSort="matSort" class="mat-elevation-z8">
         <ng-container matColumnDef="name">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
@@ -160,6 +161,7 @@
         <tr mat-header-row *matHeaderRowDef="rosterColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: rosterColumns;" (click)="openSessionsDialog(row)"></tr>
       </table>
+      </div>
       <mat-paginator #rosterPaginator [pageSizeOptions]="[5, 10, 25]" showFirstLastButtons/>
     } @else {
       <h2>Students</h2>

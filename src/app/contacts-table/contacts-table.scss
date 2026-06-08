@@ -1,6 +1,13 @@
 .clients-table {
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   table {
     width: 100%;
+    min-width: 680px;
   }
 
   .mat-mdc-row {

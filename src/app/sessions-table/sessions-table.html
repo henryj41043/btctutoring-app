@@ -11,6 +11,7 @@
 
   <mat-card class="event-card" appearance="outlined">
     <mat-card-content>
+      <div class="table-scroll">
       <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
         <ng-container matColumnDef="date">
           <th mat-header-cell *matHeaderCellDef mat-sort-header> Date </th>
@@ -74,6 +75,7 @@
         <tr mat-header-row *matHeaderRowDef="eventColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: eventColumns;"></tr>
       </table>
+      </div>
       <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
     </mat-card-content>
   </mat-card>
