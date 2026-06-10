@@ -11,7 +11,7 @@
         <mat-datepicker-toggle [for]="payrollDatepicker" matSuffix/>
         <mat-datepicker #payrollDatepicker/>
       </mat-form-field>
-      <button mat-raised-button color="primary" (click)="exportPDF()">
+      <button mat-raised-button color="primary" (click)="exportPDF()" [disabled]="loading">
         <mat-icon>picture_as_pdf</mat-icon>
         Export PDF
       </button>
@@ -20,6 +20,12 @@
 
   <mat-card appearance="outlined">
     <mat-card-content>
+      @if (loading) {
+        <div class="payroll-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="payroll-spinner-label">Calculating payroll…</span>
+        </div>
+      } @else {
       <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
         <ng-container matColumnDef="name">
           <th mat-header-cell *matHeaderCellDef mat-sort-header> Staff Name </th>
@@ -65,6 +71,7 @@
         <tr mat-row *matRowDef="let row; columns: payrollColumns;"></tr>
       </table>
       <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+      }
     </mat-card-content>
   </mat-card>
 </div>

@@ -1,4 +1,4 @@
-import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {MatButtonModule} from '@angular/material/button';
@@ -11,14 +11,16 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {provideNativeDateAdapter} from '@angular/material/core';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
 import {SessionsService} from '../services/sessions.service';
 import {ContactService} from '../services/contact.service';
 import {PayrollEntry} from '../models/payroll-entry.model';
 import {Contact} from '../models/contact.model';
+import {Session} from '../models/session.model';
 import {CurrencyPipe, DatePipe} from '@angular/common';
-import {catchError, EMPTY} from 'rxjs';
+import {catchError, EMPTY, forkJoin, map, Observable, of} from 'rxjs';
 import {Service} from '../enums/service.enum';
 import {Status} from '../enums/status.enum';
 import {SessionStatus} from '../enums/session-status.enum';
@@ -37,6 +39,7 @@ import {SessionType} from '../enums/session-type.enum';
     MatDatepickerModule,
     MatFormFieldModule,
     MatInputModule,
+    MatProgressSpinnerModule,
     FormsModule,
     DatePipe,
     CurrencyPipe,
@@ -45,14 +48,20 @@ import {SessionType} from '../enums/session-type.enum';
   styleUrl: './payroll.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class Payroll implements OnInit, AfterViewInit {
+export class Payroll implements OnInit {
   private authService: AuthService = inject(AuthService);
   private sessionsService: SessionsService = inject(SessionsService);
   private contactService: ContactService = inject(ContactService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
 
-  @ViewChild(MatSort) sort!: MatSort;
-  @ViewChild(MatPaginator) paginator!: MatPaginator;
+  // Setter-based ViewChilds: the table renders inside an @if, so these don't
+  // exist yet at ngAfterViewInit and must be wired when they appear.
+  @ViewChild(MatSort) set matSort(sort: MatSort) {
+    if (sort) { this.dataSource.sort = sort; }
+  }
+  @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
+    if (paginator) { this.dataSource.paginator = paginator; }
+  }
 
   protected payrollColumns: string[] = [
     'name',
@@ -70,14 +79,10 @@ export class Payroll implements OnInit, AfterViewInit {
   protected startDate: Date | undefined;
   protected endDate: Date | undefined;
   protected selectedDate: Date = new Date();
+  protected loading: boolean = true;
 
   ngOnInit(): void {
     this.loadPayroll(this.selectedDate);
-  }
-
-  ngAfterViewInit(): void {
-    this.dataSource.sort = this.sort;
-    this.dataSource.paginator = this.paginator;
   }
 
   onDateChange(date: Date | null): void {
@@ -161,30 +166,51 @@ export class Payroll implements OnInit, AfterViewInit {
       this.startDate = new Date(date.getFullYear(), date.getMonth(), 16);
     }
     this.dataSource.data = [];
+    this.loading = true;
+    this.cdr.markForCheck();
 
     if (this.authService.isAdmin()) {
       // Admins see payroll for every staff tutor.
       this.contactService.getContacts()
-        .pipe(catchError(error => { console.log(error); return EMPTY; }))
+        .pipe(catchError(error => {
+          console.log(error);
+          this.finishLoading([]);
+          return EMPTY;
+        }))
         .subscribe(contacts => {
-          contacts
-            .filter(contact => contact.service === Service.HIRING && contact.status === Status.STAFF)
-            .forEach(contact => this.buildPayrollEntry(contact));
+          const staff = contacts.filter(contact =>
+            contact.service === Service.HIRING && contact.status === Status.STAFF);
+          if (staff.length === 0) {
+            this.finishLoading([]);
+            return;
+          }
+          forkJoin(staff.map(contact => this.buildPayrollEntry$(contact)))
+            .subscribe(entries => this.finishLoading(entries));
         });
     } else {
       // Tutors only ever see their own payroll. Use the already-loaded contact
       // record (the backend blocks non-admins from listing all contacts).
       const self = this.authService.contact();
       if (self?.id) {
-        this.buildPayrollEntry(self);
+        this.buildPayrollEntry$(self).subscribe(entry => this.finishLoading([entry]));
+      } else {
+        this.finishLoading([]);
       }
     }
   }
 
-  private buildPayrollEntry(contact: Contact): void {
-    this.sessionsService.getSessionsByTutor(contact.id!)
-      .pipe(catchError(error => { console.log(error); return EMPTY; }))
-      .subscribe(sessions => {
+  private finishLoading(entries: PayrollEntry[]): void {
+    this.dataSource.data = entries;
+    this.loading = false;
+    this.cdr.markForCheck();
+  }
+
+  private buildPayrollEntry$(contact: Contact): Observable<PayrollEntry> {
+    return this.sessionsService.getSessionsByTutor(contact.id!).pipe(
+      // Return an empty session list on error — EMPTY would never complete and
+      // would hang the surrounding forkJoin.
+      catchError(error => { console.log(error); return of([] as Session[]); }),
+      map(sessions => {
         let payrollEntry: PayrollEntry = new PayrollEntry();
         payrollEntry.name = contact.first_name;
         payrollEntry.pay_rate = contact.hourly_rate ?? 0;
@@ -203,9 +229,9 @@ export class Payroll implements OnInit, AfterViewInit {
         payrollEntry.planning_compensation = Math.round((payrollEntry.planning_time * payrollEntry.planning_rate) * 100) / 100;
         payrollEntry.tutoring_compensation = Math.round((payrollEntry.hours_subtotal * payrollEntry.pay_rate!) * 100) / 100;
         payrollEntry.total_compensation = payrollEntry.planning_compensation + payrollEntry.tutoring_compensation;
-        this.dataSource.data = [...this.dataSource.data, payrollEntry];
-        this.cdr.markForCheck();
-      });
+        return payrollEntry;
+      }),
+    );
   }
 
   private calculateTime(startTime: string, endTime: string): number {

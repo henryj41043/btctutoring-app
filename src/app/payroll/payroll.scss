@@ -37,4 +37,17 @@
     font-weight: 800;
     color: var(--btc-teal-deep);
   }
+
+  .payroll-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 56px 0;
+  }
+
+  .payroll-spinner-label {
+    color: var(--btc-teal-deep);
+    font-weight: 700;
+  }
 }
