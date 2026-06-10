@@ -198,7 +198,7 @@ export class EventCalendar implements OnInit {
         return colors['yellow'];
       case SessionStatus.COMPLETED:
         return colors['green'];
-      case SessionStatus.MAKE_UP:
+      case SessionStatus.CANCELLED:
         return colors['red'];
       case SessionStatus.NO_CALL_NO_SHOW:
         return colors['red'];

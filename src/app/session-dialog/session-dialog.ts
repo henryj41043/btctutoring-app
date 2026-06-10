@@ -104,11 +104,11 @@ export class SessionDialog implements OnInit {
     return this.students.find(s => s.id === this.selectedStudent);
   }
 
-  /** "Make Up" attendance status only applies to regular tutoring sessions. */
+  /** The "Cancelled" attendance status only applies to regular tutoring sessions. */
   get attendanceOptions(): SessionStatus[] {
     const all = Object.values(SessionStatus);
     return this.selectedType === SessionType.MAKE_UP
-      ? all.filter(s => s !== SessionStatus.MAKE_UP)
+      ? all.filter(s => s !== SessionStatus.CANCELLED)
       : all;
   }
 
@@ -737,8 +737,8 @@ export class SessionDialog implements OnInit {
     // Regular tutoring sessions deduct strictly from available minutes.
     if (status === SessionStatus.COMPLETED || status === SessionStatus.NO_CALL_NO_SHOW) {
       student.available_minutes = (student.available_minutes ?? 0) - minutes;
-    } else if (status === SessionStatus.MAKE_UP) {
-      // Banking a make-up: move minutes from available into make-up.
+    } else if (status === SessionStatus.CANCELLED) {
+      // Cancelled session: bank the minutes — move them from available to make-up.
       student.available_minutes = (student.available_minutes ?? 0) - minutes;
       student.make_up_minutes = (student.make_up_minutes ?? 0) + minutes;
     }
