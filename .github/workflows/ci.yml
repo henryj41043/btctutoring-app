@@ -1,0 +1,51 @@
+name: CI
+
+# Pull-request gate: every check here must pass before a PR can merge to main.
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Unit tests + 95% coverage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: Jest unit tests with coverage gate
+        run: npm run test:cov
+
+  e2e:
+    name: Playwright end-to-end (mocked API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: Install Playwright browser
+        run: npm run test:e2e:install
+      - run: npm run test:e2e
+
+  mutation:
+    name: Mutation testing (changed files only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so Stryker can diff against the PR base branch.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: Stryker on the diff vs ${{ github.base_ref }}
+        run: npx stryker run --since=origin/${{ github.base_ref }}

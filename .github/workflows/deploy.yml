@@ -5,12 +5,31 @@ on:
       - main
 
 jobs:
+  test:
+    name: Tests + coverage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: Jest unit tests with coverage gate
+        run: npm run test:cov
+      - name: Install Playwright browser
+        run: npm run test:e2e:install
+      - name: Playwright end-to-end (mocked API)
+        run: npm run test:e2e
+
   deploy:
+    # Nothing ships to S3/CloudFront unless every test suite passes.
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -18,7 +37,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --legacy-peer-deps
 
       - name: Build Angular app
         run: npm run build
