@@ -26,6 +26,10 @@ jobs:
     # Nothing ships to S3/CloudFront unless every test suite passes.
     needs: test
     runs-on: ubuntu-latest
+    # OIDC: assume the btctutoring-github-deploy role instead of static keys.
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout Code
@@ -42,23 +46,18 @@ jobs:
       - name: Build Angular app
         run: npm run build
 
-      - name: Deploy to S3
-        uses: jakejarvis/s3-sync-action@v0.5.1
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          args: --delete
-        env:
-          AWS_S3_BUCKET: 'btchub.bitshiftstudio.io'
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
-          SOURCE_DIR: 'dist/btctutoring-app/browser'
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+      - name: Deploy to S3
+        run: |
+          aws s3 sync dist/btctutoring-app/browser s3://btchub.bitshiftstudio.io --delete
 
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
             --distribution-id E1AN6NRNX2S4YG \
             --paths "/*"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
