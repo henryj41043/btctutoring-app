@@ -80,6 +80,14 @@ describe('StudentRoster', () => {
     expect(ds.paginator).toBe(paginator);
   });
 
+  it('exposes the expected roster columns without available_minutes', () => {
+    studentService.getStudents.mockReturnValue(of([]));
+    const component = build();
+    expect((component as unknown as { rosterColumns: string[] }).rosterColumns).toEqual([
+      'name', 'status', 'package', 'make_up_minutes', 'scholarship',
+    ]);
+  });
+
   it('opens the sessions dialog for a student', () => {
     studentService.getStudents.mockReturnValue(of([]));
     const component = build();

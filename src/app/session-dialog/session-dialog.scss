@@ -30,11 +30,23 @@
 .series-section {
   margin: 6px 5px 0;
 
-  .series-controls {
+  .schedule-info {
+    font-size: 12px;
+    margin: 6px 0;
+    opacity: 0.8;
+  }
+
+  .schedule-slots {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
     gap: 4px;
-    margin-top: 8px;
+    margin: 4px 0 8px;
+
+    .slot-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+    }
   }
 }

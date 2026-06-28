@@ -35,7 +35,7 @@ export class StudentRoster implements OnInit, AfterViewInit {
   @ViewChild(MatSort) sort!: MatSort;
   @ViewChild(MatPaginator) paginator!: MatPaginator;
 
-  protected rosterColumns: string[] = ['name', 'status', 'package', 'available_minutes', 'make_up_minutes', 'scholarship'];
+  protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
   protected dataSource = new MatTableDataSource<Student>([]);
 
   ngOnInit(): void {

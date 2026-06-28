@@ -1,5 +1,6 @@
 import {Package} from '../enums/package.enum';
 import {Status} from '../enums/status.enum';
+import {ScheduleSlot} from '../utils/proration';
 
 export class Student {
   id?: string;
@@ -10,6 +11,17 @@ export class Student {
   assigned_tutor_id?: string;
   package?: Package;
   scholarship?: boolean;
-  available_minutes?: number;
+  /** Weekly recurring tutoring slots; the template auto-renew repeats each month. */
+  schedule?: ScheduleSlot[];
+  /** ISO date the student's package began; drives first-month proration. */
+  package_start_date?: string;
+  /** When true, next month's sessions + billing are generated automatically. */
+  auto_renew?: boolean;
+  /** Per-student package values for the CUSTOM package only. */
+  custom_monthly_cost?: number;
+  custom_sessions_per_week?: number;
+  custom_session_length_min?: number;
   make_up_minutes?: number;
+  /** @deprecated Replaced by package-driven scheduling; no longer read or written. */
+  available_minutes?: number;
 }

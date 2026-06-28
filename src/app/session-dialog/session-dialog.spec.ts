@@ -15,6 +15,7 @@ import { Service } from '../enums/service.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { SessionType } from '../enums/session-type.enum';
 import { Weekday } from '../enums/weekday.enum';
+import { Package } from '../enums/package.enum';
 
 const tutor = (over: Partial<Contact> = {}): Contact =>
   ({
@@ -35,7 +36,7 @@ const student = (over: Partial<Student> = {}): Student =>
     name: 'Pat',
     status: Status.ACTIVE_STUDENT,
     assigned_tutor_id: 't-1',
-    available_minutes: 600,
+    package: Package.SUCCEED, // 2 sessions/week, 30 min
     make_up_minutes: 120,
     ...over,
   }) as Student;
@@ -92,6 +93,7 @@ describe('SessionDialog', () => {
 
   beforeEach(() => {
     isAdmin = true;
+    jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
   });
 
@@ -133,16 +135,31 @@ describe('SessionDialog', () => {
       ).toBe(false);
     });
 
-    it('seriesActionLabel reads "change" for an edit action', () => {
-      const c = build({ type: 'edit', session: new Session() } as SessionDialogData);
-      expect(c.seriesActionLabel).toBe('change');
-    });
-
     it('selectedStudentObj resolves the chosen student', () => {
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.students = [student()];
       c.selectedStudent = 's-1';
       expect(c.selectedStudentObj?.id).toBe('s-1');
+    });
+
+    it('selectedPackageDef resolves a standard package and is null for unconfigured custom', () => {
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      c.students = [student()];
+      c.selectedStudent = 's-1';
+      expect(c.selectedPackageDef?.sessionsPerWeek).toBe(2);
+
+      c.students = [student({ package: Package.CUSTOM })];
+      expect(c.selectedPackageDef).toBeNull();
+
+      c.students = [
+        student({
+          package: Package.CUSTOM,
+          custom_monthly_cost: 400,
+          custom_sessions_per_week: 1,
+          custom_session_length_min: 45,
+        }),
+      ];
+      expect(c.selectedPackageDef?.sessionsPerWeek).toBe(1);
     });
   });
 
@@ -176,20 +193,6 @@ describe('SessionDialog', () => {
       c.ngOnInit();
       expect(c.selectedType).toBe(SessionType.TUTORING);
     });
-
-    it('defaults the type to tutoring when an edited session has none', () => {
-      contactService.getContacts.mockReturnValue(of([]));
-      studentService.getStudents.mockReturnValue(of([]));
-      const c = build({
-        type: 'edit',
-        session: {
-          start_datetime: '2026-06-01T10:00:00Z',
-          end_datetime: '2026-06-01T11:00:00Z',
-        } as Session,
-      } as SessionDialogData);
-      c.ngOnInit();
-      expect(c.selectedType).toBe(SessionType.TUTORING);
-    });
   });
 
   describe('tutor/student loading', () => {
@@ -219,15 +222,31 @@ describe('SessionDialog', () => {
       c.cancel();
       expect(dialogRef.close).toHaveBeenCalledWith();
     });
+
+    it('swallows tutor/student load errors', () => {
+      contactService.getContacts.mockReturnValue(throwError(() => new Error('x')));
+      studentService.getStudents.mockReturnValue(throwError(() => new Error('x')));
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.tutors).toEqual([]);
+      expect(c.students).toEqual([]);
+    });
   });
 
-  describe('createSession', () => {
-    it('creates a valid tutoring session', () => {
+  describe('createSession (single)', () => {
+    it('creates a valid tutoring session with no minute checks', () => {
       const c = primedCreate();
       sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
       c.createSession();
-      expect(sessionsService.createSession).toHaveBeenCalled();
-      expect(dialogRef.close).toHaveBeenCalled();
+      const sent = sessionsService.createSession.mock.calls.at(-1)![0] as Session;
+      expect(sent.type).toBe(SessionType.TUTORING);
+      expect(sent.status).toBe(SessionStatus.PENDING);
+      expect(sent.student_id).toBe('s-1');
+      expect(sent.tutor_id).toBe('t-1');
+      expect(sent.tutor_name).toBe('Tess');
+      expect(sent.notes).toBe('n');
+      expect(new Date(sent.start_datetime!).getHours()).toBe(10);
+      expect(new Date(sent.end_datetime!).getHours()).toBe(11);
       const closed = dialogRef.close.mock.calls.at(-1)![0] as Session;
       expect(closed.id).toBe('new-1');
     });
@@ -270,12 +289,14 @@ describe('SessionDialog', () => {
       expect(sessionsService.createSession).toHaveBeenCalled();
     });
 
-    it('blocks creation that would exceed the student balance', () => {
+    it('blocks a make-up session that exceeds the make-up bank', () => {
       const c = primedCreate();
-      c.students = [student({ available_minutes: 30 })];
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 30 })]; // session is 60 min
       c.createSession();
       expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('Not enough');
+      expect(c.errorMessage).toContain('make-up');
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
     });
 
     it('creates an admin session with no student', () => {
@@ -292,15 +313,141 @@ describe('SessionDialog', () => {
       c.createSession();
       expect(c.hasError).toBe(true);
     });
+  });
 
-    it('delegates to createSeries when repeating weekly', () => {
+  describe('createSchedule (monthly)', () => {
+    // July 2026: 1st is a Wednesday. Mondays: 6,13,20,27. Wednesdays: 1,8,15,22,29.
+    const primedSchedule = (over: Partial<Student> = {}): SessionDialog => {
       const c = primedCreate();
-      c.repeatWeekly = true;
-      c.repeatDays = [];
+      c.students = [student(over)];
+      c.date = new Date(2026, 6, 1);
+      c.createScheduleMode = true;
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '10:00' },
+        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
+      ];
+      return c;
+    };
+
+    it('creates the month of sessions and persists the schedule on the student', () => {
+      const c = primedSchedule();
+      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.createSession(); // delegates to createSchedule
+
+      expect(sessionsService.createSessions).toHaveBeenCalled();
+      const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
+      expect(created.length).toBe(9); // 4 Mondays + 5 Wednesdays
+
+      // Every generated session is a pending tutoring session for this
+      // student/tutor, sharing one series id.
+      const seriesId = created[0].series_id;
+      expect(seriesId).toBeDefined();
+      for (const s of created) {
+        expect(s.type).toBe(SessionType.TUTORING);
+        expect(s.status).toBe(SessionStatus.PENDING);
+        expect(s.student_id).toBe('s-1');
+        expect(s.tutor_id).toBe('t-1');
+        expect(s.tutor_name).toBe('Tess');
+        expect(s.series_id).toBe(seriesId);
+      }
+      // Occurrence counts per weekday and the exact session time window.
+      const weekdays = created.map(s => new Date(s.start_datetime!).getDay());
+      expect(weekdays.filter(d => d === 1)).toHaveLength(4); // Mondays
+      expect(weekdays.filter(d => d === 3)).toHaveLength(5); // Wednesdays
+      const first = created[0];
+      expect(new Date(first.start_datetime!).getHours()).toBe(10);
+      expect(new Date(first.start_datetime!).getMinutes()).toBe(0);
+      expect(new Date(first.end_datetime!).getHours()).toBe(10);
+      expect(new Date(first.end_datetime!).getMinutes()).toBe(30);
+
+      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+      expect(saved.schedule).toHaveLength(2);
+      expect(saved.schedule![0]).toEqual({
+        weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30',
+      });
+      expect(saved.assigned_tutor_id).toBe('t-1');
+      expect(saved.package_start_date).toContain('2026-07-01');
+      expect(saved.auto_renew).toBe(true);
+      expect(dialogRef.close).toHaveBeenCalledWith({ created: 9 });
+    });
+
+    it('rejects when the slot count does not match the package', () => {
+      const c = primedSchedule();
+      c.scheduleSlots = [{ weekday: Weekday.MONDAY, start_time: '10:00' }]; // needs 2
       c.createSession();
-      // createSeries validates repeatDays and errors out.
       expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('day of the week');
+      expect(c.errorMessage).toContain('requires 2');
+      expect(sessionsService.createSessions).not.toHaveBeenCalled();
+    });
+
+    it('rejects when a slot is missing a day or time', () => {
+      const c = primedSchedule();
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '' },
+        { weekday: null, start_time: '10:00' },
+      ];
+      c.createSession();
+      expect(c.errorMessage).toContain('day and start time');
+    });
+
+    it('rejects when the student package is not configured (custom)', () => {
+      const c = primedSchedule({ package: Package.CUSTOM });
+      c.scheduleSlots = [];
+      c.createSession();
+      expect(c.errorMessage).toContain("isn't configured");
+    });
+
+    it('rejects a schedule with no student', () => {
+      const c = primedSchedule();
+      c.selectedStudent = undefined;
+      c.createSession();
+      expect(c.errorMessage).toContain('select a student');
+    });
+
+    it('asks an admin to override out-of-availability occurrences, then creates', () => {
+      const c = primedSchedule();
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '18:00' },
+        { weekday: Weekday.WEDNESDAY, start_time: '18:00' },
+      ];
+      c.createSession();
+      expect(c.showAvailabilityConfirm).toBe(true);
+
+      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.confirmAvailabilityOverride();
+      expect(sessionsService.createSessions).toHaveBeenCalled();
+    });
+
+    it('hard-blocks a tutor on out-of-availability occurrences', () => {
+      isAdmin = false;
+      const c = primedSchedule();
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '18:00' },
+        { weekday: Weekday.WEDNESDAY, start_time: '18:00' },
+      ];
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('availability');
+    });
+
+    it('surfaces a schedule create error', () => {
+      const c = primedSchedule();
+      sessionsService.createSessions.mockReturnValue(throwError(() => new Error('x')));
+      c.createSession();
+      expect(c.hasError).toBe(true);
+    });
+
+    it('reseeds slot rows on student/mode change', () => {
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      c.students = [student()];
+      c.createScheduleMode = true;
+      c.onStudentChange('s-1');
+      expect(c.scheduleSlots).toHaveLength(2); // Succeed = 2/week
+      c.createScheduleMode = false;
+      c.onScheduleModeChange();
+      expect(c.scheduleSlots).toHaveLength(0);
     });
   });
 
@@ -339,20 +486,56 @@ describe('SessionDialog', () => {
       expect(dialogRef.close).toHaveBeenCalled();
     });
 
-    it('prompts for status confirmation when marking a pending session complete', () => {
+    it('prompts for status confirmation when marking a pending tutoring session complete', () => {
       const c = primedEdit(editData());
       c.selectedAttendance = SessionStatus.COMPLETED;
       c.updateSession();
       expect(c.showStatusConfirm).toBe(true);
     });
 
-    it('blocks a status change that exceeds the student balance', () => {
+    it('completing a tutoring session does not stage a student minute change', () => {
       const c = primedEdit(editData());
-      c.students = [student({ available_minutes: 10 })];
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      c.updateSession();
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.confirmStatusChange();
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      expect(sessionsService.updateSession).toHaveBeenCalled();
+    });
+
+    it('cancelling a tutoring session banks its minutes to make-up', () => {
+      const c = primedEdit(editData());
+      c.selectedAttendance = SessionStatus.CANCELLED;
+      c.updateSession();
+      expect(c.showStatusConfirm).toBe(true);
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.confirmStatusChange();
+      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+      expect(saved.make_up_minutes).toBe(180); // 120 + 60-min session
+    });
+
+    it('blocks completing a make-up session beyond the make-up bank', () => {
+      const c = primedEdit(editData());
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 10 })];
       c.selectedAttendance = SessionStatus.COMPLETED;
       c.updateSession();
       expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('Not enough');
+      expect(c.errorMessage).toContain('make-up');
+    });
+
+    it('deducts make-up minutes when completing a make-up session', () => {
+      const c = primedEdit(editData());
+      c.selectedType = SessionType.MAKE_UP;
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      c.updateSession();
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.confirmStatusChange();
+      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+      expect(saved.make_up_minutes).toBe(60); // 120 - 60
     });
 
     it('rejects an invalid time range', () => {
@@ -369,11 +552,37 @@ describe('SessionDialog', () => {
       expect(c.showSeriesScopePrompt).toBe(true);
     });
 
+    it('rejects when the date/time is missing', () => {
+      const c = primedEdit(editData());
+      c.date = undefined;
+      c.updateSession();
+      expect(c.hasError).toBe(true);
+    });
+
+    it('updates an admin session without touching student minutes', () => {
+      const c = primedEdit(editData());
+      c.selectedType = SessionType.ADMIN;
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.updateSession();
+      expect(sessionsService.updateSession).toHaveBeenCalled();
+    });
+
     it('surfaces an update error', () => {
       const c = primedEdit(editData());
       sessionsService.updateSession.mockReturnValue(throwError(() => new Error('x')));
       c.updateSession();
       expect(c.hasError).toBe(true);
+    });
+
+    it('asks an admin to override availability when editing a single session', () => {
+      const c = primedEdit(editData());
+      c.startTime = new Date(2026, 5, 1, 18, 0);
+      c.endTime = new Date(2026, 5, 1, 19, 0);
+      c.updateSession();
+      expect(c.showAvailabilityConfirm).toBe(true);
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.confirmAvailabilityOverride();
+      expect(sessionsService.updateSession).toHaveBeenCalled();
     });
   });
 
@@ -392,6 +601,7 @@ describe('SessionDialog', () => {
       c.students = [student()];
       c.selectedTutor = 't-1';
       c.selectedStudent = 's-1';
+      c.selectedType = SessionType.MAKE_UP;
       c.date = new Date(2026, 5, 1);
       c.startTime = new Date(2026, 5, 1, 10, 0);
       c.endTime = new Date(2026, 5, 1, 11, 0);
@@ -401,7 +611,7 @@ describe('SessionDialog', () => {
 
     it('updates the student minutes and the session on confirm', () => {
       const c = primedConfirm();
-      c.updateSession(); // stages pendingSession + pendingStudentUpdate
+      c.updateSession();
       studentService.updateStudent.mockReturnValue(of({} as Student));
       sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.confirmStatusChange();
@@ -430,6 +640,15 @@ describe('SessionDialog', () => {
       c.confirmStatusChange();
       expect(sessionsService.updateSession).not.toHaveBeenCalled();
     });
+
+    it('cancelAvailabilityOverride resets the override state', () => {
+      const c = primedCreate();
+      c.startTime = new Date(2026, 5, 1, 18, 0);
+      c.endTime = new Date(2026, 5, 1, 19, 0);
+      c.createSession();
+      c.cancelAvailabilityOverride();
+      expect(c.showAvailabilityConfirm).toBe(false);
+    });
   });
 
   describe('deleteSession', () => {
@@ -451,6 +670,7 @@ describe('SessionDialog', () => {
       } as SessionDialogData);
       c.deleteSession();
       expect(c.showSeriesScopePrompt).toBe(true);
+      expect(c.seriesActionLabel).toBe('deletion');
     });
 
     it('surfaces a delete error', () => {
@@ -460,65 +680,6 @@ describe('SessionDialog', () => {
       } as SessionDialogData);
       sessionsService.deleteSession.mockReturnValue(throwError(() => new Error('x')));
       c.deleteSession();
-      expect(c.hasError).toBe(true);
-    });
-  });
-
-  describe('createSeries', () => {
-    const primedSeries = (over: Partial<Student> = {}): SessionDialog => {
-      const c = primedCreate();
-      c.students = [student(over)];
-      c.repeatWeekly = true;
-      c.repeatDays = Object.values(Weekday);
-      c.repeatEndMode = 'count';
-      c.repeatCount = 2;
-      return c;
-    };
-
-    it('creates a counted series of sessions', () => {
-      const c = primedSeries();
-      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
-      c.createSession();
-      expect(sessionsService.createSessions).toHaveBeenCalled();
-      const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
-      expect(created).toHaveLength(2);
-      expect(created[0].series_id).toBeDefined();
-    });
-
-    it('fills the remaining balance when in fill mode', () => {
-      const c = primedSeries({ available_minutes: 180 });
-      c.repeatEndMode = 'fill'; // 180 / 60 = 3 sessions
-      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
-      c.createSession();
-      const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
-      expect(created).toHaveLength(3);
-    });
-
-    it('rejects a series with no student selected', () => {
-      const c = primedSeries();
-      c.selectedStudent = undefined;
-      c.createSession();
-      expect(c.errorMessage).toContain('select a student');
-    });
-
-    it('rejects a fill series that cannot fit even one session', () => {
-      const c = primedSeries({ available_minutes: 10 });
-      c.repeatEndMode = 'fill';
-      c.createSession();
-      expect(c.errorMessage).toContain('not enough');
-    });
-
-    it('rejects a counted series that exceeds the balance', () => {
-      const c = primedSeries({ available_minutes: 60 });
-      c.repeatCount = 5; // 300 min needed
-      c.createSession();
-      expect(c.errorMessage).toContain('only');
-    });
-
-    it('surfaces a series create error', () => {
-      const c = primedSeries();
-      sessionsService.createSessions.mockReturnValue(throwError(() => new Error('x')));
-      c.createSession();
       expect(c.hasError).toBe(true);
     });
   });
@@ -548,19 +709,11 @@ describe('SessionDialog', () => {
 
     it('chooseSeriesScope(future) updates the whole future series', () => {
       const c = seriesEdit();
-      c.updateSession(); // raises the scope prompt (seriesAction = 'edit')
+      c.updateSession();
       sessionsService.getSessionsBySeries.mockReturnValue(
         of([
-          {
-            id: 'sess-1',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-01T10:00:00Z',
-          },
-          {
-            id: 'sess-2',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-08T10:00:00Z',
-          },
+          { id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' },
+          { id: 'sess-2', status: SessionStatus.PENDING, start_datetime: '2026-06-08T10:00:00Z' },
         ]),
       );
       sessionsService.updateSession.mockReturnValue(of({}));
@@ -580,21 +733,11 @@ describe('SessionDialog', () => {
     it('chooseSeriesScope(future) deletes the whole future series', () => {
       const c = build({
         type: 'delete',
-        session: {
-          id: 'sess-1',
-          series_id: 'series-1',
-          start_datetime: '2026-06-01T10:00:00Z',
-        } as Session,
+        session: { id: 'sess-1', series_id: 'series-1', start_datetime: '2026-06-01T10:00:00Z' } as Session,
       } as SessionDialogData);
-      c.deleteSession(); // raises the scope prompt (seriesAction = 'delete')
+      c.deleteSession();
       sessionsService.getSessionsBySeries.mockReturnValue(
-        of([
-          {
-            id: 'sess-1',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-01T10:00:00Z',
-          },
-        ]),
+        of([{ id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' }]),
       );
       sessionsService.deleteSession.mockReturnValue(of({}));
       c.chooseSeriesScope('future');
@@ -603,7 +746,7 @@ describe('SessionDialog', () => {
 
     it('chooseSeriesScope(single) updates just this occurrence', () => {
       const c = seriesEdit();
-      c.updateSession(); // raises the scope prompt (seriesAction = 'edit')
+      c.updateSession();
       sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.chooseSeriesScope('single');
       expect(sessionsService.updateSession).toHaveBeenCalled();
@@ -614,458 +757,55 @@ describe('SessionDialog', () => {
       c.cancelSeriesScope();
       expect(c.showSeriesScopePrompt).toBe(false);
     });
-  });
 
-  describe('availability override cancel', () => {
-    it('cancelAvailabilityOverride resets the override state', () => {
-      const c = primedCreate();
-      c.startTime = new Date(2026, 5, 1, 18, 0);
-      c.endTime = new Date(2026, 5, 1, 19, 0);
-      c.createSession();
-      c.cancelAvailabilityOverride();
-      expect(c.showAvailabilityConfirm).toBe(false);
-    });
-  });
-
-  // ── Deeper branch coverage ────────────────────────────────────────────────
-  const editFor = (
-    sessionOver: Partial<Session>,
-    fields: Partial<SessionDialog> = {},
-  ): SessionDialog => {
-    const c = build({
-      type: 'edit',
-      session: {
-        id: 'sess-1',
-        status: SessionStatus.PENDING,
-        start_datetime: '2026-06-01T10:00:00Z',
-        ...sessionOver,
-      } as Session,
-      existingSessions: [],
-    } as SessionDialogData);
-    c.tutors = [tutor()];
-    c.students = [student()];
-    c.selectedTutor = 't-1';
-    c.selectedStudent = 's-1';
-    c.selectedType = SessionType.TUTORING;
-    c.date = new Date(2026, 5, 1);
-    c.startTime = new Date(2026, 5, 1, 10, 0);
-    c.endTime = new Date(2026, 5, 1, 11, 0);
-    c.selectedAttendance = SessionStatus.PENDING;
-    Object.assign(c, fields);
-    return c;
-  };
-
-  it('counts existing pending minutes and tolerates sessions missing datetimes', () => {
-    const c = primedCreate({
-      existingSessions: [
-        {
-          student_id: 's-1',
-          type: SessionType.TUTORING,
-          status: SessionStatus.PENDING,
-          start_datetime: '2026-06-01T10:00:00Z',
-          end_datetime: '2026-06-01T10:30:00Z',
-        },
-        // no datetimes -> durationOf returns 0
-        { student_id: 's-1', type: SessionType.TUTORING, status: SessionStatus.PENDING },
-        // different student -> excluded
-        { student_id: 's-2', type: SessionType.TUTORING, status: SessionStatus.PENDING },
-      ] as Session[],
-    });
-    sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
-    c.createSession();
-    expect(sessionsService.createSession).toHaveBeenCalled();
-  });
-
-  it('reads the deletion label for a delete series action', () => {
-    const c = build({
-      type: 'delete',
-      session: { id: 'sess-1', series_id: 'series-1' } as Session,
-    } as SessionDialogData);
-    c.deleteSession();
-    expect(c.seriesActionLabel).toBe('deletion');
-  });
-
-  describe('confirmStatusChange internals', () => {
-    it('updates directly when no student minute change is pending', () => {
-      const c = editFor({});
-      (c as unknown as { pendingSession: Session }).pendingSession = new Session();
-      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
-      c.confirmStatusChange();
-      expect(sessionsService.updateSession).toHaveBeenCalled();
-    });
-
-    it('reports an update failure during confirmation', () => {
-      const c = editFor({});
-      (c as unknown as { pendingSession: Session }).pendingSession = new Session();
-      sessionsService.updateSession.mockReturnValue(throwError(() => new Error('x')));
-      c.confirmStatusChange();
-      expect(c.hasError).toBe(true);
-    });
-  });
-
-  describe('updateSession edge cases', () => {
-    it('rejects when the date/time is missing', () => {
-      const c = editFor({}, { date: undefined });
+    it('errors when the series tutor cannot be resolved for a future update', () => {
+      const c = seriesEdit();
       c.updateSession();
-      expect(c.hasError).toBe(true);
-    });
-
-    it('blocks lengthening a still-pending session beyond the balance', () => {
-      const c = editFor(
-        {},
-        {
-          students: [student({ available_minutes: 30 })],
-          endTime: new Date(2026, 5, 1, 12, 0), // 120 min > 30
-        },
-      );
-      c.updateSession();
-      expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('Not enough');
-    });
-
-    it('deducts make-up minutes when completing a make-up session', () => {
-      const c = editFor(
-        {},
-        {
-          selectedType: SessionType.MAKE_UP,
-          selectedAttendance: SessionStatus.COMPLETED,
-        },
-      );
-      c.updateSession();
-      expect(c.showStatusConfirm).toBe(true);
-    });
-
-    it('banks minutes when cancelling a tutoring session', () => {
-      const c = editFor({}, { selectedAttendance: SessionStatus.CANCELLED });
-      c.updateSession();
-      expect(c.showStatusConfirm).toBe(true);
-    });
-
-    it('asks an admin to override availability when editing a single session', () => {
-      const c = editFor(
-        {},
-        {
-          startTime: new Date(2026, 5, 1, 18, 0),
-          endTime: new Date(2026, 5, 1, 19, 0),
-        },
-      );
-      c.updateSession();
-      expect(c.showAvailabilityConfirm).toBe(true);
-    });
-
-    it('deducts available minutes on a no-call-no-show', () => {
-      const c = editFor({}, { selectedAttendance: SessionStatus.NO_CALL_NO_SHOW });
-      c.updateSession();
-      expect(c.showStatusConfirm).toBe(true);
-    });
-
-    it('deducts make-up minutes on a no-call-no-show make-up session', () => {
-      const c = editFor(
-        {},
-        {
-          selectedType: SessionType.MAKE_UP,
-          selectedAttendance: SessionStatus.NO_CALL_NO_SHOW,
-        },
-      );
-      c.updateSession();
-      expect(c.showStatusConfirm).toBe(true);
-    });
-
-    it('tolerates a status change when the selected student is unresolved', () => {
-      const c = editFor(
-        {},
-        { selectedStudent: 'ghost', selectedAttendance: SessionStatus.COMPLETED },
-      );
-      c.updateSession();
-      // No student record -> staged without a minute update; confirm runs the
-      // direct update path.
-      expect(c.showStatusConfirm).toBe(true);
-      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
-      c.confirmStatusChange();
-      expect(sessionsService.updateSession).toHaveBeenCalled();
-    });
-
-    it('treats a tutor with no availability as always available', () => {
-      const c = editFor(
-        {},
-        {
-          tutors: [tutor({ availability: [] })],
-          startTime: new Date(2026, 5, 1, 18, 0),
-          endTime: new Date(2026, 5, 1, 19, 0),
-        },
-      );
-      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
-      c.updateSession();
-      expect(sessionsService.updateSession).toHaveBeenCalled();
-    });
-  });
-
-  describe('createSeries validation', () => {
-    const series = (fields: Partial<SessionDialog>): SessionDialog => {
-      const c = primedCreate();
-      c.repeatWeekly = true;
-      c.repeatDays = Object.values(Weekday);
-      c.repeatEndMode = 'count';
-      c.repeatCount = 2;
-      Object.assign(c, fields);
-      return c;
-    };
-
-    it('rejects a missing date', () => {
-      const c = series({ date: undefined });
-      c.createSession();
-      expect(c.hasError).toBe(true);
-    });
-
-    it('rejects an inverted time range', () => {
-      const c = series({
-        startTime: new Date(2026, 5, 1, 12, 0),
-        endTime: new Date(2026, 5, 1, 11, 0),
-      });
-      c.createSession();
-      expect(c.hasError).toBe(true);
-    });
-
-    it('rejects a zero-length session', () => {
-      const c = series({
-        startTime: new Date(2026, 5, 1, 10, 0),
-        endTime: new Date(2026, 5, 1, 10, 0),
-      });
-      c.createSession();
-      expect(c.errorMessage).toContain('valid time range');
-    });
-
-    it('rejects a non-positive repeat count', () => {
-      const c = series({ repeatCount: 0 });
-      c.createSession();
-      expect(c.errorMessage).toContain('valid number');
-    });
-
-    it('asks an admin to override out-of-availability occurrences', () => {
-      const c = series({
-        startTime: new Date(2026, 5, 1, 18, 0),
-        endTime: new Date(2026, 5, 1, 19, 0),
-      });
-      c.createSession();
-      expect(c.showAvailabilityConfirm).toBe(true);
-    });
-
-    it('hard-blocks a tutor on out-of-availability occurrences', () => {
-      isAdmin = false;
-      const c = series({
-        startTime: new Date(2026, 5, 1, 18, 0),
-        endTime: new Date(2026, 5, 1, 19, 0),
-      });
-      c.createSession();
-      expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('availability');
-    });
-  });
-
-  describe('updateSeriesFuture / deleteSeriesFuture', () => {
-    const futureEdit = (): SessionDialog => {
-      const c = editFor({ series_id: 'series-1' });
-      c.updateSession(); // raise prompt
-      return c;
-    };
-
-    it('errors when the series tutor cannot be resolved', () => {
-      const c = futureEdit();
       c.selectedTutor = 'missing';
       c.chooseSeriesScope('future');
       expect(c.hasError).toBe(true);
     });
 
     it('asks an admin to override availability across the future series', () => {
-      const c = editFor(
-        { series_id: 'series-1' },
-        {
-          startTime: new Date(2026, 5, 1, 18, 0),
-          endTime: new Date(2026, 5, 1, 19, 0),
-        },
-      );
+      const c = seriesEdit();
+      c.startTime = new Date(2026, 5, 1, 18, 0);
+      c.endTime = new Date(2026, 5, 1, 19, 0);
       c.updateSession();
       sessionsService.getSessionsBySeries.mockReturnValue(
-        of([
-          {
-            id: 'sess-1',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-01T10:00:00Z',
-          },
-        ]),
+        of([{ id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' }]),
       );
       c.chooseSeriesScope('future');
       expect(c.showAvailabilityConfirm).toBe(true);
     });
 
-    it('reports a balance overrun across the future series', () => {
-      const c = editFor(
-        { series_id: 'series-1' },
-        { students: [student({ available_minutes: 10 })] },
-      );
+    it('reports an error loading the series', () => {
+      const c = seriesEdit();
       c.updateSession();
-      sessionsService.getSessionsBySeries.mockReturnValue(
-        of([
-          {
-            id: 'sess-1',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-01T10:00:00Z',
-          },
-        ]),
-      );
+      sessionsService.getSessionsBySeries.mockReturnValue(throwError(() => new Error('x')));
       c.chooseSeriesScope('future');
       expect(c.hasError).toBe(true);
     });
 
-    it('reports an error loading the series for a future update', () => {
-      const c = futureEdit();
-      sessionsService.getSessionsBySeries.mockReturnValue(
-        throwError(() => new Error('x')),
-      );
-      c.chooseSeriesScope('future');
-      expect(c.hasError).toBe(true);
-    });
-
-    it('hard-blocks a tutor on out-of-availability future occurrences', () => {
-      isAdmin = false;
-      const c = editFor(
-        { series_id: 'series-1' },
-        {
-          startTime: new Date(2026, 5, 1, 18, 0),
-          endTime: new Date(2026, 5, 1, 19, 0),
-        },
-      );
-      c.updateSession();
-      sessionsService.getSessionsBySeries.mockReturnValue(
-        of([
-          {
-            id: 'sess-1',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-01T10:00:00Z',
-          },
-        ]),
-      );
-      c.chooseSeriesScope('future');
-      expect(c.hasError).toBe(true);
-    });
-
-    it('surfaces a forkJoin error deleting the future series', () => {
-      const c = build({
-        type: 'delete',
-        session: {
-          id: 'sess-1',
-          series_id: 'series-1',
-          start_datetime: '2026-06-01T10:00:00Z',
-        } as Session,
-      } as SessionDialogData);
-      c.deleteSession();
-      sessionsService.getSessionsBySeries.mockReturnValue(
-        of([
-          {
-            id: 'sess-1',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-01T10:00:00Z',
-          },
-        ]),
-      );
-      sessionsService.deleteSession.mockReturnValue(throwError(() => new Error('x')));
-      c.chooseSeriesScope('future');
-      expect(c.hasError).toBe(true);
-    });
-
-    it('surfaces a forkJoin error when updating the future series', () => {
-      const c = futureEdit();
-      sessionsService.getSessionsBySeries.mockReturnValue(
-        of([
-          {
-            id: 'sess-1',
-            status: SessionStatus.PENDING,
-            start_datetime: '2026-06-01T10:00:00Z',
-          },
-        ]),
-      );
-      sessionsService.updateSession.mockReturnValue(throwError(() => new Error('x')));
-      c.chooseSeriesScope('future');
-      expect(c.hasError).toBe(true);
-    });
-
-    it('surfaces an error loading the series for deletion', () => {
-      const c = build({
-        type: 'delete',
-        session: {
-          id: 'sess-1',
-          series_id: 'series-1',
-          start_datetime: '2026-06-01T10:00:00Z',
-        } as Session,
-      } as SessionDialogData);
-      c.deleteSession();
-      sessionsService.getSessionsBySeries.mockReturnValue(
-        throwError(() => new Error('x')),
-      );
-      c.chooseSeriesScope('future');
-      expect(c.hasError).toBe(true);
-    });
-
-    it('closes with zero deletions when no future occurrences match', () => {
-      const c = build({
-        type: 'delete',
-        session: {
-          id: 'sess-1',
-          series_id: 'series-1',
-          start_datetime: '2026-06-01T10:00:00Z',
-        } as Session,
-      } as SessionDialogData);
-      c.deleteSession();
-      sessionsService.getSessionsBySeries.mockReturnValue(of([]));
-      c.chooseSeriesScope('future');
-      expect(dialogRef.close).toHaveBeenCalledWith({ deleted: 0 });
+    it('chooseSeriesScope does nothing without a staged action', () => {
+      const c = build({ type: 'edit', session: new Session() } as SessionDialogData);
+      expect(() => c.chooseSeriesScope('single')).not.toThrow();
     });
   });
 
-  describe('defensive branches', () => {
-    it('reports a make-up balance shortfall using the make-up label', () => {
-      const c = editFor(
-        {},
-        {
-          selectedType: SessionType.MAKE_UP,
-          selectedAttendance: SessionStatus.COMPLETED,
-          students: [student({ make_up_minutes: undefined })],
-        },
-      );
-      c.updateSession();
-      expect(c.errorMessage).toContain('make-up');
-    });
-
-    it('reports a tutoring balance shortfall when minutes are unset', () => {
-      const c = editFor(
-        {},
-        {
-          selectedAttendance: SessionStatus.COMPLETED,
-          students: [student({ available_minutes: undefined })],
-        },
-      );
-      c.updateSession();
-      expect(c.hasError).toBe(true);
-    });
-
-    it('updates an admin session without touching student minutes', () => {
-      const c = editFor({}, { selectedType: SessionType.ADMIN });
-      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
-      c.updateSession();
-      expect(sessionsService.updateSession).toHaveBeenCalled();
-    });
-
-    it('updates a still-pending session that has no id', () => {
-      const c = editFor({ id: undefined });
-      sessionsService.updateSession.mockReturnValue(of({}));
-      c.updateSession();
-      expect(sessionsService.updateSession).toHaveBeenCalled();
-    });
-
-    it('handles a create dialog with no existing-session list', () => {
+  describe('coverage hardening', () => {
+    const editFor = (
+      sessionOver: Partial<Session> = {},
+      fields: Partial<SessionDialog> = {},
+    ): SessionDialog => {
       const c = build({
-        type: 'create',
-        session: new Session(),
+        type: 'edit',
+        session: {
+          id: 'sess-1',
+          status: SessionStatus.PENDING,
+          start_datetime: '2026-06-01T10:00:00Z',
+          ...sessionOver,
+        } as Session,
+        existingSessions: [],
       } as SessionDialogData);
       c.tutors = [tutor()];
       c.students = [student()];
@@ -1075,54 +815,215 @@ describe('SessionDialog', () => {
       c.date = new Date(2026, 5, 1);
       c.startTime = new Date(2026, 5, 1, 10, 0);
       c.endTime = new Date(2026, 5, 1, 11, 0);
-      sessionsService.createSession.mockReturnValue(of({ id: 'x' }));
+      c.selectedAttendance = SessionStatus.PENDING;
+      Object.assign(c, fields);
+      return c;
+    };
+
+    it('blocks lengthening a pending make-up session beyond the make-up bank', () => {
+      const c = editFor(
+        { type: SessionType.MAKE_UP },
+        {
+          selectedType: SessionType.MAKE_UP,
+          selectedAttendance: SessionStatus.PENDING,
+          students: [student({ make_up_minutes: 60 })],
+          endTime: new Date(2026, 5, 1, 12, 0), // 120 min
+        },
+      );
+      c.dialogData.existingSessions = [
+        {
+          id: 'other', student_id: 's-1', type: SessionType.MAKE_UP, status: SessionStatus.PENDING,
+          start_datetime: '2026-06-02T10:00:00Z', end_datetime: '2026-06-02T10:30:00Z',
+        },
+        // missing datetimes -> durationOf returns 0
+        { id: 'nodt', student_id: 's-1', type: SessionType.MAKE_UP, status: SessionStatus.PENDING },
+      ] as Session[];
+      c.updateSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('make-up');
+    });
+
+    it('blocks a make-up create when pending make-up already fills the bank', () => {
+      const c = primedCreate({
+        existingSessions: [
+          {
+            student_id: 's-1', type: SessionType.MAKE_UP, status: SessionStatus.PENDING,
+            start_datetime: '2026-06-02T10:00:00Z', end_datetime: '2026-06-02T11:00:00Z',
+          },
+        ] as Session[],
+      });
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 90 })]; // existing 60 + new 60 = 120 > 90
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('make-up');
+    });
+
+    it('deducts make-up minutes on a no-call-no-show make-up session', () => {
+      const c = editFor({}, {
+        selectedType: SessionType.MAKE_UP,
+        selectedAttendance: SessionStatus.NO_CALL_NO_SHOW,
+      });
+      c.updateSession();
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.confirmStatusChange();
+      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+      expect(saved.make_up_minutes).toBe(60); // 120 - 60
+    });
+
+    it('no-shows a tutoring session without changing student minutes', () => {
+      const c = editFor({}, { selectedAttendance: SessionStatus.NO_CALL_NO_SHOW });
+      c.updateSession();
+      expect(c.showStatusConfirm).toBe(true);
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.confirmStatusChange();
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('errors when the schedule has no occurrences left in the month', () => {
+      const c = primedCreate();
+      c.date = new Date(2026, 6, 31); // July 31 2026 (Friday) — no Mon/Wed remain
+      c.createScheduleMode = true;
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '10:00' },
+        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
+      ];
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('no sessions');
+    });
+
+    it('seeds zero slots when the selected package is unconfigured', () => {
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      c.students = [student({ package: Package.CUSTOM })];
+      c.createScheduleMode = true;
+      c.onStudentChange('s-1');
+      expect(c.scheduleSlots).toHaveLength(0);
+    });
+
+    it('admin override confirm path creates the schedule', () => {
+      const c = primedCreate();
+      c.date = new Date(2026, 6, 1);
+      c.createScheduleMode = true;
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '18:00' },
+        { weekday: Weekday.WEDNESDAY, start_time: '18:00' },
+      ];
+      c.createSession();
+      expect(c.showAvailabilityConfirm).toBe(true);
+      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.confirmAvailabilityOverride();
+      expect(sessionsService.createSessions).toHaveBeenCalled();
+    });
+
+    it('creates a make-up session that fits within the make-up bank', () => {
+      const c = primedCreate();
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 240 })]; // 60-min session fits
+      sessionsService.createSession.mockReturnValue(of({ id: 'mu-1' }));
       c.createSession();
       expect(sessionsService.createSession).toHaveBeenCalled();
     });
 
-    it('skips non-matching weekdays when generating occurrences', () => {
-      const c = primedCreate();
-      c.repeatWeekly = true;
-      c.repeatDays = [Weekday.MONDAY]; // most cursor days will not match
-      c.repeatEndMode = 'count';
-      c.repeatCount = 1;
-      c.students = [student({ available_minutes: undefined })];
-      c.createSession();
+    it('reports a session-update failure after the student update succeeds', () => {
+      const c = editFor({}, {
+        selectedType: SessionType.MAKE_UP,
+        selectedAttendance: SessionStatus.COMPLETED,
+      });
+      c.updateSession(); // stages make-up deduction + pendingSession
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      sessionsService.updateSession.mockReturnValue(throwError(() => new Error('x')));
+      c.confirmStatusChange();
       expect(c.hasError).toBe(true);
     });
 
-    it('chooseSeriesScope does nothing without a staged action', () => {
-      const c = build({ type: 'edit', session: new Session() } as SessionDialogData);
-      expect(() => c.chooseSeriesScope('single')).not.toThrow();
+    it('createSchedule requires a start date', () => {
+      const c = primedCreate();
+      c.createScheduleMode = true;
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '10:00' },
+        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
+      ];
+      c.date = undefined;
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('start date');
     });
 
-    it('updates future occurrences that have no id', () => {
+    it('hard-blocks a tutor on out-of-availability future occurrences', () => {
+      isAdmin = false;
+      const c = editFor({ series_id: 'series-1' }, {
+        startTime: new Date(2026, 5, 1, 18, 0),
+        endTime: new Date(2026, 5, 1, 19, 0),
+      });
+      c.updateSession();
+      sessionsService.getSessionsBySeries.mockReturnValue(
+        of([{ id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' }]),
+      );
+      c.chooseSeriesScope('future');
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('availability');
+    });
+
+    it('surfaces a schedule save failure after sessions are created', () => {
+      const c = primedCreate();
+      c.date = new Date(2026, 6, 1);
+      c.createScheduleMode = true;
+      c.scheduleSlots = [
+        { weekday: Weekday.MONDAY, start_time: '10:00' },
+        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
+      ];
+      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
+      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('saving the schedule failed');
+    });
+
+    it('surfaces a forkJoin error updating the future series', () => {
       const c = editFor({ series_id: 'series-1' });
       c.updateSession();
       sessionsService.getSessionsBySeries.mockReturnValue(
-        of([{ status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' }]),
+        of([{ id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' }]),
       );
-      sessionsService.updateSession.mockReturnValue(of({}));
+      sessionsService.updateSession.mockReturnValue(throwError(() => new Error('x')));
       c.chooseSeriesScope('future');
-      expect(dialogRef.close).toHaveBeenCalled();
-    });
-  });
-
-  describe('tutor/student load errors', () => {
-    it('swallows a getTutors error', () => {
-      contactService.getContacts.mockReturnValue(throwError(() => new Error('x')));
-      studentService.getStudents.mockReturnValue(of([]));
-      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
-      c.ngOnInit();
-      expect(c.tutors).toEqual([]);
+      expect(c.hasError).toBe(true);
     });
 
-    it('swallows a getStudents error', () => {
-      contactService.getContacts.mockReturnValue(of([]));
-      studentService.getStudents.mockReturnValue(throwError(() => new Error('x')));
-      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
-      c.ngOnInit();
-      expect(c.students).toEqual([]);
+    it('deletes a future series, and handles zero/at-error cases', () => {
+      const mkDelete = () =>
+        build({
+          type: 'delete',
+          session: { id: 'sess-1', series_id: 'series-1', start_datetime: '2026-06-01T10:00:00Z' } as Session,
+        } as SessionDialogData);
+
+      // zero matching future occurrences
+      const c1 = mkDelete();
+      c1.deleteSession();
+      sessionsService.getSessionsBySeries.mockReturnValue(of([]));
+      c1.chooseSeriesScope('future');
+      expect(dialogRef.close).toHaveBeenCalledWith({ deleted: 0 });
+
+      // load error
+      const c2 = mkDelete();
+      c2.deleteSession();
+      sessionsService.getSessionsBySeries.mockReturnValue(throwError(() => new Error('x')));
+      c2.chooseSeriesScope('future');
+      expect(c2.hasError).toBe(true);
+
+      // forkJoin delete error
+      const c3 = mkDelete();
+      c3.deleteSession();
+      sessionsService.getSessionsBySeries.mockReturnValue(
+        of([{ id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' }]),
+      );
+      sessionsService.deleteSession.mockReturnValue(throwError(() => new Error('x')));
+      c3.chooseSeriesScope('future');
+      expect(c3.hasError).toBe(true);
     });
   });
 });

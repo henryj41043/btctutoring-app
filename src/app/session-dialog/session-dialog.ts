@@ -30,6 +30,14 @@ import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {AuthService} from '../services/auth.service';
 import {Weekday, WEEKDAY_BY_JS_DAY, WEEKDAY_LABELS} from '../enums/weekday.enum';
+import {PackageDef, resolvePackageDef} from '../utils/package-config';
+import {ScheduleSlot} from '../utils/proration';
+
+/** A schedule slot the admin is editing (weekday not yet picked until chosen). */
+interface ScheduleSlotInput {
+  weekday: Weekday | null;
+  start_time: string; // 'HH:mm'
+}
 
 @Component({
   selector: 'app-session-dialog',
@@ -81,13 +89,16 @@ export class SessionDialog implements OnInit {
   private pendingSession: Session | null = null;
   private pendingStudentUpdate: Student | null = null;
 
-  // Recurring series (create, TUTORING only)
-  repeatWeekly: boolean = false;
-  repeatDays: Weekday[] = [];
-  repeatEndMode: 'count' | 'fill' = 'count';
-  repeatCount: number = 1;
+  // Monthly schedule (create, TUTORING only). Replaces the old available-minutes
+  // "series" flow: the admin picks one slot per weekly session (count fixed by
+  // the package), and the system fills the rest of the current month.
+  createScheduleMode: boolean = false;
+  scheduleSlots: ScheduleSlotInput[] = [];
+  autoRenew: boolean = true;
   readonly weekdayOptions: Weekday[] = Object.values(Weekday);
   readonly weekdayLabels = WEEKDAY_LABELS;
+  /** 15-min increments 6:00 AM–9:00 PM as { value: 'HH:mm', label: '1:00 PM' }. */
+  readonly timeOptions: {value: string; label: string}[] = this.buildTimeOptions();
 
   // Series edit/delete scope ("this occurrence" vs "this and future")
   showSeriesScopePrompt: boolean = false;
@@ -102,6 +113,17 @@ export class SessionDialog implements OnInit {
 
   get selectedStudentObj(): Student | undefined {
     return this.students.find(s => s.id === this.selectedStudent);
+  }
+
+  /** The resolved package definition for the selected student (null if CUSTOM is unconfigured). */
+  get selectedPackageDef(): PackageDef | null {
+    const student = this.selectedStudentObj;
+    if (!student) return null;
+    return resolvePackageDef(student.package, {
+      monthlyCost: student.custom_monthly_cost,
+      sessionsPerWeek: student.custom_sessions_per_week,
+      sessionLengthMin: student.custom_session_length_min,
+    });
   }
 
   /** The "Cancelled" attendance status only applies to regular tutoring sessions. */
@@ -141,15 +163,15 @@ export class SessionDialog implements OnInit {
   }
 
   /**
-   * Total existing PENDING minutes of the given type already committed for a
-   * student, excluding any session ids handled by the current operation.
+   * Total existing PENDING make-up minutes already committed for a student,
+   * excluding any session ids handled by the current operation.
    */
-  private pendingMinutesFor(studentId: string | undefined, type: SessionType, excludeIds: Set<string>): number {
+  private pendingMakeupMinutesFor(studentId: string | undefined, excludeIds: Set<string>): number {
     const existing = this.dialogData.existingSessions ?? [];
     return existing
       .filter(s =>
         s.student_id === studentId &&
-        s.type === type &&
+        s.type === SessionType.MAKE_UP &&
         s.status === SessionStatus.PENDING &&
         !excludeIds.has(s.id ?? ''),
       )
@@ -157,21 +179,18 @@ export class SessionDialog implements OnInit {
   }
 
   /**
-   * Validates that a student's total pending minutes for the affected bucket
-   * stays within their balance after adding `addMinutes`. Pass the ids of any
-   * existing sessions this operation replaces so they aren't double-counted.
-   * Returns an error message, or null if within balance.
+   * Validates that a student's total pending make-up minutes stay within their
+   * make-up balance after adding `addMinutes`. Returns an error message or null.
    */
-  private validatePendingBalance(
+  private validateMakeupPendingBalance(
     student: Student,
-    type: SessionType,
     addMinutes: number,
     excludeIds: Set<string> = new Set(),
   ): string | null {
-    const balance = this.balanceFor(student, type);
-    const projected = this.pendingMinutesFor(student.id, type, excludeIds) + addMinutes;
+    const balance = student.make_up_minutes ?? 0;
+    const projected = this.pendingMakeupMinutesFor(student.id, excludeIds) + addMinutes;
     if (projected > balance) {
-      return `Not enough ${this.balanceLabel(type)} minutes. ${student.name} has ${balance} min `
+      return `Not enough make-up minutes. ${student.name} has ${balance} min `
         + `but this would commit ${projected} pending min.`;
     }
     return null;
@@ -224,20 +243,18 @@ export class SessionDialog implements OnInit {
 
   /** True if the tutor has no availability set (skip) or the session fits within a block. */
   private isWithinAvailability(): boolean {
-    if (!this.date) return true;
-    return this.isDateWithinAvailability(this.date);
+    if (!this.date || !this.startTime || !this.endTime) return true;
+    const startMin = this.startTime.getHours() * 60 + this.startTime.getMinutes();
+    const endMin = this.endTime.getHours() * 60 + this.endTime.getMinutes();
+    return this.isDateTimeWithinAvailability(this.date, startMin, endMin);
   }
 
-  /** Availability check for a specific occurrence date, using the current time range. */
-  private isDateWithinAvailability(date: Date): boolean {
-    if (!this.startTime || !this.endTime) return true;
+  /** Availability check for a specific occurrence date and explicit time range (in minutes). */
+  private isDateTimeWithinAvailability(date: Date, startMin: number, endMin: number): boolean {
     const tutor = this.tutors.find(t => t.id === this.selectedTutor);
     if (!tutor || !tutor.availability || tutor.availability.length === 0) return true;
 
     const weekday = WEEKDAY_BY_JS_DAY[date.getDay()];
-    const startMin = this.startTime.getHours() * 60 + this.startTime.getMinutes();
-    const endMin = this.endTime.getHours() * 60 + this.endTime.getMinutes();
-
     return tutor.availability.some(block =>
       block.days.includes(weekday) &&
       this.timeStringToMinutes(block.start_time) <= startMin &&
@@ -248,6 +265,36 @@ export class SessionDialog implements OnInit {
   private timeStringToMinutes(time: string): number {
     const [h, m] = (time ?? '').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
+  }
+
+  /** A copy of `date` with its time set from a 'HH:mm' string. */
+  private atTime(date: Date, time: string): Date {
+    const total = this.timeStringToMinutes(time);
+    const d = new Date(date);
+    d.setHours(Math.floor(total / 60), total % 60, 0, 0);
+    return d;
+  }
+
+  /** Adds minutes to a 'HH:mm' time string, returning a 'HH:mm' string. */
+  private addMinutesToTime(time: string, minutes: number): string {
+    const total = this.timeStringToMinutes(time) + minutes;
+    const h = Math.floor(total / 60) % 24;
+    const m = total % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+
+  private buildTimeOptions(): {value: string; label: string}[] {
+    const options: {value: string; label: string}[] = [];
+    for (let minutes = 6 * 60; minutes <= 21 * 60; minutes += 15) {
+      const h24 = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      const value = `${h24.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      const period = h24 < 12 ? 'AM' : 'PM';
+      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+      const label = `${h12}:${m.toString().padStart(2, '0')} ${period}`;
+      options.push({value, label});
+    }
+    return options;
   }
 
   confirmAvailabilityOverride(): void {
@@ -297,10 +344,30 @@ export class SessionDialog implements OnInit {
     }
   }
 
+  /** Reseeds the schedule slot rows to match the selected package's sessions/week. */
+  onScheduleModeChange(): void {
+    this.seedScheduleSlots();
+  }
+
+  onStudentChange(studentId: string): void {
+    this.selectedStudent = studentId;
+    this.seedScheduleSlots();
+  }
+
+  private seedScheduleSlots(): void {
+    const def = this.selectedPackageDef;
+    const target = this.createScheduleMode && def ? def.sessionsPerWeek : 0;
+    const next: ScheduleSlotInput[] = [];
+    for (let i = 0; i < target; i++) {
+      next.push(this.scheduleSlots[i] ?? {weekday: null, start_time: ''});
+    }
+    this.scheduleSlots = next;
+  }
+
   createSession(): void {
-    // Recurring series creation is a separate flow (regular tutoring only).
-    if (this.repeatWeekly && this.selectedType === SessionType.TUTORING) {
-      this.createSeries();
+    // Monthly schedule creation is a separate flow (regular tutoring only).
+    if (this.createScheduleMode && this.selectedType === SessionType.TUTORING) {
+      this.createSchedule();
       return;
     }
     if(this.date && this.startTime && this.endTime) {
@@ -312,10 +379,11 @@ export class SessionDialog implements OnInit {
       if (!this.passesAvailabilityGate(() => this.createSession())) {
         return;
       }
-      if (this.hasStudent) {
+      // Make-up sessions still draw from the banked make-up minutes.
+      if (this.selectedType === SessionType.MAKE_UP) {
         const student = this.selectedStudentObj;
         if (student) {
-          const error = this.validatePendingBalance(student, this.selectedType, this.sessionDurationMinutes);
+          const error = this.validateMakeupPendingBalance(student, this.sessionDurationMinutes);
           if (error) {
             this.errorMessage = error;
             this.hasError = true;
@@ -411,20 +479,26 @@ export class SessionDialog implements OnInit {
 
         if (isStatusChange && student) {
           const duration = this.sessionDurationMinutes;
-          const balance = this.balanceFor(student, this.selectedType);
-          if (balance < duration) {
-            this.errorMessage = `Not enough ${this.balanceLabel(this.selectedType)} minutes. ${student.name} has ${balance} min but this session requires ${duration} min.`;
-            this.hasError = true;
-            return;
+          // Completing/no-showing a make-up session consumes banked make-up minutes.
+          if (this.selectedType === SessionType.MAKE_UP
+            && (newStatus === SessionStatus.COMPLETED || newStatus === SessionStatus.NO_CALL_NO_SHOW)) {
+            const balance = student.make_up_minutes ?? 0;
+            if (balance < duration) {
+              this.errorMessage = `Not enough make-up minutes. ${student.name} has ${balance} min but this session requires ${duration} min.`;
+              this.hasError = true;
+              return;
+            }
           }
-          this.pendingStudentUpdate = this.applyMinuteDeduction({ ...student }, duration, this.selectedType, newStatus);
-        } else if (student && newStatus === SessionStatus.PENDING) {
-          // Editing a still-pending session (e.g. lengthening it): the student's
-          // total pending minutes must still fit their balance, even though no
-          // minutes are deducted until attendance is taken. Exclude this session's
-          // own existing contribution so it isn't double-counted.
+          // Only cancelled tutoring (banks minutes) and finalized make-up (deducts
+          // minutes) mutate the student; completing a tutoring session does not.
+          if (this.mutatesStudent(this.selectedType, newStatus)) {
+            this.pendingStudentUpdate = this.applyMinuteDeduction({ ...student }, duration, this.selectedType, newStatus);
+          }
+        } else if (student && newStatus === SessionStatus.PENDING && this.selectedType === SessionType.MAKE_UP) {
+          // Editing a still-pending make-up session (e.g. lengthening it): the
+          // student's total pending make-up minutes must still fit their balance.
           const exclude = new Set<string>([this.dialogData.session.id ?? '']);
-          const error = this.validatePendingBalance(student, this.selectedType, this.sessionDurationMinutes, exclude);
+          const error = this.validateMakeupPendingBalance(student, this.sessionDurationMinutes, exclude);
           if (error) {
             this.errorMessage = error;
             this.hasError = true;
@@ -478,20 +552,10 @@ export class SessionDialog implements OnInit {
     });
   }
 
-  // ── Recurring series ──────────────────────────────────────────────────────
-  createSeries(): void {
-    if (!this.date || !this.startTime || !this.endTime) {
-      this.errorMessage = 'Please enter a valid date and time range';
-      this.hasError = true;
-      return;
-    }
-    if (this.startTime > this.endTime) {
-      this.errorMessage = 'Please enter a valid date and time range';
-      this.hasError = true;
-      return;
-    }
-    if (this.repeatDays.length === 0) {
-      this.errorMessage = 'Select at least one day of the week to repeat on.';
+  // ── Monthly schedule ──────────────────────────────────────────────────────
+  createSchedule(): void {
+    if (!this.date) {
+      this.errorMessage = 'Please choose a start date.';
       this.hasError = true;
       return;
     }
@@ -501,49 +565,55 @@ export class SessionDialog implements OnInit {
       this.hasError = true;
       return;
     }
-    const duration = this.sessionDurationMinutes;
-    if (duration <= 0) {
-      this.errorMessage = 'Please enter a valid time range.';
+    const def = this.selectedPackageDef;
+    if (!def) {
+      this.errorMessage = `${student.name}'s package isn't configured. Custom packages need their values set on the student first.`;
       this.hasError = true;
       return;
     }
-    const available = student.available_minutes ?? 0;
-    // Account for the student's other already-committed pending tutoring minutes.
-    const committed = this.pendingMinutesFor(student.id, SessionType.TUTORING, new Set());
-    const remaining = available - committed;
-
-    let count: number;
-    if (this.repeatEndMode === 'fill') {
-      count = Math.floor(remaining / duration);
-      if (count < 1) {
-        this.errorMessage = `${student.name} has ${remaining} of ${available} available minutes remaining (${committed} already committed) — not enough for even one ${duration}-minute session.`;
-        this.hasError = true;
-        return;
-      }
-    } else {
-      count = Math.floor(this.repeatCount);
-      if (count < 1) {
-        this.errorMessage = 'Enter a valid number of sessions.';
-        this.hasError = true;
-        return;
-      }
-      if (count * duration > remaining) {
-        this.errorMessage = `This series needs ${count * duration} min but ${student.name} has only ${remaining} of ${available} available minutes remaining (${committed} already committed in pending sessions).`;
-        this.hasError = true;
-        return;
-      }
+    if (this.scheduleSlots.length !== def.sessionsPerWeek) {
+      this.errorMessage = `${student.package} requires ${def.sessionsPerWeek} session(s) per week.`;
+      this.hasError = true;
+      return;
+    }
+    if (this.scheduleSlots.some(s => !s.weekday || !s.start_time)) {
+      this.errorMessage = 'Please choose a day and start time for every session.';
+      this.hasError = true;
+      return;
     }
 
-    const occurrences = this.generateOccurrenceDates(this.date, this.repeatDays, count);
+    // Finalize each slot's end time from the package's fixed session length.
+    const slots: ScheduleSlot[] = this.scheduleSlots.map(s => ({
+      weekday: s.weekday as Weekday,
+      start_time: s.start_time,
+      end_time: this.addMinutesToTime(s.start_time, def.sessionLengthMin),
+    }));
+
+    // Generate every occurrence from the start date through the end of its month.
+    const occurrences: {date: Date; slot: ScheduleSlot}[] = [];
+    for (const slot of slots) {
+      for (const date of this.generateMonthOccurrences(this.date, slot.weekday)) {
+        occurrences.push({date, slot});
+      }
+    }
+    if (occurrences.length === 0) {
+      this.errorMessage = 'The chosen days have no sessions left in this month. Pick an earlier start date or different days.';
+      this.hasError = true;
+      return;
+    }
 
     // Validate each occurrence against the tutor's availability.
     if (!this.availabilityOverridden) {
-      const failing = occurrences.filter(d => !this.isDateWithinAvailability(d));
+      const failing = occurrences.filter(o => !this.isDateTimeWithinAvailability(
+        o.date,
+        this.timeStringToMinutes(o.slot.start_time),
+        this.timeStringToMinutes(o.slot.end_time),
+      ));
       if (failing.length > 0) {
         const tutor = this.tutors.find(t => t.id === this.selectedTutor);
         this.availabilityTutorName = tutor?.first_name ?? 'this tutor';
         if (this.authService.isAdmin()) {
-          this.pendingAction = () => { this.availabilityOverridden = true; this.createSeries(); };
+          this.pendingAction = () => { this.availabilityOverridden = true; this.createSchedule(); };
           this.showAvailabilityConfirm = true;
           return;
         } else {
@@ -556,11 +626,9 @@ export class SessionDialog implements OnInit {
 
     const tutor = this.tutors.find(t => t.id === this.selectedTutor)!;
     const seriesId = crypto.randomUUID();
-    const sessions: Session[] = occurrences.map(d => {
-      const start = new Date(d);
-      start.setHours(this.startTime!.getHours(), this.startTime!.getMinutes(), 0, 0);
-      const end = new Date(d);
-      end.setHours(this.endTime!.getHours(), this.endTime!.getMinutes(), 0, 0);
+    const sessions: Session[] = occurrences.map(({date, slot}) => {
+      const start = this.atTime(date, slot.start_time);
+      const end = this.atTime(date, slot.end_time);
       const s = new Session();
       s.type = SessionType.TUTORING;
       s.tutor_id = tutor.id;
@@ -575,30 +643,47 @@ export class SessionDialog implements OnInit {
       return s;
     });
 
+    // Persist the schedule template on the student so auto-renew can repeat it,
+    // and record the package start date for first-month proration.
+    const updatedStudent: Student = {
+      ...student,
+      assigned_tutor_id: tutor.id,
+      schedule: slots,
+      package_start_date: new Date(this.date.getFullYear(), this.date.getMonth(), this.date.getDate()).toISOString(),
+      auto_renew: this.autoRenew,
+    };
+
     this.sessionsService.createSessions(sessions).pipe(
       catchError(err => {
-        this.errorMessage = 'Create session series failed';
+        this.errorMessage = 'Create monthly schedule failed';
         this.hasError = true;
-        return new Observable();
+        return EMPTY;
       })
-    ).subscribe(response => {
-      this.hasError = false;
-      this.dialogRef.close(response as Response);
+    ).subscribe(() => {
+      this.studentService.updateStudent(updatedStudent).pipe(
+        catchError(err => {
+          // Sessions were created; surface the schedule-save failure.
+          this.errorMessage = 'Sessions created, but saving the schedule failed.';
+          this.hasError = true;
+          return EMPTY;
+        })
+      ).subscribe(() => {
+        this.hasError = false;
+        this.dialogRef.close({created: sessions.length});
+      });
     });
   }
 
-  private generateOccurrenceDates(start: Date, days: Weekday[], count: number): Date[] {
+  /** Every date from `start` (inclusive) through the end of start's month that falls on `weekday`. */
+  private generateMonthOccurrences(start: Date, weekday: Weekday): Date[] {
     const result: Date[] = [];
-    const cursor = new Date(start);
-    cursor.setHours(0, 0, 0, 0);
-    let guard = 0;
-    while (result.length < count && guard < 731) {
-      const weekday = WEEKDAY_BY_JS_DAY[cursor.getDay()];
-      if (days.includes(weekday)) {
+    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const endOfMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+    while (cursor <= endOfMonth) {
+      if (WEEKDAY_BY_JS_DAY[cursor.getDay()] === weekday) {
         result.push(new Date(cursor));
       }
       cursor.setDate(cursor.getDate() + 1);
-      guard++;
     }
     return result;
   }
@@ -624,30 +709,13 @@ export class SessionDialog implements OnInit {
         return;
       }
 
-      // Re-check the student's total pending minutes against their available
-      // minutes. The edited (target) occurrences are rewritten to the new
-      // duration, so exclude their old contribution and add the new total; all
-      // other pending sessions (in this series or not) are counted as-is.
-      const student = this.selectedStudentObj;
-      if (student) {
-        const newDuration = this.sessionDurationMinutes;
-        const targetIds = new Set(targets.map(t => t.id ?? ''));
-        const error = this.validatePendingBalance(
-          student,
-          SessionType.TUTORING,
-          targets.length * newDuration,
-          targetIds,
-        );
-        if (error) {
-          this.errorMessage = error;
-          this.hasError = true;
-          return;
-        }
-      }
-
       // Availability check for each occurrence with the new time range.
       if (!this.availabilityOverridden) {
-        const failing = targets.filter(s => !this.isDateWithinAvailability(new Date(s.start_datetime!)));
+        const failing = targets.filter(s => !this.isDateTimeWithinAvailability(
+          new Date(s.start_datetime!),
+          this.startTime!.getHours() * 60 + this.startTime!.getMinutes(),
+          this.endTime!.getHours() * 60 + this.endTime!.getMinutes(),
+        ));
         if (failing.length > 0) {
           this.availabilityTutorName = tutor.first_name ?? 'this tutor';
           if (this.authService.isAdmin()) {
@@ -726,6 +794,15 @@ export class SessionDialog implements OnInit {
     this.seriesAction = null;
   }
 
+  /** Whether finalizing a session of this type/status changes the student's minute banks. */
+  private mutatesStudent(type: SessionType, status: SessionStatus): boolean {
+    if (type === SessionType.MAKE_UP) {
+      return status === SessionStatus.COMPLETED || status === SessionStatus.NO_CALL_NO_SHOW;
+    }
+    // Regular tutoring only mutates the student when cancelled (minutes are banked).
+    return status === SessionStatus.CANCELLED;
+  }
+
   private applyMinuteDeduction(student: Student, minutes: number, type: SessionType, status: SessionStatus): Student {
     if (type === SessionType.MAKE_UP) {
       // Make-up sessions consume banked make-up minutes only.
@@ -734,26 +811,13 @@ export class SessionDialog implements OnInit {
       }
       return student;
     }
-    // Regular tutoring sessions deduct strictly from available minutes.
-    if (status === SessionStatus.COMPLETED || status === SessionStatus.NO_CALL_NO_SHOW) {
-      student.available_minutes = (student.available_minutes ?? 0) - minutes;
-    } else if (status === SessionStatus.CANCELLED) {
-      // Cancelled session: bank the minutes — move them from available to make-up.
-      student.available_minutes = (student.available_minutes ?? 0) - minutes;
+    // Regular tutoring: a cancelled session banks its minutes into the make-up
+    // bank. Completed/no-show tutoring no longer touches any balance (package
+    // sessions are pre-paid, not minute-metered).
+    if (status === SessionStatus.CANCELLED) {
       student.make_up_minutes = (student.make_up_minutes ?? 0) + minutes;
     }
     return student;
-  }
-
-  /** The minute bucket a session of the given type draws from. */
-  private balanceFor(student: Student, type: SessionType): number {
-    return type === SessionType.MAKE_UP
-      ? (student.make_up_minutes ?? 0)
-      : (student.available_minutes ?? 0);
-  }
-
-  private balanceLabel(type: SessionType): string {
-    return type === SessionType.MAKE_UP ? 'make-up' : 'available';
   }
 
   private getTutors() {
@@ -768,6 +832,7 @@ export class SessionDialog implements OnInit {
     this.selectedTutor = tutorId;
     this.selectedStudent = undefined;
     this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === tutorId);
+    this.seedScheduleSlots();
   }
 
   private getStudents() {
