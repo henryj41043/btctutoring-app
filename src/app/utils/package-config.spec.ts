@@ -26,6 +26,10 @@ describe('package-config', () => {
       });
     });
 
+    it('returns null for an undefined package', () => {
+      expect(resolvePackageDef(undefined)).toBeNull();
+    });
+
     it('returns null for CUSTOM without a complete override', () => {
       expect(resolvePackageDef(Package.CUSTOM)).toBeNull();
       expect(resolvePackageDef(Package.CUSTOM, {monthlyCost: 400})).toBeNull();

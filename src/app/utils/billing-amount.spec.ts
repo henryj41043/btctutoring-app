@@ -31,6 +31,27 @@ describe('studentMonthlyCharge', () => {
     expect(studentMonthlyCharge(succeed({ package: Package.CUSTOM }), 2026, 6)).toBe(0);
   });
 
+  it('charges full when started on the last day of the month (boundary)', () => {
+    // start === monthEnd, getDate() > 1 → prorated path is taken (not zero).
+    // July 31 2026 with no schedule → 0 missed → full cost.
+    expect(
+      studentMonthlyCharge(succeed({ package_start_date: '2026-07-31T00:00:00' }), 2026, 6),
+    ).toBe(362);
+  });
+
+  it('charges zero when starting on the 1st of the next month (boundary)', () => {
+    expect(
+      studentMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6),
+    ).toBe(0);
+  });
+
+  it('charges full when starting on the last day of the prior month (boundary)', () => {
+    // June 30 < July 1 monthStart → ongoing full month.
+    expect(
+      studentMonthlyCharge(succeed({ package_start_date: '2026-06-30T00:00:00' }), 2026, 6),
+    ).toBe(362);
+  });
+
   it('prorates the first partial month from missed slots', () => {
     // Custom $400/wk, 1×45min, schedule on Wednesdays. July 2026: Wednesdays are
     // 1, 8, 15... Starting the 15th misses the 1st and the 8th → 2 slots.

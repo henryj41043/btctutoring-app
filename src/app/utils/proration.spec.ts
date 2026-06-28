@@ -27,6 +27,11 @@ describe('proration', () => {
     it('is zero when starting on the 1st', () => {
       expect(countMissedSlots([slot(Weekday.WEDNESDAY)], new Date(2026, 6, 1))).toBe(0);
     });
+
+    it('is zero for an empty or missing schedule', () => {
+      expect(countMissedSlots([], new Date(2026, 6, 15))).toBe(0);
+      expect(countMissedSlots(undefined as unknown as [], new Date(2026, 6, 15))).toBe(0);
+    });
   });
 
   describe('proratedFirstMonthCost', () => {
