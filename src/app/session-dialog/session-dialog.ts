@@ -154,6 +154,24 @@ export class SessionDialog implements OnInit {
     return Math.round((this.endTime.getTime() - this.startTime.getTime()) / 60000);
   }
 
+  /**
+   * Returns an error if a tutoring session's duration exceeds the length the
+   * student's package allows per session. Only applies to TUTORING sessions with
+   * a configured package; ADMIN/MAKE_UP and unconfigured packages aren't
+   * constrained (make-up is already bounded by the make-up minutes bank).
+   */
+  private validateSessionLength(durationMinutes: number): string | null {
+    if (this.selectedType !== SessionType.TUTORING) return null;
+    const def = this.selectedPackageDef;
+    if (!def) return null;
+    if (durationMinutes > def.sessionLengthMin) {
+      const student = this.selectedStudentObj;
+      return `This session is ${durationMinutes} min, but ${student?.name ?? 'this student'}'s `
+        + `${student?.package} package allows up to ${def.sessionLengthMin} min per session.`;
+    }
+    return null;
+  }
+
   /** Duration in minutes of a persisted session from its start/end datetimes. */
   private durationOf(session: Session): number {
     if (!session.start_datetime || !session.end_datetime) return 0;
@@ -376,6 +394,12 @@ export class SessionDialog implements OnInit {
         this.hasError = true;
         return;
       }
+      const lengthError = this.validateSessionLength(this.sessionDurationMinutes);
+      if (lengthError) {
+        this.errorMessage = lengthError;
+        this.hasError = true;
+        return;
+      }
       if (!this.passesAvailabilityGate(() => this.createSession())) {
         return;
       }
@@ -432,6 +456,14 @@ export class SessionDialog implements OnInit {
     if(this.date && this.startTime && this.endTime) {
       if (this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
+        this.hasError = true;
+        return;
+      }
+      // Enforce the package's per-session length for single edits and for the
+      // "this & future" series path (which reuses this time range).
+      const lengthError = this.validateSessionLength(this.sessionDurationMinutes);
+      if (lengthError) {
+        this.errorMessage = lengthError;
         this.hasError = true;
         return;
       }
