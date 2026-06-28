@@ -36,7 +36,7 @@ const student = (over: Partial<Student> = {}): Student =>
     name: 'Pat',
     status: Status.ACTIVE_STUDENT,
     assigned_tutor_id: 't-1',
-    package: Package.SUCCEED, // 2 sessions/week, 30 min
+    package: Package.DETERMINATION, // 2 sessions/week, 60 min
     make_up_minutes: 120,
     ...over,
   }) as Student;
@@ -313,6 +313,31 @@ describe('SessionDialog', () => {
       c.createSession();
       expect(c.hasError).toBe(true);
     });
+
+    it('blocks a tutoring session longer than the package allows', () => {
+      const c = primedCreate();
+      c.endTime = new Date(2026, 5, 1, 11, 30); // 90 min vs Determination's 60
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('allows up to 60 min');
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+    });
+
+    it('allows a tutoring session exactly the package length', () => {
+      const c = primedCreate(); // 10:00–11:00 = 60 min == package length
+      sessionsService.createSession.mockReturnValue(of({ id: 'ok' }));
+      c.createSession();
+      expect(sessionsService.createSession).toHaveBeenCalled();
+    });
+
+    it('skips the length check when the package is unconfigured', () => {
+      const c = primedCreate();
+      c.students = [student({ package: Package.CUSTOM })]; // no overrides → def null
+      c.endTime = new Date(2026, 5, 1, 12, 0); // 120 min, but no cap to enforce
+      sessionsService.createSession.mockReturnValue(of({ id: 'ok' }));
+      c.createSession();
+      expect(sessionsService.createSession).toHaveBeenCalled();
+    });
   });
 
   describe('createSchedule (monthly)', () => {
@@ -358,13 +383,14 @@ describe('SessionDialog', () => {
       const first = created[0];
       expect(new Date(first.start_datetime!).getHours()).toBe(10);
       expect(new Date(first.start_datetime!).getMinutes()).toBe(0);
-      expect(new Date(first.end_datetime!).getHours()).toBe(10);
-      expect(new Date(first.end_datetime!).getMinutes()).toBe(30);
+      // end = start + the package's 60-min session length.
+      expect(new Date(first.end_datetime!).getHours()).toBe(11);
+      expect(new Date(first.end_datetime!).getMinutes()).toBe(0);
 
       const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
       expect(saved.schedule).toHaveLength(2);
       expect(saved.schedule![0]).toEqual({
-        weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30',
+        weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00',
       });
       expect(saved.assigned_tutor_id).toBe('t-1');
       expect(saved.package_start_date).toContain('2026-07-01');
@@ -583,6 +609,24 @@ describe('SessionDialog', () => {
       sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.confirmAvailabilityOverride();
       expect(sessionsService.updateSession).toHaveBeenCalled();
+    });
+
+    it('blocks an edit that exceeds the package session length', () => {
+      const c = primedEdit(editData());
+      c.endTime = new Date(2026, 5, 1, 11, 30); // 90 min vs 60
+      c.updateSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain('allows up to 60 min');
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+    });
+
+    it('blocks an over-length series edit before prompting for scope', () => {
+      const c = primedEdit(editData({ series_id: 'series-1' }));
+      c.endTime = new Date(2026, 5, 1, 11, 30); // 90 min vs 60
+      c.updateSession();
+      expect(c.hasError).toBe(true);
+      expect(c.showSeriesScopePrompt).toBe(false);
+      expect(c.errorMessage).toContain('allows up to 60 min');
     });
   });
 
