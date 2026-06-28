@@ -9,4 +9,6 @@ export enum Package {
   EXCEL = 'Excel',
   CUSTOM = 'Custom',
   TRIUMPH = 'Triumph',
+  CONQUEST = 'Conquest',
+  SUMMIT = 'Summit',
 }

@@ -1,0 +1,67 @@
+.billing {
+  .billing-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    h2 {
+      margin: 0;
+      font-size: 1.9rem;
+    }
+  }
+
+  .billing-period {
+    color: var(--btc-teal-deep);
+    font-weight: 700;
+    font-size: .9rem;
+  }
+
+  .billing-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  mat-card-content {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    min-width: 800px;
+  }
+
+  .total-cell {
+    font-weight: 800;
+    color: var(--btc-teal-deep);
+  }
+
+  .attention-icon {
+    font-size: 18px;
+    height: 18px;
+    width: 18px;
+    vertical-align: middle;
+    color: orange;
+  }
+
+  .billing-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 56px 0;
+  }
+
+  .billing-spinner-label {
+    color: var(--btc-teal-deep);
+    font-weight: 700;
+  }
+
+  .billing-empty {
+    padding: 32px 0;
+    text-align: center;
+    color: var(--btc-teal-deep);
+    font-weight: 600;
+  }
+}

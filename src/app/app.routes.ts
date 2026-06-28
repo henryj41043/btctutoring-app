@@ -7,6 +7,7 @@ import {SessionsTable} from './sessions-table/sessions-table';
 import {ContactsTable} from './contacts-table/contacts-table';
 import {Contact} from './contact/contact';
 import {Payroll} from './payroll/payroll';
+import {Billing} from './billing/billing';
 import {StudentRoster} from './student-roster/student-roster';
 
 export const routes: Routes = [
@@ -47,6 +48,11 @@ export const routes: Routes = [
   {
     path: 'payroll',
     component: Payroll,
+    canActivate: [AuthGuard],
+  },
+  {
+    path: 'billing',
+    component: Billing,
     canActivate: [AuthGuard],
   },
   {

@@ -34,19 +34,21 @@
     </mat-select>
   </mat-form-field>
   <br/>
-  <mat-form-field>
-    <mat-label>Enter start time</mat-label>
-    <input matInput
-           [matTimepicker]="starttimepicker"
-           [(ngModel)]="startTime"
-           [ngModelOptions]="{updateOn: 'blur'}">
-    <mat-timepicker interval="15min" #starttimepicker/>
-    <mat-timepicker-toggle [for]="starttimepicker" matSuffix/>
-  </mat-form-field>
+  @if (!createScheduleMode) {
+    <mat-form-field>
+      <mat-label>Enter start time</mat-label>
+      <input matInput
+             [matTimepicker]="starttimepicker"
+             [(ngModel)]="startTime"
+             [ngModelOptions]="{updateOn: 'blur'}">
+      <mat-timepicker interval="15min" #starttimepicker/>
+      <mat-timepicker-toggle [for]="starttimepicker" matSuffix/>
+    </mat-form-field>
+  }
   @if (hasStudent) {
     <mat-form-field>
       <mat-label>Select Student</mat-label>
-      <mat-select [(ngModel)]="selectedStudent">
+      <mat-select [ngModel]="selectedStudent" (ngModelChange)="onStudentChange($event)">
         @for (student of filteredStudents; track student) {
           <mat-option [value]="student.id">{{student.name}}</mat-option>
         }
@@ -54,22 +56,24 @@
     </mat-form-field>
     @if (selectedStudentObj) {
       <p class="minutes-info">
-        Available: <strong>{{selectedStudentObj.available_minutes ?? 0}} min</strong>
+        Package: <strong>{{selectedStudentObj.package || '—'}}</strong>
         &nbsp;|&nbsp;
         Make-up: <strong>{{selectedStudentObj.make_up_minutes ?? 0}} min</strong>
       </p>
     }
   }
   <br/>
-  <mat-form-field>
-    <mat-label>Enter end time</mat-label>
-    <input matInput
-           [matTimepicker]="endtimepicker"
-           [(ngModel)]="endTime"
-           [ngModelOptions]="{updateOn: 'blur'}">
-    <mat-timepicker interval="15min" #endtimepicker/>
-    <mat-timepicker-toggle [for]="endtimepicker" matSuffix/>
-  </mat-form-field>
+  @if (!createScheduleMode) {
+    <mat-form-field>
+      <mat-label>Enter end time</mat-label>
+      <input matInput
+             [matTimepicker]="endtimepicker"
+             [(ngModel)]="endTime"
+             [ngModelOptions]="{updateOn: 'blur'}">
+      <mat-timepicker interval="15min" #endtimepicker/>
+      <mat-timepicker-toggle [for]="endtimepicker" matSuffix/>
+    </mat-form-field>
+  }
   @if (dialogData.type !== 'create') {
     <mat-form-field>
       <mat-label>Take Attendance</mat-label>
@@ -87,31 +91,44 @@
 
   @if (dialogData.type === 'create' && selectedType === SessionType.TUTORING) {
     <div class="series-section">
-      <mat-checkbox [(ngModel)]="repeatWeekly">Repeat weekly (create a series)</mat-checkbox>
-      @if (repeatWeekly) {
-        <div class="series-controls">
-          <mat-form-field>
-            <mat-label>Repeat on</mat-label>
-            <mat-select [(ngModel)]="repeatDays" multiple>
-              @for (day of weekdayOptions; track day) {
-                <mat-option [value]="day">{{weekdayLabels[day]}}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-          <mat-form-field>
-            <mat-label>End</mat-label>
-            <mat-select [(ngModel)]="repeatEndMode">
-              <mat-option value="count">After N sessions</mat-option>
-              <mat-option value="fill">Fill available minutes</mat-option>
-            </mat-select>
-          </mat-form-field>
-          @if (repeatEndMode === 'count') {
-            <mat-form-field>
-              <mat-label>Number of sessions</mat-label>
-              <input matInput type="number" min="1" [(ngModel)]="repeatCount">
-            </mat-form-field>
-          }
-        </div>
+      <mat-checkbox [(ngModel)]="createScheduleMode" (ngModelChange)="onScheduleModeChange()">
+        Set up monthly schedule
+      </mat-checkbox>
+      @if (createScheduleMode) {
+        @if (selectedPackageDef) {
+          <p class="schedule-info">
+            {{selectedStudentObj?.package}}: {{selectedPackageDef.sessionsPerWeek}} session(s)/week,
+            {{selectedPackageDef.sessionLengthMin}} min each. The start date's month is filled automatically.
+          </p>
+          <div class="schedule-slots">
+            @for (slot of scheduleSlots; track $index) {
+              <div class="slot-row">
+                <mat-form-field>
+                  <mat-label>Day {{$index + 1}}</mat-label>
+                  <mat-select [(ngModel)]="slot.weekday">
+                    @for (day of weekdayOptions; track day) {
+                      <mat-option [value]="day">{{weekdayLabels[day]}}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>Start time</mat-label>
+                  <mat-select [(ngModel)]="slot.start_time">
+                    @for (t of timeOptions; track t.value) {
+                      <mat-option [value]="t.value">{{t.label}}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+            }
+          </div>
+          <mat-checkbox [(ngModel)]="autoRenew">Auto-renew this schedule each month</mat-checkbox>
+        } @else {
+          <p class="schedule-info">
+            Select a student whose package is configured to set up a schedule.
+            (Custom-package students need their package values set first.)
+          </p>
+        }
       }
     </div>
     <br/>
@@ -124,7 +141,7 @@
   @if (showStatusConfirm) {
     <div class="status-confirm-warning">
       <p><strong>⚠ This action is irreversible.</strong></p>
-      <p>Changing the status will update the student's available and make-up minutes and cannot be undone. Are you sure you want to continue?</p>
+      <p>Finalizing attendance locks this session. Cancelled tutoring sessions bank their minutes to the make-up balance; completed make-up sessions deduct from it. Are you sure you want to continue?</p>
     </div>
   }
   @if (showAvailabilityConfirm) {

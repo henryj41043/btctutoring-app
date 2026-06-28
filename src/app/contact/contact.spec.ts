@@ -3,7 +3,6 @@ import { of, throwError } from 'rxjs';
 import { FormArray, FormGroup } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSelectChange } from '@angular/material/select';
 import { Contact } from './contact';
 import { ContactService } from '../services/contact.service';
 import { StudentService } from '../services/student.service';
@@ -16,7 +15,6 @@ import { StudentSessionsDialog } from '../student-sessions-dialog/student-sessio
 import { DeleteContactDialog } from '../delete-contact-dialog/delete-contact-dialog';
 import { Service } from '../enums/service.enum';
 import { Status } from '../enums/status.enum';
-import { Package } from '../enums/package.enum';
 
 const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
   ({
@@ -257,13 +255,19 @@ describe('Contact', () => {
       expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(0);
     });
 
-    it('packageSelected sets available minutes from the package map', () => {
+    it('new student form carries schedule/billing fields and drops available_minutes', () => {
       const c = build();
       c.ngOnInit();
       studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
       c.addStudent();
-      c.packageSelected({ value: Package.POWER_UP } as MatSelectChange);
-      expect(students(c).at(0).get('available_minutes')?.value).toBe(720);
+      const group = students(c).at(0);
+      // Carried-through fields prevent a save here from wiping the session
+      // dialog's schedule and the billing flow's start date / auto-renew.
+      expect(group.get('schedule')).toBeTruthy();
+      expect(group.get('package_start_date')).toBeTruthy();
+      expect(group.get('auto_renew')).toBeTruthy();
+      expect(group.get('custom_monthly_cost')).toBeTruthy();
+      expect(group.get('available_minutes')).toBeNull();
     });
   });
 

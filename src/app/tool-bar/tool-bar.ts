@@ -51,4 +51,8 @@ export class ToolBar {
   payrollNav(): void {
     void this.router.navigate(['/payroll']);
   }
+
+  billingNav(): void {
+    void this.router.navigate(['/billing']);
+  }
 }

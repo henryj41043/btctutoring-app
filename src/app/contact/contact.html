@@ -140,10 +140,6 @@
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Package</th>
           <td mat-cell *matCellDef="let item">{{item.package}}</td>
         </ng-container>
-        <ng-container matColumnDef="available_minutes">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Available Min</th>
-          <td mat-cell *matCellDef="let item">{{item.available_minutes}}</td>
-        </ng-container>
         <ng-container matColumnDef="make_up_minutes">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Make Up Min</th>
           <td mat-cell *matCellDef="let item">{{item.make_up_minutes}}</td>
@@ -187,7 +183,6 @@
                 <div class="student-grid">
                   <div>Birthday: {{studentControl.get('birthday')?.value}}</div>
                   <div>Status: {{studentControl.get('status')?.value}}</div>
-                  <div>Available Minutes: {{studentControl.get('available_minutes')?.value}}</div>
                   <div>Assigned Tutor: {{getTutorName(studentControl.get('assigned_tutor_id')?.value)}}</div>
                   <div>Make Up Minutes: {{studentControl.get('make_up_minutes')?.value}}</div>
                   <div>Package: {{studentControl.get('package')?.value}}</div>
@@ -215,10 +210,6 @@
                     </mat-select>
                   </mat-form-field>
                   <mat-form-field>
-                    <mat-label>Available Minutes</mat-label>
-                    <input matInput type="number" formControlName="available_minutes">
-                  </mat-form-field>
-                  <mat-form-field>
                     <mat-label>Assign Tutor</mat-label>
                     <mat-select formControlName="assigned_tutor_id">
                       @for (tutorOption of tutors; track tutorOption) {
@@ -232,12 +223,26 @@
                   </mat-form-field>
                   <mat-form-field>
                     <mat-label>Select Package</mat-label>
-                    <mat-select formControlName="package" (selectionChange)="packageSelected($event)">
+                    <mat-select formControlName="package">
                       @for (packageOption of packageOptions; track packageOption) {
                         <mat-option [value]="packageOption">{{packageOption}}</mat-option>
                       }
                     </mat-select>
                   </mat-form-field>
+                  @if (studentControl.get('package')?.value === Package.CUSTOM) {
+                    <mat-form-field>
+                      <mat-label>Custom Monthly Cost</mat-label>
+                      <input matInput type="number" formControlName="custom_monthly_cost">
+                    </mat-form-field>
+                    <mat-form-field>
+                      <mat-label>Custom Sessions / Week</mat-label>
+                      <input matInput type="number" formControlName="custom_sessions_per_week">
+                    </mat-form-field>
+                    <mat-form-field>
+                      <mat-label>Custom Session Length (min)</mat-label>
+                      <input matInput type="number" formControlName="custom_session_length_min">
+                    </mat-form-field>
+                  }
                   <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
                 </div>
               </div>
@@ -367,10 +372,6 @@
           <mat-datepicker-toggle [for]="dfrbfDatepicker" matSuffix/>
         </mat-form-field>
         <mat-form-field>
-          <mat-label>Amount To Be Paid This Month</mat-label>
-          <input matInput formControlName="amount_to_be_paid_this_month">
-        </mat-form-field>
-        <mat-form-field>
           <mat-label>Invoice Number</mat-label>
           <input matInput formControlName="invoice_number">
         </mat-form-field>
@@ -397,24 +398,9 @@
         <mat-icon style="color: red;">close</mat-icon>
       }
       <div class="billing-grid">
-        <mat-form-field>
-          <mat-label>Monthly Charge</mat-label>
-          <input matInput formControlName="monthly_charge">
-        </mat-form-field>
+        <p class="billing-note">Charges and payment tracking now live on the <strong>Billing</strong> page.</p>
         <mat-checkbox formControlName="cc_authorization_received">CC Authorization Received</mat-checkbox>
         <mat-checkbox formControlName="twenty_five_deducted">$25 Deducted</mat-checkbox>
-        <mat-form-field>
-          <mat-label>Charge Per Billing Cycle</mat-label>
-          <input matInput formControlName="charge_per_billing_cycle">
-        </mat-form-field>
-        <mat-checkbox formControlName="payment_one_received">Payment 1 Received</mat-checkbox>
-        <mat-checkbox formControlName="payment_two_received">Payment 2 Received</mat-checkbox>
-        <mat-form-field>
-          <mat-label>Amount To Be Paid This Month</mat-label>
-          <input matInput formControlName="amount_to_be_paid_this_month">
-        </mat-form-field>
-        <mat-checkbox formControlName="payment_three_received">Payment 3 Received</mat-checkbox>
-        <mat-checkbox formControlName="payment_four_received">Payment 4 Received</mat-checkbox>
         <mat-form-field>
           <mat-label>Billing Cycle</mat-label>
           <mat-select formControlName="billing_cycle">

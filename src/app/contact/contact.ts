@@ -11,7 +11,7 @@ import {MatInputModule} from '@angular/material/input';
 import {Service} from '../enums/service.enum';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatButtonModule} from '@angular/material/button';
-import {MatSelectChange, MatSelectModule} from '@angular/material/select';
+import {MatSelectModule} from '@angular/material/select';
 import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
 import {StudentService} from '../services/student.service';
@@ -27,7 +27,6 @@ import {AuthService} from '../services/auth.service';
 import {DatePipe} from '@angular/common';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {provideNativeDateAdapter} from '@angular/material/core';
-import {packageMinutesMap} from '../utils/package-minutes-map';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatSort, MatSortModule} from '@angular/material/sort';
@@ -99,16 +98,9 @@ export class Contact implements OnInit {
     phone_number: ['', phoneValidator],
     service: ['', Validators.required],
     status: '',
-    monthly_charge: 0,
-    charge_per_billing_cycle: 0,
-    amount_to_be_paid_this_month: 0,
     billing_cycle: '',
     cc_authorization_received: false,
     twenty_five_deducted: false,
-    payment_one_received: false,
-    payment_two_received: false,
-    payment_three_received: false,
-    payment_four_received: false,
     special_circumstance: '',
     scholarship_state: '',
     invoice_Month: '',
@@ -148,10 +140,11 @@ export class Contact implements OnInit {
   protected notesEditIndex: number = -1;
   protected studentsEditIndex: number = -1;
   protected readonly Service = Service;
+  protected readonly Package = Package;
   protected updatedSuccessfully: boolean = false;
   protected updateError: boolean = false;
   protected rosterDataSource = new MatTableDataSource<Student>([]);
-  protected rosterColumns: string[] = ['name', 'status', 'package', 'available_minutes', 'make_up_minutes', 'scholarship'];
+  protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
 
   ngOnInit() {
     this.loadContact();
@@ -257,16 +250,9 @@ export class Contact implements OnInit {
     this.contactForm.controls['email'].setValue(contact.email);
     this.contactForm.controls['phone_number'].setValue(contact.phone_number);
     this.contactForm.controls['service'].setValue(contact.service);
-    this.contactForm.controls['monthly_charge'].setValue(contact.monthly_charge);
-    this.contactForm.controls['charge_per_billing_cycle'].setValue(contact.charge_per_billing_cycle);
-    this.contactForm.controls['amount_to_be_paid_this_month'].setValue(contact.amount_to_be_paid_this_month);
     this.contactForm.controls['billing_cycle'].setValue(contact.billing_cycle);
     this.contactForm.controls['cc_authorization_received'].setValue(contact.cc_authorization_received);
     this.contactForm.controls['twenty_five_deducted'].setValue(contact.twenty_five_deducted);
-    this.contactForm.controls['payment_one_received'].setValue(contact.payment_one_received);
-    this.contactForm.controls['payment_two_received'].setValue(contact.payment_two_received);
-    this.contactForm.controls['payment_three_received'].setValue(contact.payment_three_received);
-    this.contactForm.controls['payment_four_received'].setValue(contact.payment_four_received);
     this.contactForm.controls['special_circumstance'].setValue(contact.special_circumstance);
     this.contactForm.controls['scholarship_state'].setValue(contact.scholarship_state);
     this.contactForm.controls['invoice_Month'].setValue(contact.invoice_Month);
@@ -339,7 +325,14 @@ export class Contact implements OnInit {
         assigned_tutor_id: student.assigned_tutor_id,
         package: student.package,
         scholarship: student.scholarship,
-        available_minutes: student.available_minutes,
+        // Carried through edits so saving a student here never wipes the
+        // schedule/billing fields owned by the session dialog + billing flow.
+        schedule: [student.schedule ?? null],
+        package_start_date: [student.package_start_date ?? null],
+        auto_renew: [student.auto_renew ?? false],
+        custom_monthly_cost: student.custom_monthly_cost ?? null,
+        custom_sessions_per_week: student.custom_sessions_per_week ?? null,
+        custom_session_length_min: student.custom_session_length_min ?? null,
         make_up_minutes: student.make_up_minutes,
       }));
     });
@@ -509,7 +502,12 @@ export class Contact implements OnInit {
         assigned_tutor_id: '',
         package: ['', Validators.required],
         scholarship: false,
-        available_minutes: 0,
+        schedule: [null],
+        package_start_date: [null],
+        auto_renew: [false],
+        custom_monthly_cost: [null],
+        custom_sessions_per_week: [null],
+        custom_session_length_min: [null],
         make_up_minutes: 0
       }));
       this.students.updateValueAndValidity();
@@ -635,8 +633,4 @@ export class Contact implements OnInit {
     return tutor ? `${tutor.first_name} ${tutor.last_name}`.trim() : id;
   }
 
-  packageSelected($event: MatSelectChange) {
-    this.students.at(this.studentsEditIndex).get('available_minutes')?.setValue(packageMinutesMap[$event.value as Package]);
-    this.students.updateValueAndValidity();
-  }
 }
