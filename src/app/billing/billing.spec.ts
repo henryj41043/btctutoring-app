@@ -15,6 +15,7 @@ import { Status } from '../enums/status.enum';
 import { Package } from '../enums/package.enum';
 import { BillingCycle } from '../enums/billing-cycle.enum';
 import { Weekday } from '../enums/weekday.enum';
+import { studentMonthlyCharge } from '../utils/billing-amount';
 
 jest.mock('jspdf', () => ({
   __esModule: true,
@@ -94,6 +95,54 @@ describe('Billing', () => {
     expect(entry.due_first).toBe(181);
     expect(entry.due_fifteenth).toBe(181);
     expect(entry.due_first + entry.due_fifteenth).toBe(entry.total);
+  });
+
+  it('bills a semi-monthly prorated first month in full on the 15th (start before the 15th)', () => {
+    const s = student({ package_start_date: '2026-07-10T00:00:00' }); // default Monday schedule
+    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+    studentService.getStudents.mockReturnValue(of([s]));
+    const c = build(); // viewing July 2026
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    const prorated = studentMonthlyCharge(s, 2026, 6);
+    expect(prorated).toBeGreaterThan(0);
+    expect(prorated).toBeLessThan(362);
+    expect(entry.due_first).toBeNull(); // 1st left blank
+    expect(entry.due_fifteenth).toBe(prorated); // full prorated amount, not split
+    expect(entry.total).toBe(prorated);
+  });
+
+  it('defers a semi-monthly prorated first month to the 1st of next month (start on/after the 15th)', () => {
+    const s = student({ package_start_date: '2026-07-20T00:00:00' });
+    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+    studentService.getStudents.mockReturnValue(of([s]));
+
+    // Start month (July): nothing billed yet → no row.
+    const july = build();
+    july.ngOnInit();
+    expect((july as any).dataSource.data).toHaveLength(0);
+
+    // Next month (August): full prorated amount on the 1st, 15th blank.
+    const aug = build();
+    aug.selectedDate = new Date(2026, 7, 1);
+    aug.ngOnInit();
+    const entry = (aug as any).dataSource.data[0];
+    const prorated = studentMonthlyCharge(s, 2026, 6);
+    expect(entry.due_first).toBe(prorated);
+    expect(entry.due_fifteenth).toBeNull();
+    expect(entry.total).toBe(prorated);
+  });
+
+  it('resumes the normal 50/50 split the month after a prorated first month', () => {
+    const s = student({ package_start_date: '2026-07-10T00:00:00' });
+    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+    studentService.getStudents.mockReturnValue(of([s]));
+    const c = build();
+    c.selectedDate = new Date(2026, 7, 1); // August
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    expect(entry.due_first).toBe(181);
+    expect(entry.due_fifteenth).toBe(181);
   });
 
   it('treats a legacy biweekly cycle as semi-monthly', () => {
@@ -274,7 +323,7 @@ describe('Billing', () => {
         name: 'Sam Roe', packages: 'Kai: Thrive', cycle: BillingCycle.SEMI_MONTHLY,
         due_first: 181, due_fifteenth: 181, total: 362,
       } as BillingEntry,
-      // Undefined amounts exercise the formatMoney `?? 0` fallback.
+      // Undefined amounts: due columns render blank ('—'), total uses the formatMoney `?? 0` fallback.
       {} as BillingEntry,
     ];
     c.exportPDF();
@@ -289,7 +338,7 @@ describe('Billing', () => {
     expect(config.body).toEqual([
       ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '$362.00'],
       ['Sam Roe', 'Kai: Thrive', 'Semi-monthly', '$181.00', '$181.00', '$362.00'],
-      ['', '', 'Monthly', '$0.00', '—', '$0.00'],
+      ['', '', 'Monthly', '—', '—', '$0.00'],
     ]);
   });
 });

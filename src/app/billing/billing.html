@@ -53,7 +53,9 @@
         </ng-container>
         <ng-container matColumnDef="due_first">
           <th mat-header-cell *matHeaderCellDef> Due 1st </th>
-          <td mat-cell *matCellDef="let item"> {{item.due_first | currency:'USD':'symbol':'1.2-2'}} </td>
+          <td mat-cell *matCellDef="let item">
+            {{item.due_first == null ? '—' : (item.due_first | currency:'USD':'symbol':'1.2-2')}}
+          </td>
         </ng-container>
         <ng-container matColumnDef="due_fifteenth">
           <th mat-header-cell *matHeaderCellDef> Due 15th </th>
@@ -68,11 +70,13 @@
         <ng-container matColumnDef="paid">
           <th mat-header-cell *matHeaderCellDef> Paid </th>
           <td mat-cell *matCellDef="let item">
-            <mat-checkbox [checked]="item.paid_first"
-                          (change)="togglePaid(item, 'first', $event.checked)">
-              {{isSemiMonthly(item) ? '1st' : ''}}
-            </mat-checkbox>
-            @if (isSemiMonthly(item)) {
+            @if (item.due_first != null) {
+              <mat-checkbox [checked]="item.paid_first"
+                            (change)="togglePaid(item, 'first', $event.checked)">
+                {{isSemiMonthly(item) ? '1st' : ''}}
+              </mat-checkbox>
+            }
+            @if (isSemiMonthly(item) && item.due_fifteenth != null) {
               <mat-checkbox [checked]="item.paid_fifteenth"
                             (change)="togglePaid(item, 'fifteenth', $event.checked)">
                 15th

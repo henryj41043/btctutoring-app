@@ -27,8 +27,7 @@ import {CurrencyPipe, DatePipe} from '@angular/common';
 import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {Status} from '../enums/status.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
-import {studentMonthlyCharge, studentNeedsAttention} from '../utils/billing-amount';
-import {semiMonthlySplit} from '../utils/proration';
+import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
 
 @Component({
@@ -157,22 +156,41 @@ export class Billing implements OnInit {
       const contact = contacts.find(c => c.id === contactId);
       if (!contact) continue;
 
-      const total = round2(
-        contactStudents.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0),
-      );
-      if (total <= 0) continue; // nobody is billable this month
-
       const cycle = this.normalizeCycle(contact.billing_cycle);
       const semi = cycle === BillingCycle.SEMI_MONTHLY;
-      const [first, second] = semi ? semiMonthlySplit(total) : [total, 0];
+
+      let dueFirst: number | null;
+      let dueFifteenth: number | null;
+      let total: number;
+      if (semi) {
+        let first = 0;
+        let fifteenth = 0;
+        for (const s of contactStudents) {
+          const charge = studentSemiMonthlyCharge(s, year, month);
+          first += charge.first;
+          fifteenth += charge.fifteenth;
+        }
+        first = round2(first);
+        fifteenth = round2(fifteenth);
+        total = round2(first + fifteenth);
+        // A half with no charge (e.g. the blank side of a prorated first month,
+        // billed in full on the other date) renders as blank rather than $0.00.
+        dueFirst = first === 0 ? null : first;
+        dueFifteenth = fifteenth === 0 ? null : fifteenth;
+      } else {
+        total = round2(contactStudents.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+        dueFirst = total;
+        dueFifteenth = null;
+      }
+      if (total <= 0) continue; // nobody is billable this month
 
       const entry: BillingEntry = {
         contact_id: contactId,
         name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
         packages: contactStudents.map(s => `${s.name}: ${s.package}`).join('; '),
         cycle,
-        due_first: first,
-        due_fifteenth: semi ? second : null,
+        due_first: dueFirst,
+        due_fifteenth: dueFifteenth,
         total,
         paid_first: recordMap.get(`${contactId}#${periodFirst}`)?.paid ?? false,
         paid_fifteenth: semi ? (recordMap.get(`${contactId}#${periodFifteenth}`)?.paid ?? false) : false,
@@ -192,7 +210,7 @@ export class Billing implements OnInit {
   /** Persists a paid/unpaid toggle for one half of a contact's billing month. */
   togglePaid(entry: BillingEntry, half: 'first' | 'fifteenth', checked: boolean): void {
     const period = this.periodKey(this.selectedDate, half === 'first' ? 1 : 15);
-    const amount = half === 'first' ? entry.due_first : (entry.due_fifteenth ?? 0);
+    const amount = (half === 'first' ? entry.due_first : entry.due_fifteenth) ?? 0;
     const record: BillingRecord = {
       contact_id: entry.contact_id,
       period_start: period,
@@ -235,7 +253,7 @@ export class Billing implements OnInit {
         e.name ?? '',
         e.packages ?? '',
         e.cycle === BillingCycle.SEMI_MONTHLY ? 'Semi-monthly' : 'Monthly',
-        this.formatMoney(e.due_first),
+        e.due_first == null ? '—' : this.formatMoney(e.due_first),
         e.due_fifteenth == null ? '—' : this.formatMoney(e.due_fifteenth),
         this.formatMoney(e.total),
       ]),
