@@ -1,10 +1,17 @@
-import {studentMonthlyCharge, studentNeedsAttention} from './billing-amount';
+import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention} from './billing-amount';
 import {Student} from '../models/student.model';
 import {Package} from '../enums/package.enum';
 import {Weekday} from '../enums/weekday.enum';
 
 const succeed = (over: Partial<Student> = {}): Student =>
   ({ package: Package.SUCCEED, ...over }) as Student;
+
+// A Succeed student with a Monday schedule, so mid-month starts actually prorate.
+const prorating = (start: string): Student =>
+  succeed({
+    package_start_date: start,
+    schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
+  });
 
 describe('studentMonthlyCharge', () => {
   it('charges the full monthly cost for an ongoing month', () => {
@@ -65,6 +72,69 @@ describe('studentMonthlyCharge', () => {
       schedule: [{ weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '10:45' }],
     } as Student;
     expect(studentMonthlyCharge(student, 2026, 6)).toBe(215.38);
+  });
+});
+
+describe('studentSemiMonthlyCharge', () => {
+  it('splits an ongoing month 50/50', () => {
+    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-05-01T00:00:00' }), 2026, 6))
+      .toEqual({ first: 181, fifteenth: 181 });
+  });
+
+  it('splits 50/50 for a legacy student with no start date', () => {
+    expect(studentSemiMonthlyCharge(succeed(), 2026, 6)).toEqual({ first: 181, fifteenth: 181 });
+  });
+
+  it('charges nothing for an unconfigured custom package', () => {
+    expect(studentSemiMonthlyCharge(succeed({ package: Package.CUSTOM }), 2026, 6))
+      .toEqual({ first: 0, fifteenth: 0 });
+  });
+
+  it('charges nothing before the package starts', () => {
+    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6))
+      .toEqual({ first: 0, fifteenth: 0 });
+  });
+
+  it('splits 50/50 when starting on the 1st (no proration)', () => {
+    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-07-01T00:00:00' }), 2026, 6))
+      .toEqual({ first: 181, fifteenth: 181 });
+  });
+
+  it('bills the full prorated first month on the 15th when starting before the 15th', () => {
+    const s = prorating('2026-07-10T00:00:00');
+    const prorated = studentMonthlyCharge(s, 2026, 6); // July's prorated value
+    expect(prorated).toBeGreaterThan(0);
+    expect(prorated).toBeLessThan(362);
+    // Prorated lands in full on the 15th of the start month; the 1st stays blank (0).
+    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 0, fifteenth: prorated });
+    // The following month resumes the normal split.
+    expect(studentSemiMonthlyCharge(s, 2026, 7)).toEqual({ first: 181, fifteenth: 181 });
+  });
+
+  it('bills the full prorated first month on the 1st of next month when starting on/after the 15th', () => {
+    const s = prorating('2026-07-20T00:00:00');
+    const prorated = studentMonthlyCharge(s, 2026, 6); // July's prorated value
+    expect(prorated).toBeGreaterThan(0);
+    expect(prorated).toBeLessThan(362);
+    // Start month: nothing is billed yet.
+    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 0, fifteenth: 0 });
+    // Next month (August): prorated in full on the 1st, the 15th stays blank (0).
+    expect(studentSemiMonthlyCharge(s, 2026, 7)).toEqual({ first: prorated, fifteenth: 0 });
+    // The month after resumes the normal split.
+    expect(studentSemiMonthlyCharge(s, 2026, 8)).toEqual({ first: 181, fifteenth: 181 });
+  });
+
+  it('treats a start exactly on the 15th as billed on the 1st of next month', () => {
+    const s = prorating('2026-07-15T00:00:00');
+    const prorated = studentMonthlyCharge(s, 2026, 6);
+    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 0, fifteenth: 0 });
+    expect(studentSemiMonthlyCharge(s, 2026, 7)).toEqual({ first: prorated, fifteenth: 0 });
+  });
+
+  it('treats a start on the 14th as billed on the 15th of the start month', () => {
+    const s = prorating('2026-07-14T00:00:00');
+    const prorated = studentMonthlyCharge(s, 2026, 6);
+    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 0, fifteenth: prorated });
   });
 });
 
