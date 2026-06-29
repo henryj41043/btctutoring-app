@@ -85,6 +85,11 @@ export class SessionDialog implements OnInit {
   showAvailabilityConfirm: boolean = false;
   availabilityTutorName: string = '';
   private availabilityOverridden: boolean = false;
+  // Soft warning when an individual session is added/edited for a student who
+  // already has a saved monthly schedule (it may exceed their package sessions/week).
+  showScheduleWarning: boolean = false;
+  scheduleWarningMessage: string = '';
+  private scheduleWarningOverridden: boolean = false;
   private pendingAction: (() => void) | null = null;
   private pendingSession: Session | null = null;
   private pendingStudentUpdate: Student | null = null;
@@ -259,6 +264,37 @@ export class SessionDialog implements OnInit {
     return false;
   }
 
+  /**
+   * Returns true if the session may proceed. When the selected student already
+   * has a saved monthly schedule, an individual (non-series) TUTORING session is
+   * "extra" and may push them past the sessions/week their package allows. We
+   * surface a soft "Save Anyway" warning (override) rather than a hard stop:
+   * returns false while the warning is shown; `proceed` runs on confirm.
+   */
+  private passesScheduleGate(proceed: () => void): boolean {
+    if (this.selectedType !== SessionType.TUTORING || this.scheduleWarningOverridden) {
+      return true;
+    }
+    // Editing an occurrence that's already part of the schedule isn't an extra session.
+    if (this.dialogData.type !== 'create' && this.dialogData.session.series_id) {
+      return true;
+    }
+    const student = this.selectedStudentObj;
+    const schedule = student?.schedule;
+    if (!student || !schedule || schedule.length === 0) {
+      return true;
+    }
+    const perWeek = this.selectedPackageDef?.sessionsPerWeek ?? schedule.length;
+    const pkg = student.package ? ` (${student.package} package)` : '';
+    this.scheduleWarningMessage =
+      `${student.name} already has a monthly schedule of ${perWeek} session(s)/week${pkg}. `
+      + 'This individual session is outside that schedule and may exceed the sessions '
+      + 'their package allows. Save it anyway?';
+    this.pendingAction = () => { this.scheduleWarningOverridden = true; proceed(); };
+    this.showScheduleWarning = true;
+    return false;
+  }
+
   /** True if the tutor has no availability set (skip) or the session fits within a block. */
   private isWithinAvailability(): boolean {
     if (!this.date || !this.startTime || !this.endTime) return true;
@@ -326,6 +362,19 @@ export class SessionDialog implements OnInit {
     this.showAvailabilityConfirm = false;
     this.pendingAction = null;
     this.availabilityOverridden = false;
+  }
+
+  confirmScheduleWarning(): void {
+    this.showScheduleWarning = false;
+    const action = this.pendingAction;
+    this.pendingAction = null;
+    action?.();
+  }
+
+  cancelScheduleWarning(): void {
+    this.showScheduleWarning = false;
+    this.pendingAction = null;
+    this.scheduleWarningOverridden = false;
   }
 
   cancelStatusChange(): void {
@@ -403,6 +452,9 @@ export class SessionDialog implements OnInit {
       if (!this.passesAvailabilityGate(() => this.createSession())) {
         return;
       }
+      if (!this.passesScheduleGate(() => this.createSession())) {
+        return;
+      }
       // Make-up sessions still draw from the banked make-up minutes.
       if (this.selectedType === SessionType.MAKE_UP) {
         const student = this.selectedStudentObj;
@@ -478,6 +530,9 @@ export class SessionDialog implements OnInit {
         return;
       }
       if (!this.passesAvailabilityGate(() => this.updateSession())) {
+        return;
+      }
+      if (!this.passesScheduleGate(() => this.updateSession())) {
         return;
       }
       let submitStartDate: Date = new Date(this.date);
