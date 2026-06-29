@@ -150,6 +150,12 @@
       <p>This session falls outside {{availabilityTutorName}}'s set availability. Do you want to save it anyway?</p>
     </div>
   }
+  @if (showScheduleWarning) {
+    <div class="status-confirm-warning">
+      <p><strong>⚠ Existing monthly schedule.</strong></p>
+      <p>{{scheduleWarningMessage}}</p>
+    </div>
+  }
   @if (showSeriesScopePrompt) {
     <div class="status-confirm-warning">
       <p><strong>This session is part of a series.</strong></p>
@@ -168,6 +174,9 @@
   } @else if (showAvailabilityConfirm) {
     <button matButton (click)="cancelAvailabilityOverride()">Go Back</button>
     <button matButton color="warn" (click)="confirmAvailabilityOverride()">Save Anyway</button>
+  } @else if (showScheduleWarning) {
+    <button matButton (click)="cancelScheduleWarning()">Go Back</button>
+    <button matButton color="warn" (click)="confirmScheduleWarning()">Save Anyway</button>
   } @else if (showStatusConfirm) {
     <button matButton (click)="cancelStatusChange()">Go Back</button>
     <button matButton color="warn" (click)="confirmStatusChange()">Confirm Update</button>

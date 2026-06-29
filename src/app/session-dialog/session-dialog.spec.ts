@@ -340,6 +340,124 @@ describe('SessionDialog', () => {
     });
   });
 
+  describe('schedule-conflict warning (individual sessions)', () => {
+    const scheduled = (over: Partial<Student> = {}): Student =>
+      student({
+        schedule: [
+          { weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00' },
+          { weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00' },
+        ],
+        ...over,
+      });
+
+    const scheduledEdit = (over: Partial<Session> = {}): SessionDialog => {
+      const c = build({
+        type: 'edit',
+        session: {
+          id: 'sess-1',
+          status: SessionStatus.PENDING,
+          start_datetime: '2026-06-01T10:00:00Z',
+          ...over,
+        } as Session,
+        existingSessions: [],
+      } as SessionDialogData);
+      c.tutors = [tutor()];
+      c.students = [scheduled()];
+      c.selectedTutor = 't-1';
+      c.selectedStudent = 's-1';
+      c.selectedType = SessionType.TUTORING;
+      c.date = new Date(2026, 5, 1);
+      c.startTime = new Date(2026, 5, 1, 10, 0);
+      c.endTime = new Date(2026, 5, 1, 11, 0);
+      c.selectedAttendance = SessionStatus.PENDING;
+      return c;
+    };
+
+    it('warns before creating an individual session for a scheduled student', () => {
+      const c = primedCreate();
+      c.students = [scheduled()];
+      c.createSession();
+      expect(c.showScheduleWarning).toBe(true);
+      expect(c.scheduleWarningMessage).toContain('2 session(s)/week');
+      expect(c.scheduleWarningMessage).toContain(Package.DETERMINATION);
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+    });
+
+    it('creates the session after the warning is confirmed', () => {
+      const c = primedCreate();
+      c.students = [scheduled()];
+      c.createSession();
+      sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
+      c.confirmScheduleWarning();
+      expect(sessionsService.createSession).toHaveBeenCalled();
+      expect(c.showScheduleWarning).toBe(false);
+    });
+
+    it('cancelling the warning aborts and lets it re-trigger', () => {
+      const c = primedCreate();
+      c.students = [scheduled()];
+      c.createSession();
+      c.cancelScheduleWarning();
+      expect(c.showScheduleWarning).toBe(false);
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+      // Not permanently overridden — a second attempt warns again.
+      c.createSession();
+      expect(c.showScheduleWarning).toBe(true);
+    });
+
+    it('does not warn for a student without a saved schedule', () => {
+      const c = primedCreate(); // default student has no schedule
+      sessionsService.createSession.mockReturnValue(of({ id: 'ok' }));
+      c.createSession();
+      expect(c.showScheduleWarning).toBe(false);
+      expect(sessionsService.createSession).toHaveBeenCalled();
+    });
+
+    it('does not warn for a make-up session even if a schedule exists', () => {
+      const c = primedCreate();
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [scheduled()];
+      sessionsService.createSession.mockReturnValue(of({ id: 'ok' }));
+      c.createSession();
+      expect(c.showScheduleWarning).toBe(false);
+      expect(sessionsService.createSession).toHaveBeenCalled();
+    });
+
+    it('falls back to the schedule length when the package is unconfigured', () => {
+      const c = primedCreate();
+      c.students = [scheduled({ package: Package.CUSTOM })]; // resolvePackageDef → null
+      c.createSession();
+      expect(c.showScheduleWarning).toBe(true);
+      expect(c.scheduleWarningMessage).toContain('2 session(s)/week'); // from schedule.length
+    });
+
+    it('omits the package suffix when the student has no package set', () => {
+      const c = primedCreate();
+      c.students = [scheduled({ package: undefined })];
+      c.createSession();
+      expect(c.showScheduleWarning).toBe(true);
+      expect(c.scheduleWarningMessage).toContain('2 session(s)/week.');
+      expect(c.scheduleWarningMessage).not.toContain('package).');
+    });
+
+    it('warns when editing a non-series individual session for a scheduled student', () => {
+      const c = scheduledEdit();
+      c.updateSession();
+      expect(c.showScheduleWarning).toBe(true);
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+    });
+
+    it('does not warn when editing an occurrence that belongs to the schedule', () => {
+      const c = scheduledEdit({ series_id: 'series-1' });
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.updateSession();
+      expect(c.showSeriesScopePrompt).toBe(true); // series sessions prompt for scope first
+      c.chooseSeriesScope('single');
+      expect(c.showScheduleWarning).toBe(false);
+      expect(sessionsService.updateSession).toHaveBeenCalled();
+    });
+  });
+
   describe('createSchedule (monthly)', () => {
     // July 2026: 1st is a Wednesday. Mondays: 6,13,20,27. Wednesdays: 1,8,15,22,29.
     const primedSchedule = (over: Partial<Student> = {}): SessionDialog => {
