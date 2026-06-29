@@ -271,6 +271,105 @@ describe('Contact', () => {
     });
   });
 
+  describe('cancel, discard, auto-renew', () => {
+    const seedStudent = (c: Contact) => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT,
+              schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' }] }]),
+      );
+      c.ngOnInit();
+    };
+
+    it('cancels a student edit, reverting changes and exiting edit mode', () => {
+      const c = build();
+      seedStudent(c);
+      c.setStudentsEditIndex(0);
+      students(c).at(0).get('name')?.setValue('Changed');
+      c.cancelStudentEdit(0);
+      expect(students(c).at(0).get('name')?.value).toBe('Pat');
+      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
+      expect(studentService.deleteStudent).not.toHaveBeenCalled();
+    });
+
+    it('cancels a newly added student by removing the placeholder', () => {
+      const c = build();
+      c.ngOnInit();
+      studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
+      c.addStudent();
+      studentService.deleteStudent.mockReturnValue(of({ message: 'deleted' }));
+      c.cancelStudentEdit(0);
+      expect(studentService.deleteStudent).toHaveBeenCalledWith('s-new');
+      expect(students(c).length).toBe(0);
+      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
+    });
+
+    it('cancels a note edit, reverting changes', () => {
+      const c = build();
+      noteService.getNotesByRecipient.mockReturnValue(of([{ id: 'n-1', message: 'hi' } as Note]));
+      c.ngOnInit();
+      c.setNotesEditIndex(0);
+      notes(c).at(0).get('message')?.setValue('changed');
+      c.cancelNoteEdit(0);
+      expect(notes(c).at(0).get('message')?.value).toBe('hi');
+      expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(-1);
+    });
+
+    it('cancels a newly added note by removing the placeholder', () => {
+      const c = build();
+      c.ngOnInit();
+      noteService.createNote.mockReturnValue(of({ id: 'n-new', message: 'm' }));
+      c.addNote();
+      noteService.deleteNote.mockReturnValue(of({ message: 'deleted' }));
+      c.cancelNoteEdit(0);
+      expect(noteService.deleteNote).toHaveBeenCalledWith('n-new');
+      expect(notes(c).length).toBe(0);
+    });
+
+    it('discards contact form changes back to the loaded record', () => {
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['first_name'].setValue('Zzz');
+      form(c).markAsDirty();
+      c.discardContactChanges();
+      expect(form(c).controls['first_name'].value).toBe('Ada');
+      expect(form(c).pristine).toBe(true);
+    });
+
+    it('toggles auto-renew and persists the student', () => {
+      const c = build();
+      seedStudent(c);
+      studentService.updateStudent.mockReturnValue(of({ id: 's-1' } as Student));
+      c.toggleAutoRenew(0, true);
+      expect(students(c).at(0).get('auto_renew')?.value).toBe(true);
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ auto_renew: true }),
+      );
+    });
+
+    it('reverts the auto-renew toggle when the save fails', () => {
+      const c = build();
+      seedStudent(c);
+      students(c).at(0).get('auto_renew')?.setValue(false);
+      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
+      c.toggleAutoRenew(0, true);
+      expect(students(c).at(0).get('auto_renew')?.value).toBe(false);
+    });
+
+    it('cancel without a prior edit snapshot just exits edit mode', () => {
+      const c = build();
+      seedStudent(c); // no setStudentsEditIndex → no snapshot
+      c.cancelStudentEdit(0);
+      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
+      expect(studentService.deleteStudent).not.toHaveBeenCalled();
+    });
+
+    it('discard with no loaded contact only resets the form state', () => {
+      const c = build(); // no ngOnInit → loadedContact undefined
+      expect(() => c.discardContactChanges()).not.toThrow();
+      expect(form(c).pristine).toBe(true);
+    });
+  });
+
   describe('account management', () => {
     it('creates an account when the email and group are set', () => {
       const c = build();

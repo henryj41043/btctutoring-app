@@ -1,15 +1,6 @@
 <form class="contact-form">
   <div class="contact-section">
     <h2>Contact</h2>
-    <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
-      <mat-icon>save</mat-icon>
-    </button>
-    @if (updatedSuccessfully) {
-      <mat-icon style="color: green;">check</mat-icon>
-    }
-    @if (updateError) {
-      <mat-icon style="color: red;">close</mat-icon>
-    }
     @if (authService.isAdmin()) {
       <button matIconButton type="button" color="warn" (click)="openDeleteDialog()" aria-label="Delete contact">
         <mat-icon>delete</mat-icon>
@@ -115,7 +106,10 @@
             <button matIconButton type="button" (click)="saveNoteAt(i)" [hidden]="notesEditIndex !== i">
               <mat-icon>save</mat-icon>
             </button>
-            <button matIconButton type="button" (click)="deleteNoteAt(i)">
+            <button matIconButton type="button" (click)="cancelNoteEdit(i)" [hidden]="notesEditIndex !== i" aria-label="Cancel edit">
+              <mat-icon>close</mat-icon>
+            </button>
+            <button matIconButton type="button" (click)="deleteNoteAt(i)" [hidden]="notesEditIndex === i">
               <mat-icon>delete</mat-icon>
             </button>
           </mat-card-actions>
@@ -193,6 +187,15 @@
                       <mat-icon style="color: red;">close</mat-icon>
                     }
                   </div>
+                  @if (studentControl.get('schedule')?.value?.length) {
+                    <div class="auto-renew-row">
+                      <span>Auto-renew schedule:</span>
+                      <mat-slide-toggle
+                        [checked]="studentControl.get('auto_renew')?.value"
+                        (change)="toggleAutoRenew(i, $event.checked)">
+                      </mat-slide-toggle>
+                    </div>
+                  }
                 </div>
               </div>
               <div [hidden]="studentsEditIndex !== i">
@@ -254,7 +257,10 @@
               <button matIconButton type="button" (click)="saveStudentAt(i)" [hidden]="studentsEditIndex !== i">
                 <mat-icon>save</mat-icon>
               </button>
-              <button matIconButton type="button" (click)="deleteStudentAt(i)">
+              <button matIconButton type="button" (click)="cancelStudentEdit(i)" [hidden]="studentsEditIndex !== i" aria-label="Cancel edit">
+                <mat-icon>close</mat-icon>
+              </button>
+              <button matIconButton type="button" (click)="deleteStudentAt(i)" [hidden]="studentsEditIndex === i">
                 <mat-icon>delete</mat-icon>
               </button>
             </mat-card-actions>
@@ -266,15 +272,6 @@
   <div class="contact-billing contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>BTC Tutor Information</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
-        <mat-icon>save</mat-icon>
-      </button>
-      @if (updatedSuccessfully) {
-        <mat-icon style="color: green;">check</mat-icon>
-      }
-      @if (updateError) {
-        <mat-icon style="color: red;">close</mat-icon>
-      }
       <div class="scholarship-grid">
         <mat-form-field>
           <mat-label>Title</mat-label>
@@ -341,15 +338,6 @@
       </div>
     } @else if (students.length > 0 && students.at(0).get('scholarship')?.value) {
       <h2>Scholarship</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
-        <mat-icon>save</mat-icon>
-      </button>
-      @if (updatedSuccessfully) {
-        <mat-icon style="color: green;">check</mat-icon>
-      }
-      @if (updateError) {
-        <mat-icon style="color: red;">close</mat-icon>
-      }
       <div class="scholarship-grid">
         <mat-form-field>
           <mat-label>Scholarship State</mat-label>
@@ -388,15 +376,6 @@
       </div>
     } @else {
       <h2>Billing</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
-        <mat-icon>save</mat-icon>
-      </button>
-      @if (updatedSuccessfully) {
-        <mat-icon style="color: green;">check</mat-icon>
-      }
-      @if (updateError) {
-        <mat-icon style="color: red;">close</mat-icon>
-      }
       <div class="billing-grid">
         <p class="billing-note">Charges and payment tracking now live on the <strong>Billing</strong> page.</p>
         <mat-checkbox formControlName="cc_authorization_received">CC Authorization Received</mat-checkbox>
@@ -419,15 +398,6 @@
   <div class="contact-onboarding contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>Hiring Process</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
-        <mat-icon>save</mat-icon>
-      </button>
-      @if (updatedSuccessfully) {
-        <mat-icon style="color: green;">check</mat-icon>
-      }
-      @if (updateError) {
-        <mat-icon style="color: red;">close</mat-icon>
-      }
       <div class="onboarding-grid">
         <mat-form-field>
           <mat-label>Hiring Inquiry Received</mat-label>
@@ -468,15 +438,6 @@
       </div>
     } @else {
       <h2>Onboarding</h2>
-      <button matIconButton type="button" (click)="updateContact()" [hidden]="(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError">
-        <mat-icon>save</mat-icon>
-      </button>
-      @if (updatedSuccessfully) {
-        <mat-icon style="color: green;">check</mat-icon>
-      }
-      @if (updateError) {
-        <mat-icon style="color: red;">close</mat-icon>
-      }
       <div class="onboarding-grid">
         <mat-form-field>
           <mat-label>Inquiry Received</mat-label>
@@ -522,4 +483,18 @@
       </div>
     }
   </div>
+
+  @if (!(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError) {
+    <div class="contact-save-bar">
+      @if (updatedSuccessfully) {
+        <span class="save-status save-status--ok"><mat-icon>check</mat-icon> Saved</span>
+      } @else if (updateError) {
+        <span class="save-status save-status--err"><mat-icon>close</mat-icon> Save failed</span>
+      } @else {
+        <span class="save-bar-text">You have unsaved changes</span>
+        <button matButton type="button" (click)="discardContactChanges()">Discard</button>
+        <button mat-raised-button color="primary" type="button" (click)="updateContact()">Save</button>
+      }
+    </div>
+  }
 </form>

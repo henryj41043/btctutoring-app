@@ -163,3 +163,42 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Single sticky save bar for the whole contact form (replaces per-section save buttons) */
+.contact-save-bar {
+  grid-column: 1 / -1;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--btc-card);
+  color: var(--btc-ink);
+  border: 1px solid color-mix(in srgb, var(--btc-sky) 45%, transparent);
+  border-radius: var(--btc-radius);
+  box-shadow: var(--btc-shadow-md);
+
+  .save-bar-text,
+  .save-status {
+    margin-right: auto;
+    font-weight: 600;
+  }
+
+  .save-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .save-status--ok { color: green; }
+  .save-status--err { color: var(--mat-sys-error, red); }
+}
+
+.auto-renew-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}

@@ -21,6 +21,7 @@ import {Note} from '../models/note.model';
 import {Status} from '../enums/status.enum';
 import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {UserGroup} from '../enums/user-group.enum';
 import {AuthService} from '../services/auth.service';
@@ -48,6 +49,7 @@ import {Router} from '@angular/router';
     MatSelectModule,
     MatIconModule,
     MatCheckbox,
+    MatSlideToggleModule,
     DatePipe,
     MatDatepickerModule,
     MatProgressSpinnerModule,
@@ -139,6 +141,15 @@ export class Contact implements OnInit {
   });
   protected notesEditIndex: number = -1;
   protected studentsEditIndex: number = -1;
+  // Snapshots of the card being edited, so Cancel can revert unsaved changes.
+  private studentEditSnapshot: Record<string, unknown> | null = null;
+  private noteEditSnapshot: Record<string, unknown> | null = null;
+  // Ids of cards added this session but not yet saved with real data — Cancel
+  // on one of these removes the placeholder record entirely.
+  private readonly newStudentIds = new Set<string>();
+  private readonly newNoteIds = new Set<string>();
+  // The contact as last loaded/saved, used to discard unsaved form changes.
+  private loadedContact?: _Contact;
   protected readonly Service = Service;
   protected readonly Package = Package;
   protected updatedSuccessfully: boolean = false;
@@ -238,6 +249,7 @@ export class Contact implements OnInit {
         return EMPTY;
       })
     ).subscribe(contacts => {
+      this.loadedContact = contacts[0];
       this.buildContactForm(contacts[0]);
       this.contactLoading = false;
     });
@@ -372,13 +384,79 @@ export class Contact implements OnInit {
   }
 
   setNotesEditIndex(index: number) {
+    if (index >= 0) {
+      this.noteEditSnapshot = this.notes.at(index)?.getRawValue() as Record<string, unknown>;
+    }
     this.notesEditIndex = index;
     this.cdr.markForCheck();
   }
 
   setStudentsEditIndex(index: number) {
+    if (index >= 0) {
+      this.studentEditSnapshot = this.students.at(index)?.getRawValue() as Record<string, unknown>;
+    }
     this.studentsEditIndex = index;
     this.cdr.markForCheck();
+  }
+
+  /** Cancels editing a student card: a brand-new card is removed entirely, an
+   *  existing one is reverted to its values from when editing began. */
+  cancelStudentEdit(index: number) {
+    const group = this.students.at(index)!;
+    const id = group.get('id')!.value as string;
+    this.studentsEditIndex = -1;
+    if (this.newStudentIds.has(id)) {
+      this.newStudentIds.delete(id);
+      this.deleteStudentAt(index);
+      return;
+    }
+    if (this.studentEditSnapshot) {
+      group.reset(this.studentEditSnapshot);
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Cancels editing a note card (see {@link cancelStudentEdit}). */
+  cancelNoteEdit(index: number) {
+    const group = this.notes.at(index)!;
+    const id = group.get('id')!.value as string;
+    this.notesEditIndex = -1;
+    if (this.newNoteIds.has(id)) {
+      this.newNoteIds.delete(id);
+      this.deleteNoteAt(index);
+      return;
+    }
+    if (this.noteEditSnapshot) {
+      group.reset(this.noteEditSnapshot);
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Reverts all unsaved changes to the contact form back to the loaded record. */
+  discardContactChanges() {
+    if (this.loadedContact) {
+      this.buildContactForm(this.loadedContact);
+    }
+    this.contactForm.markAsPristine();
+    this.contactForm.markAsUntouched();
+    this.cdr.markForCheck();
+  }
+
+  /** Turns a student's monthly auto-renew on/off and persists immediately. */
+  toggleAutoRenew(index: number, checked: boolean) {
+    const group = this.students.at(index)!;
+    group.get('auto_renew')!.setValue(checked);
+    const student: Student = group.getRawValue() as Student;
+    this.studentService.updateStudent(student).pipe(
+      catchError(error => {
+        console.log(error);
+        group.get('auto_renew')!.setValue(!checked); // revert on failure
+        this.cdr.markForCheck();
+        return EMPTY;
+      })
+    ).subscribe(() => {
+      this.cdr.markForCheck();
+    });
   }
 
   deleteNoteAt(index: number) {
@@ -426,6 +504,7 @@ export class Contact implements OnInit {
       )
       .subscribe(note => {
         console.log(`Note ${note.id} updated successfully.`);
+        this.newNoteIds.delete(noteToSave.id!);
         this.setNotesEditIndex(-1);
       });
   }
@@ -441,6 +520,7 @@ export class Contact implements OnInit {
       )
       .subscribe(student => {
         console.log(`Student ${student.id} updated successfully.`);
+        this.newStudentIds.delete(studentToSave.id!);
         this.setStudentsEditIndex(-1);
       });
   }
@@ -478,6 +558,7 @@ export class Contact implements OnInit {
           type: '',
         }));
         this.notes.updateValueAndValidity();
+        this.newNoteIds.add(response.id);
         this.setNotesEditIndex(0);
       });
   }
@@ -511,6 +592,7 @@ export class Contact implements OnInit {
         make_up_minutes: 0
       }));
       this.students.updateValueAndValidity();
+      this.newStudentIds.add(response.id);
       this.setStudentsEditIndex(this.students.controls.length - 1);
     });
   }
