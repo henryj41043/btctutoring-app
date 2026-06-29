@@ -1,0 +1,91 @@
+<h2 mat-dialog-title>
+  @if (isEdit) { Manage Schedule } @else { Set Up Schedule }
+  @if (student.name) { — {{student.name}} }
+</h2>
+<mat-dialog-content>
+  @if (!def) {
+    <p class="schedule-info">
+      {{student.name}}'s package isn't configured. Custom-package students need their package
+      values set first.
+    </p>
+  } @else {
+    <p class="schedule-info">
+      {{student.package}}: {{def.sessionsPerWeek}} session(s)/week, {{def.sessionLengthMin}} min each.
+      @if (isEdit) {
+        Editing regenerates this month's remaining sessions.
+      } @else {
+        The start date's month is filled automatically.
+      }
+    </p>
+
+    @if (!isEdit) {
+      <mat-form-field>
+        <mat-label>Start date</mat-label>
+        <input matInput [matDatepicker]="startpicker" [(ngModel)]="startDate">
+        <mat-datepicker #startpicker/>
+        <mat-datepicker-toggle [for]="startpicker" matSuffix/>
+      </mat-form-field>
+      <br/>
+    }
+
+    <div class="schedule-slots">
+      @for (slot of scheduleSlots; track $index) {
+        <div class="slot-row">
+          <mat-form-field>
+            <mat-label>Day {{$index + 1}}</mat-label>
+            <mat-select [(ngModel)]="slot.weekday">
+              @for (day of weekdayOptions; track day) {
+                <mat-option [value]="day">{{weekdayLabels[day]}}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Start time</mat-label>
+            <mat-select [(ngModel)]="slot.start_time">
+              @for (t of timeOptions; track t.value) {
+                <mat-option [value]="t.value">{{t.label}}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+      }
+    </div>
+
+    <mat-slide-toggle [(ngModel)]="autoRenew">Auto-renew this schedule each month</mat-slide-toggle>
+  }
+
+  @if (showAvailabilityConfirm) {
+    <div class="status-confirm-warning">
+      <p><strong>⚠ Outside tutor availability.</strong></p>
+      <p>{{availabilityFailCount}} session(s) fall outside {{availabilityTutorName}}'s set
+        availability. Do you want to save anyway?</p>
+    </div>
+  }
+  @if (showDeleteConfirm) {
+    <div class="status-confirm-warning">
+      <p><strong>⚠ Delete this schedule?</strong></p>
+      <p>This removes the recurring schedule, turns off auto-renew, and deletes this month's
+        upcoming (not-yet-held) sessions. Past and completed sessions are kept.</p>
+    </div>
+  }
+  @if (hasError) {
+    <mat-error>{{errorMessage}}</mat-error>
+  }
+</mat-dialog-content>
+<mat-dialog-actions>
+  @if (showAvailabilityConfirm) {
+    <button matButton (click)="cancelAvailabilityOverride()">Go Back</button>
+    <button matButton color="warn" (click)="confirmAvailabilityOverride()">Save Anyway</button>
+  } @else if (showDeleteConfirm) {
+    <button matButton (click)="cancelDelete()">Go Back</button>
+    <button matButton color="warn" (click)="confirmDelete()">Delete Schedule</button>
+  } @else {
+    <button matButton (click)="cancel()">Cancel</button>
+    @if (isEdit) {
+      <button matButton color="warn" [disabled]="saving" (click)="requestDelete()">Delete</button>
+    }
+    <button matButton [disabled]="saving || !def" (click)="save()">
+      @if (isEdit) { Save } @else { Create }
+    </button>
+  }
+</mat-dialog-actions>

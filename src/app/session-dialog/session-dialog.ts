@@ -15,7 +15,6 @@ import {MatTimepickerModule} from '@angular/material/timepicker';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSelectModule} from '@angular/material/select';
-import {MatCheckboxModule} from '@angular/material/checkbox';
 import {SessionsService} from '../services/sessions.service';
 import {Session} from '../models/session.model';
 import {Response} from '../models/response.model';
@@ -29,15 +28,8 @@ import {Student} from '../models/student.model';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {AuthService} from '../services/auth.service';
-import {Weekday, WEEKDAY_BY_JS_DAY, WEEKDAY_LABELS} from '../enums/weekday.enum';
+import {ScheduleService} from '../services/schedule.service';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
-import {ScheduleSlot} from '../utils/proration';
-
-/** A schedule slot the admin is editing (weekday not yet picked until chosen). */
-interface ScheduleSlotInput {
-  weekday: Weekday | null;
-  start_time: string; // 'HH:mm'
-}
 
 @Component({
   selector: 'app-session-dialog',
@@ -53,7 +45,6 @@ interface ScheduleSlotInput {
     MatTimepickerModule,
     MatDatepickerModule,
     MatSelectModule,
-    MatCheckboxModule,
   ],
   templateUrl: './session-dialog.html',
   standalone: true,
@@ -94,17 +85,6 @@ export class SessionDialog implements OnInit {
   private pendingSession: Session | null = null;
   private pendingStudentUpdate: Student | null = null;
 
-  // Monthly schedule (create, TUTORING only). Replaces the old available-minutes
-  // "series" flow: the admin picks one slot per weekly session (count fixed by
-  // the package), and the system fills the rest of the current month.
-  createScheduleMode: boolean = false;
-  scheduleSlots: ScheduleSlotInput[] = [];
-  autoRenew: boolean = true;
-  readonly weekdayOptions: Weekday[] = Object.values(Weekday);
-  readonly weekdayLabels = WEEKDAY_LABELS;
-  /** 15-min increments 6:00 AM–9:00 PM as { value: 'HH:mm', label: '1:00 PM' }. */
-  readonly timeOptions: {value: string; label: string}[] = this.buildTimeOptions();
-
   // Series edit/delete scope ("this occurrence" vs "this and future")
   showSeriesScopePrompt: boolean = false;
   private seriesScope: 'single' | 'future' | null = null;
@@ -115,6 +95,7 @@ export class SessionDialog implements OnInit {
   contactService: ContactService = inject(ContactService);
   studentService: StudentService = inject(StudentService);
   authService: AuthService = inject(AuthService);
+  scheduleService: ScheduleService = inject(ScheduleService);
 
   get selectedStudentObj(): Student | undefined {
     return this.students.find(s => s.id === this.selectedStudent);
@@ -306,49 +287,7 @@ export class SessionDialog implements OnInit {
   /** Availability check for a specific occurrence date and explicit time range (in minutes). */
   private isDateTimeWithinAvailability(date: Date, startMin: number, endMin: number): boolean {
     const tutor = this.tutors.find(t => t.id === this.selectedTutor);
-    if (!tutor || !tutor.availability || tutor.availability.length === 0) return true;
-
-    const weekday = WEEKDAY_BY_JS_DAY[date.getDay()];
-    return tutor.availability.some(block =>
-      block.days.includes(weekday) &&
-      this.timeStringToMinutes(block.start_time) <= startMin &&
-      this.timeStringToMinutes(block.end_time) >= endMin,
-    );
-  }
-
-  private timeStringToMinutes(time: string): number {
-    const [h, m] = (time ?? '').split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  }
-
-  /** A copy of `date` with its time set from a 'HH:mm' string. */
-  private atTime(date: Date, time: string): Date {
-    const total = this.timeStringToMinutes(time);
-    const d = new Date(date);
-    d.setHours(Math.floor(total / 60), total % 60, 0, 0);
-    return d;
-  }
-
-  /** Adds minutes to a 'HH:mm' time string, returning a 'HH:mm' string. */
-  private addMinutesToTime(time: string, minutes: number): string {
-    const total = this.timeStringToMinutes(time) + minutes;
-    const h = Math.floor(total / 60) % 24;
-    const m = total % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  }
-
-  private buildTimeOptions(): {value: string; label: string}[] {
-    const options: {value: string; label: string}[] = [];
-    for (let minutes = 6 * 60; minutes <= 21 * 60; minutes += 15) {
-      const h24 = Math.floor(minutes / 60);
-      const m = minutes % 60;
-      const value = `${h24.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      const period = h24 < 12 ? 'AM' : 'PM';
-      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-      const label = `${h12}:${m.toString().padStart(2, '0')} ${period}`;
-      options.push({value, label});
-    }
-    return options;
+    return this.scheduleService.isDateTimeWithinAvailability(tutor, date, startMin, endMin);
   }
 
   confirmAvailabilityOverride(): void {
@@ -411,32 +350,11 @@ export class SessionDialog implements OnInit {
     }
   }
 
-  /** Reseeds the schedule slot rows to match the selected package's sessions/week. */
-  onScheduleModeChange(): void {
-    this.seedScheduleSlots();
-  }
-
   onStudentChange(studentId: string): void {
     this.selectedStudent = studentId;
-    this.seedScheduleSlots();
-  }
-
-  private seedScheduleSlots(): void {
-    const def = this.selectedPackageDef;
-    const target = this.createScheduleMode && def ? def.sessionsPerWeek : 0;
-    const next: ScheduleSlotInput[] = [];
-    for (let i = 0; i < target; i++) {
-      next.push(this.scheduleSlots[i] ?? {weekday: null, start_time: ''});
-    }
-    this.scheduleSlots = next;
   }
 
   createSession(): void {
-    // Monthly schedule creation is a separate flow (regular tutoring only).
-    if (this.createScheduleMode && this.selectedType === SessionType.TUTORING) {
-      this.createSchedule();
-      return;
-    }
     if(this.date && this.startTime && this.endTime) {
       if(this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
@@ -639,142 +557,6 @@ export class SessionDialog implements OnInit {
     });
   }
 
-  // ── Monthly schedule ──────────────────────────────────────────────────────
-  createSchedule(): void {
-    if (!this.date) {
-      this.errorMessage = 'Please choose a start date.';
-      this.hasError = true;
-      return;
-    }
-    const student = this.selectedStudentObj;
-    if (!student) {
-      this.errorMessage = 'Please select a student.';
-      this.hasError = true;
-      return;
-    }
-    const def = this.selectedPackageDef;
-    if (!def) {
-      this.errorMessage = `${student.name}'s package isn't configured. Custom packages need their values set on the student first.`;
-      this.hasError = true;
-      return;
-    }
-    if (this.scheduleSlots.length !== def.sessionsPerWeek) {
-      this.errorMessage = `${student.package} requires ${def.sessionsPerWeek} session(s) per week.`;
-      this.hasError = true;
-      return;
-    }
-    if (this.scheduleSlots.some(s => !s.weekday || !s.start_time)) {
-      this.errorMessage = 'Please choose a day and start time for every session.';
-      this.hasError = true;
-      return;
-    }
-
-    // Finalize each slot's end time from the package's fixed session length.
-    const slots: ScheduleSlot[] = this.scheduleSlots.map(s => ({
-      weekday: s.weekday as Weekday,
-      start_time: s.start_time,
-      end_time: this.addMinutesToTime(s.start_time, def.sessionLengthMin),
-    }));
-
-    // Generate every occurrence from the start date through the end of its month.
-    const occurrences: {date: Date; slot: ScheduleSlot}[] = [];
-    for (const slot of slots) {
-      for (const date of this.generateMonthOccurrences(this.date, slot.weekday)) {
-        occurrences.push({date, slot});
-      }
-    }
-    if (occurrences.length === 0) {
-      this.errorMessage = 'The chosen days have no sessions left in this month. Pick an earlier start date or different days.';
-      this.hasError = true;
-      return;
-    }
-
-    // Validate each occurrence against the tutor's availability.
-    if (!this.availabilityOverridden) {
-      const failing = occurrences.filter(o => !this.isDateTimeWithinAvailability(
-        o.date,
-        this.timeStringToMinutes(o.slot.start_time),
-        this.timeStringToMinutes(o.slot.end_time),
-      ));
-      if (failing.length > 0) {
-        const tutor = this.tutors.find(t => t.id === this.selectedTutor);
-        this.availabilityTutorName = tutor?.first_name ?? 'this tutor';
-        if (this.authService.isAdmin()) {
-          this.pendingAction = () => { this.availabilityOverridden = true; this.createSchedule(); };
-          this.showAvailabilityConfirm = true;
-          return;
-        } else {
-          this.errorMessage = `${failing.length} of ${occurrences.length} session(s) fall outside ${this.availabilityTutorName}'s availability.`;
-          this.hasError = true;
-          return;
-        }
-      }
-    }
-
-    const tutor = this.tutors.find(t => t.id === this.selectedTutor)!;
-    const seriesId = crypto.randomUUID();
-    const sessions: Session[] = occurrences.map(({date, slot}) => {
-      const start = this.atTime(date, slot.start_time);
-      const end = this.atTime(date, slot.end_time);
-      const s = new Session();
-      s.type = SessionType.TUTORING;
-      s.tutor_id = tutor.id;
-      s.tutor_name = tutor.first_name;
-      s.student_id = student.id;
-      s.student_name = student.name;
-      s.start_datetime = start.toISOString();
-      s.end_datetime = end.toISOString();
-      s.status = SessionStatus.PENDING;
-      s.notes = this.notes;
-      s.series_id = seriesId;
-      return s;
-    });
-
-    // Persist the schedule template on the student so auto-renew can repeat it,
-    // and record the package start date for first-month proration.
-    const updatedStudent: Student = {
-      ...student,
-      assigned_tutor_id: tutor.id,
-      schedule: slots,
-      package_start_date: new Date(this.date.getFullYear(), this.date.getMonth(), this.date.getDate()).toISOString(),
-      auto_renew: this.autoRenew,
-    };
-
-    this.sessionsService.createSessions(sessions).pipe(
-      catchError(err => {
-        this.errorMessage = 'Create monthly schedule failed';
-        this.hasError = true;
-        return EMPTY;
-      })
-    ).subscribe(() => {
-      this.studentService.updateStudent(updatedStudent).pipe(
-        catchError(err => {
-          // Sessions were created; surface the schedule-save failure.
-          this.errorMessage = 'Sessions created, but saving the schedule failed.';
-          this.hasError = true;
-          return EMPTY;
-        })
-      ).subscribe(() => {
-        this.hasError = false;
-        this.dialogRef.close({created: sessions.length});
-      });
-    });
-  }
-
-  /** Every date from `start` (inclusive) through the end of start's month that falls on `weekday`. */
-  private generateMonthOccurrences(start: Date, weekday: Weekday): Date[] {
-    const result: Date[] = [];
-    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-    const endOfMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-    while (cursor <= endOfMonth) {
-      if (WEEKDAY_BY_JS_DAY[cursor.getDay()] === weekday) {
-        result.push(new Date(cursor));
-      }
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    return result;
-  }
-
   private updateSeriesFuture(): void {
     const current = this.dialogData.session;
     const tutor = this.tutors.find(t => t.id === this.selectedTutor);
@@ -919,7 +701,6 @@ export class SessionDialog implements OnInit {
     this.selectedTutor = tutorId;
     this.selectedStudent = undefined;
     this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === tutorId);
-    this.seedScheduleSlots();
   }
 
   private getStudents() {
