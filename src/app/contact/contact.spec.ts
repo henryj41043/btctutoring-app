@@ -152,6 +152,95 @@ describe('Contact', () => {
     expect(() => c.ngOnInit()).not.toThrow();
   });
 
+  it('initializes form defaults, validators and view state', () => {
+    const c = build();
+    const f = form(c);
+    const ci = c as unknown as Record<string, unknown>;
+
+    for (const key of [
+      'id', 'first_name', 'last_name', 'email', 'phone_number', 'service', 'status',
+      'billing_cycle', 'special_circumstance', 'scholarship_state', 'invoice_Month',
+      'invoice_number', 'inquiry_note_from_parent', 'scholarship_name', 'title',
+      'zoom_link', 'user_group',
+    ]) {
+      expect(f.controls[key].value).toBe('');
+    }
+    for (const key of [
+      'cc_authorization_received', 'twenty_five_deducted', 'twenty_five_received',
+      'scholarship_student', 'currently_accepting_students', 'user_profile_created',
+    ]) {
+      expect(f.controls[key].value).toBe(false);
+    }
+    expect(f.controls['hourly_rate'].value).toBe(0);
+
+    // Required + format validators (kills mutants that drop the validator array).
+    f.controls['id'].setValue('');
+    f.controls['first_name'].setValue('');
+    f.controls['service'].setValue('');
+    expect(f.controls['id'].hasError('required')).toBe(true);
+    expect(f.controls['first_name'].hasError('required')).toBe(true);
+    expect(f.controls['service'].hasError('required')).toBe(true);
+    f.controls['email'].setValue('');
+    expect(f.controls['email'].hasError('required')).toBe(true);
+    f.controls['email'].setValue('not-an-email');
+    expect(f.controls['email'].hasError('email')).toBe(true);
+    f.controls['phone_number'].setValue('123');
+    expect(f.controls['phone_number'].hasError('phoneNumber')).toBe(true);
+
+    // Class-field default state.
+    expect(ci['contactLoading']).toBe(true);
+    expect(ci['studentsLoading']).toBe(true);
+    expect(ci['notesLoading']).toBe(true);
+    expect(ci['accountCreated']).toBe(false);
+    expect(ci['accountError']).toBe(false);
+    expect(ci['accountLoading']).toBe(false);
+    expect(ci['notesEditIndex']).toBe(-1);
+    expect(ci['studentsEditIndex']).toBe(-1);
+    expect(ci['updatedSuccessfully']).toBe(false);
+    expect(ci['updateError']).toBe(false);
+    expect(ci['rosterColumns']).toEqual(['name', 'status', 'package', 'make_up_minutes', 'scholarship']);
+  });
+
+  it('populates every form field from a loaded contact', () => {
+    const rich = fullContact({
+      first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x.com', phone_number: '1234567890',
+      service: Service.HIRING, status: Status.STAFF, billing_cycle: 'monthly',
+      cc_authorization_received: true, twenty_five_deducted: true, special_circumstance: 'note',
+      scholarship_state: 'TX', invoice_Month: 'July', invoice_number: 'INV-1',
+      inquiry_note_from_parent: 'hello', scholarship_name: 'Sch', title: 'Mr',
+      currently_accepting_students: true, zoom_link: 'http://z', hourly_rate: 42,
+      user_profile_created: true, user_group: 'Tutors', twenty_five_received: true,
+      scholarship_student: true,
+      availability: [{ days: ['MONDAY'], start_time: '09:00', end_time: '10:00' }],
+    });
+    contactService.getContact.mockReturnValue(of([rich]));
+    const c = build();
+    c.ngOnInit();
+    const f = form(c);
+
+    expect(f.controls['first_name'].value).toBe('Ada');
+    expect(f.controls['last_name'].value).toBe('Lovelace');
+    expect(f.controls['email'].value).toBe('ada@x.com');
+    expect(f.controls['phone_number'].value).toBe('1234567890');
+    expect(f.controls['billing_cycle'].value).toBe('monthly');
+    expect(f.controls['cc_authorization_received'].value).toBe(true);
+    expect(f.controls['twenty_five_deducted'].value).toBe(true);
+    expect(f.controls['special_circumstance'].value).toBe('note');
+    expect(f.controls['scholarship_state'].value).toBe('TX');
+    expect(f.controls['invoice_Month'].value).toBe('July');
+    expect(f.controls['invoice_number'].value).toBe('INV-1');
+    expect(f.controls['inquiry_note_from_parent'].value).toBe('hello');
+    expect(f.controls['scholarship_name'].value).toBe('Sch');
+    expect(f.controls['title'].value).toBe('Mr');
+    expect(f.controls['currently_accepting_students'].value).toBe(true);
+    expect(f.controls['zoom_link'].value).toBe('http://z');
+    expect(f.controls['hourly_rate'].value).toBe(42);
+    expect(f.controls['user_group'].value).toBe('Tutors');
+    expect(f.controls['twenty_five_received'].value).toBe(true);
+    expect(f.controls['scholarship_student'].value).toBe(true);
+    expect((c as unknown as { availabilityBlocks: { length: number } }).availabilityBlocks.length).toBe(1);
+  });
+
   describe('availability blocks', () => {
     it('adds and removes blocks', () => {
       const c = build();
@@ -268,6 +357,105 @@ describe('Contact', () => {
       expect(group.get('auto_renew')).toBeTruthy();
       expect(group.get('custom_monthly_cost')).toBeTruthy();
       expect(group.get('available_minutes')).toBeNull();
+    });
+  });
+
+  describe('cancel, discard, auto-renew', () => {
+    const seedStudent = (c: Contact) => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT,
+              schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' }] }]),
+      );
+      c.ngOnInit();
+    };
+
+    it('cancels a student edit, reverting changes and exiting edit mode', () => {
+      const c = build();
+      seedStudent(c);
+      c.setStudentsEditIndex(0);
+      students(c).at(0).get('name')?.setValue('Changed');
+      c.cancelStudentEdit(0);
+      expect(students(c).at(0).get('name')?.value).toBe('Pat');
+      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
+      expect(studentService.deleteStudent).not.toHaveBeenCalled();
+    });
+
+    it('cancels a newly added student by removing the placeholder', () => {
+      const c = build();
+      c.ngOnInit();
+      studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
+      c.addStudent();
+      studentService.deleteStudent.mockReturnValue(of({ message: 'deleted' }));
+      c.cancelStudentEdit(0);
+      expect(studentService.deleteStudent).toHaveBeenCalledWith('s-new');
+      expect(students(c).length).toBe(0);
+      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
+    });
+
+    it('cancels a note edit, reverting changes', () => {
+      const c = build();
+      noteService.getNotesByRecipient.mockReturnValue(of([{ id: 'n-1', message: 'hi' } as Note]));
+      c.ngOnInit();
+      c.setNotesEditIndex(0);
+      notes(c).at(0).get('message')?.setValue('changed');
+      c.cancelNoteEdit(0);
+      expect(notes(c).at(0).get('message')?.value).toBe('hi');
+      expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(-1);
+    });
+
+    it('cancels a newly added note by removing the placeholder', () => {
+      const c = build();
+      c.ngOnInit();
+      noteService.createNote.mockReturnValue(of({ id: 'n-new', message: 'm' }));
+      c.addNote();
+      noteService.deleteNote.mockReturnValue(of({ message: 'deleted' }));
+      c.cancelNoteEdit(0);
+      expect(noteService.deleteNote).toHaveBeenCalledWith('n-new');
+      expect(notes(c).length).toBe(0);
+    });
+
+    it('discards contact form changes back to the loaded record', () => {
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['first_name'].setValue('Zzz');
+      form(c).markAsDirty();
+      c.discardContactChanges();
+      expect(form(c).controls['first_name'].value).toBe('Ada');
+      expect(form(c).pristine).toBe(true);
+    });
+
+    it('toggles auto-renew and persists the student', () => {
+      const c = build();
+      seedStudent(c);
+      studentService.updateStudent.mockReturnValue(of({ id: 's-1' } as Student));
+      c.toggleAutoRenew(0, true);
+      expect(students(c).at(0).get('auto_renew')?.value).toBe(true);
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ auto_renew: true }),
+      );
+    });
+
+    it('reverts the auto-renew toggle when the save fails', () => {
+      const c = build();
+      seedStudent(c);
+      students(c).at(0).get('auto_renew')?.setValue(false);
+      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
+      c.toggleAutoRenew(0, true);
+      expect(students(c).at(0).get('auto_renew')?.value).toBe(false);
+    });
+
+    it('cancel without a prior edit snapshot just exits edit mode', () => {
+      const c = build();
+      seedStudent(c); // no setStudentsEditIndex → no snapshot
+      c.cancelStudentEdit(0);
+      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
+      expect(studentService.deleteStudent).not.toHaveBeenCalled();
+    });
+
+    it('discard with no loaded contact only resets the form state', () => {
+      const c = build(); // no ngOnInit → loadedContact undefined
+      expect(() => c.discardContactChanges()).not.toThrow();
+      expect(form(c).pristine).toBe(true);
     });
   });
 
