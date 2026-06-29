@@ -187,15 +187,16 @@
                       <mat-icon style="color: red;">close</mat-icon>
                     }
                   </div>
-                  @if (studentControl.get('schedule')?.value?.length) {
-                    <div class="auto-renew-row">
-                      <span>Auto-renew schedule:</span>
-                      <mat-slide-toggle
-                        [checked]="studentControl.get('auto_renew')?.value"
-                        (change)="toggleAutoRenew(i, $event.checked)">
-                      </mat-slide-toggle>
-                    </div>
-                  }
+                  <div class="schedule-summary">
+                    @if (studentControl.get('schedule')?.value?.length) {
+                      <span>Schedule: {{scheduleSummary(studentControl)}}</span>
+                      <span>Auto-renew: {{studentControl.get('auto_renew')?.value ? 'On' : 'Off'}}</span>
+                    } @else if (canManageSchedule(studentControl)) {
+                      <span>Schedule: None set</span>
+                    } @else {
+                      <span>Schedule: set a tutor &amp; package first</span>
+                    }
+                  </div>
                 </div>
               </div>
               <div [hidden]="studentsEditIndex !== i">
@@ -253,6 +254,11 @@
             <mat-card-actions>
               <button matIconButton type="button" (click)="setStudentsEditIndex(i)" [hidden]="studentsEditIndex === i">
                 <mat-icon>edit</mat-icon>
+              </button>
+              <button matIconButton type="button" (click)="openManageScheduleDialog(i)"
+                      [hidden]="studentsEditIndex === i" [disabled]="!canManageSchedule(studentControl)"
+                      aria-label="Manage schedule">
+                <mat-icon>event_repeat</mat-icon>
               </button>
               <button matIconButton type="button" (click)="saveStudentAt(i)" [hidden]="studentsEditIndex !== i">
                 <mat-icon>save</mat-icon>

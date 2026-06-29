@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, Input, OnInit, ViewChild} from '@angular/core';
 import {ContactService} from '../services/contact.service';
-import {catchError, EMPTY} from 'rxjs';
-import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
+import {catchError, EMPTY, of} from 'rxjs';
+import {AbstractControl, FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
 import {AvailabilityBlock} from '../models/availability-block.model';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
@@ -17,11 +17,11 @@ import {MatIconModule} from '@angular/material/icon';
 import {StudentService} from '../services/student.service';
 import {NoteService} from '../services/note.service';
 import {Student} from '../models/student.model';
+import {ScheduleSlot} from '../utils/proration';
 import {Note} from '../models/note.model';
 import {Status} from '../enums/status.enum';
 import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
-import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {UserGroup} from '../enums/user-group.enum';
 import {AuthService} from '../services/auth.service';
@@ -35,6 +35,8 @@ import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDialog} from '@angular/material/dialog';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
+import {ManageScheduleDialog} from '../manage-schedule-dialog/manage-schedule-dialog';
+import {ScheduleService} from '../services/schedule.service';
 import {Router} from '@angular/router';
 
 @Component({
@@ -49,7 +51,6 @@ import {Router} from '@angular/router';
     MatSelectModule,
     MatIconModule,
     MatCheckbox,
-    MatSlideToggleModule,
     DatePipe,
     MatDatepickerModule,
     MatProgressSpinnerModule,
@@ -72,6 +73,7 @@ export class Contact implements OnInit {
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
+  private scheduleService: ScheduleService = inject(ScheduleService);
   private router: Router = inject(Router);
 
   @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
@@ -442,20 +444,41 @@ export class Contact implements OnInit {
     this.cdr.markForCheck();
   }
 
-  /** Turns a student's monthly auto-renew on/off and persists immediately. */
-  toggleAutoRenew(index: number, checked: boolean) {
+  /** True once a student has both an assigned tutor and a package — required to schedule. */
+  canManageSchedule(group: AbstractControl): boolean {
+    return !!group.get('assigned_tutor_id')?.value && !!group.get('package')?.value;
+  }
+
+  /** A read-only one-line summary of a student's schedule, e.g. "Mon 10:00 AM · Wed 10:00 AM". */
+  scheduleSummary(group: AbstractControl): string {
+    const schedule = group.get('schedule')?.value as ScheduleSlot[] | undefined;
+    return this.scheduleService.scheduleSummary(schedule).join(' · ');
+  }
+
+  /** Opens the Manage Schedule dialog for a student and applies the result to the card. */
+  openManageScheduleDialog(index: number): void {
     const group = this.students.at(index)!;
-    group.get('auto_renew')!.setValue(checked);
     const student: Student = group.getRawValue() as Student;
-    this.studentService.updateStudent(student).pipe(
+    this.contactService.getContact(student.assigned_tutor_id!).pipe(
       catchError(error => {
         console.log(error);
-        group.get('auto_renew')!.setValue(!checked); // revert on failure
-        this.cdr.markForCheck();
-        return EMPTY;
+        return of([] as _Contact[]);
       })
-    ).subscribe(() => {
-      this.cdr.markForCheck();
+    ).subscribe(contacts => {
+      const ref = this.dialog.open(ManageScheduleDialog, {
+        data: {student, tutor: contacts[0]},
+        width: '520px',
+      });
+      ref.afterClosed().subscribe((updated?: Student) => {
+        if (!updated) return;
+        group.patchValue({
+          assigned_tutor_id: updated.assigned_tutor_id ?? student.assigned_tutor_id,
+          schedule: updated.schedule ?? null,
+          package_start_date: updated.package_start_date ?? null,
+          auto_renew: updated.auto_renew ?? false,
+        });
+        this.cdr.markForCheck();
+      });
     });
   }
 

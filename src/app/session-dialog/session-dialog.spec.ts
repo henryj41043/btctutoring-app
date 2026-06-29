@@ -458,143 +458,6 @@ describe('SessionDialog', () => {
     });
   });
 
-  describe('createSchedule (monthly)', () => {
-    // July 2026: 1st is a Wednesday. Mondays: 6,13,20,27. Wednesdays: 1,8,15,22,29.
-    const primedSchedule = (over: Partial<Student> = {}): SessionDialog => {
-      const c = primedCreate();
-      c.students = [student(over)];
-      c.date = new Date(2026, 6, 1);
-      c.createScheduleMode = true;
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '10:00' },
-        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
-      ];
-      return c;
-    };
-
-    it('creates the month of sessions and persists the schedule on the student', () => {
-      const c = primedSchedule();
-      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
-      studentService.updateStudent.mockReturnValue(of({} as Student));
-      c.createSession(); // delegates to createSchedule
-
-      expect(sessionsService.createSessions).toHaveBeenCalled();
-      const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
-      expect(created.length).toBe(9); // 4 Mondays + 5 Wednesdays
-
-      // Every generated session is a pending tutoring session for this
-      // student/tutor, sharing one series id.
-      const seriesId = created[0].series_id;
-      expect(seriesId).toBeDefined();
-      for (const s of created) {
-        expect(s.type).toBe(SessionType.TUTORING);
-        expect(s.status).toBe(SessionStatus.PENDING);
-        expect(s.student_id).toBe('s-1');
-        expect(s.tutor_id).toBe('t-1');
-        expect(s.tutor_name).toBe('Tess');
-        expect(s.series_id).toBe(seriesId);
-      }
-      // Occurrence counts per weekday and the exact session time window.
-      const weekdays = created.map(s => new Date(s.start_datetime!).getDay());
-      expect(weekdays.filter(d => d === 1)).toHaveLength(4); // Mondays
-      expect(weekdays.filter(d => d === 3)).toHaveLength(5); // Wednesdays
-      const first = created[0];
-      expect(new Date(first.start_datetime!).getHours()).toBe(10);
-      expect(new Date(first.start_datetime!).getMinutes()).toBe(0);
-      // end = start + the package's 60-min session length.
-      expect(new Date(first.end_datetime!).getHours()).toBe(11);
-      expect(new Date(first.end_datetime!).getMinutes()).toBe(0);
-
-      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
-      expect(saved.schedule).toHaveLength(2);
-      expect(saved.schedule![0]).toEqual({
-        weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00',
-      });
-      expect(saved.assigned_tutor_id).toBe('t-1');
-      expect(saved.package_start_date).toContain('2026-07-01');
-      expect(saved.auto_renew).toBe(true);
-      expect(dialogRef.close).toHaveBeenCalledWith({ created: 9 });
-    });
-
-    it('rejects when the slot count does not match the package', () => {
-      const c = primedSchedule();
-      c.scheduleSlots = [{ weekday: Weekday.MONDAY, start_time: '10:00' }]; // needs 2
-      c.createSession();
-      expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('requires 2');
-      expect(sessionsService.createSessions).not.toHaveBeenCalled();
-    });
-
-    it('rejects when a slot is missing a day or time', () => {
-      const c = primedSchedule();
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '' },
-        { weekday: null, start_time: '10:00' },
-      ];
-      c.createSession();
-      expect(c.errorMessage).toContain('day and start time');
-    });
-
-    it('rejects when the student package is not configured (custom)', () => {
-      const c = primedSchedule({ package: Package.CUSTOM });
-      c.scheduleSlots = [];
-      c.createSession();
-      expect(c.errorMessage).toContain("isn't configured");
-    });
-
-    it('rejects a schedule with no student', () => {
-      const c = primedSchedule();
-      c.selectedStudent = undefined;
-      c.createSession();
-      expect(c.errorMessage).toContain('select a student');
-    });
-
-    it('asks an admin to override out-of-availability occurrences, then creates', () => {
-      const c = primedSchedule();
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '18:00' },
-        { weekday: Weekday.WEDNESDAY, start_time: '18:00' },
-      ];
-      c.createSession();
-      expect(c.showAvailabilityConfirm).toBe(true);
-
-      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
-      studentService.updateStudent.mockReturnValue(of({} as Student));
-      c.confirmAvailabilityOverride();
-      expect(sessionsService.createSessions).toHaveBeenCalled();
-    });
-
-    it('hard-blocks a tutor on out-of-availability occurrences', () => {
-      isAdmin = false;
-      const c = primedSchedule();
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '18:00' },
-        { weekday: Weekday.WEDNESDAY, start_time: '18:00' },
-      ];
-      c.createSession();
-      expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('availability');
-    });
-
-    it('surfaces a schedule create error', () => {
-      const c = primedSchedule();
-      sessionsService.createSessions.mockReturnValue(throwError(() => new Error('x')));
-      c.createSession();
-      expect(c.hasError).toBe(true);
-    });
-
-    it('reseeds slot rows on student/mode change', () => {
-      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
-      c.students = [student()];
-      c.createScheduleMode = true;
-      c.onStudentChange('s-1');
-      expect(c.scheduleSlots).toHaveLength(2); // Succeed = 2/week
-      c.createScheduleMode = false;
-      c.onScheduleModeChange();
-      expect(c.scheduleSlots).toHaveLength(0);
-    });
-  });
-
   describe('updateSession', () => {
     const editData = (over: Partial<Session> = {}): SessionDialogData =>
       ({
@@ -1044,43 +907,6 @@ describe('SessionDialog', () => {
       expect(studentService.updateStudent).not.toHaveBeenCalled();
     });
 
-    it('errors when the schedule has no occurrences left in the month', () => {
-      const c = primedCreate();
-      c.date = new Date(2026, 6, 31); // July 31 2026 (Friday) — no Mon/Wed remain
-      c.createScheduleMode = true;
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '10:00' },
-        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
-      ];
-      c.createSession();
-      expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('no sessions');
-    });
-
-    it('seeds zero slots when the selected package is unconfigured', () => {
-      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
-      c.students = [student({ package: Package.CUSTOM })];
-      c.createScheduleMode = true;
-      c.onStudentChange('s-1');
-      expect(c.scheduleSlots).toHaveLength(0);
-    });
-
-    it('admin override confirm path creates the schedule', () => {
-      const c = primedCreate();
-      c.date = new Date(2026, 6, 1);
-      c.createScheduleMode = true;
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '18:00' },
-        { weekday: Weekday.WEDNESDAY, start_time: '18:00' },
-      ];
-      c.createSession();
-      expect(c.showAvailabilityConfirm).toBe(true);
-      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
-      studentService.updateStudent.mockReturnValue(of({} as Student));
-      c.confirmAvailabilityOverride();
-      expect(sessionsService.createSessions).toHaveBeenCalled();
-    });
-
     it('creates a make-up session that fits within the make-up bank', () => {
       const c = primedCreate();
       c.selectedType = SessionType.MAKE_UP;
@@ -1102,19 +928,6 @@ describe('SessionDialog', () => {
       expect(c.hasError).toBe(true);
     });
 
-    it('createSchedule requires a start date', () => {
-      const c = primedCreate();
-      c.createScheduleMode = true;
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '10:00' },
-        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
-      ];
-      c.date = undefined;
-      c.createSession();
-      expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('start date');
-    });
-
     it('hard-blocks a tutor on out-of-availability future occurrences', () => {
       isAdmin = false;
       const c = editFor({ series_id: 'series-1' }, {
@@ -1128,21 +941,6 @@ describe('SessionDialog', () => {
       c.chooseSeriesScope('future');
       expect(c.hasError).toBe(true);
       expect(c.errorMessage).toContain('availability');
-    });
-
-    it('surfaces a schedule save failure after sessions are created', () => {
-      const c = primedCreate();
-      c.date = new Date(2026, 6, 1);
-      c.createScheduleMode = true;
-      c.scheduleSlots = [
-        { weekday: Weekday.MONDAY, start_time: '10:00' },
-        { weekday: Weekday.WEDNESDAY, start_time: '10:00' },
-      ];
-      sessionsService.createSessions.mockReturnValue(of({ message: 'ok' }));
-      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
-      c.createSession();
-      expect(c.hasError).toBe(true);
-      expect(c.errorMessage).toContain('saving the schedule failed');
     });
 
     it('surfaces a forkJoin error updating the future series', () => {

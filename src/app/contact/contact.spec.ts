@@ -15,6 +15,8 @@ import { StudentSessionsDialog } from '../student-sessions-dialog/student-sessio
 import { DeleteContactDialog } from '../delete-contact-dialog/delete-contact-dialog';
 import { Service } from '../enums/service.enum';
 import { Status } from '../enums/status.enum';
+import { Package } from '../enums/package.enum';
+import { ScheduleService } from '../services/schedule.service';
 
 const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
   ({
@@ -60,6 +62,7 @@ describe('Contact', () => {
   };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
   const router = { navigate: jest.fn() };
+  const scheduleService = { scheduleSummary: jest.fn().mockReturnValue([]) };
 
   const defaults = () => {
     contactService.getContact.mockReturnValue(of([fullContact()]));
@@ -79,6 +82,7 @@ describe('Contact', () => {
         { provide: AuthService, useValue: authService },
         { provide: MatDialog, useValue: dialog },
         { provide: Router, useValue: router },
+        { provide: ScheduleService, useValue: scheduleService },
       ],
     });
     const c = TestBed.createComponent(Contact).componentInstance;
@@ -424,24 +428,61 @@ describe('Contact', () => {
       expect(form(c).pristine).toBe(true);
     });
 
-    it('toggles auto-renew and persists the student', () => {
+    it('summarizes a student schedule for the card', () => {
       const c = build();
       seedStudent(c);
-      studentService.updateStudent.mockReturnValue(of({ id: 's-1' } as Student));
-      c.toggleAutoRenew(0, true);
-      expect(students(c).at(0).get('auto_renew')?.value).toBe(true);
-      expect(studentService.updateStudent).toHaveBeenCalledWith(
-        expect.objectContaining({ auto_renew: true }),
-      );
+      scheduleService.scheduleSummary.mockReturnValue(['Mon 10:00 AM', 'Wed 10:00 AM']);
+      expect(c.scheduleSummary(students(c).at(0))).toBe('Mon 10:00 AM · Wed 10:00 AM');
     });
 
-    it('reverts the auto-renew toggle when the save fails', () => {
+    it('canManageSchedule requires both an assigned tutor and a package', () => {
       const c = build();
       seedStudent(c);
-      students(c).at(0).get('auto_renew')?.setValue(false);
-      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
-      c.toggleAutoRenew(0, true);
-      expect(students(c).at(0).get('auto_renew')?.value).toBe(false);
+      const group = students(c).at(0);
+      expect(c.canManageSchedule(group)).toBe(false);
+      group.get('assigned_tutor_id')?.setValue('t-1');
+      group.get('package')?.setValue(Package.DETERMINATION);
+      expect(c.canManageSchedule(group)).toBe(true);
+    });
+
+    it('opens the Manage Schedule dialog and applies the result to the card', () => {
+      const updated = {
+        assigned_tutor_id: 't-1',
+        schedule: [{ weekday: 'MONDAY', start_time: '09:00', end_time: '10:00' }],
+        package_start_date: '2026-07-01',
+        auto_renew: true,
+      } as unknown as Student;
+      afterClosed = updated;
+      const c = build();
+      seedStudent(c);
+      students(c).at(0).get('assigned_tutor_id')?.setValue('t-1');
+      contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
+      c.openManageScheduleDialog(0);
+      expect(dialog.open).toHaveBeenCalled();
+      expect(students(c).at(0).get('auto_renew')?.value).toBe(true);
+      expect(students(c).at(0).get('schedule')?.value).toEqual(updated.schedule);
+    });
+
+    it('opens the schedule dialog even when the tutor fetch fails', () => {
+      afterClosed = undefined;
+      const c = build();
+      seedStudent(c);
+      students(c).at(0).get('assigned_tutor_id')?.setValue('t-1');
+      contactService.getContact.mockReturnValue(throwError(() => new Error('x')));
+      c.openManageScheduleDialog(0);
+      expect(dialog.open).toHaveBeenCalled();
+    });
+
+    it('leaves the card unchanged when the Manage Schedule dialog is cancelled', () => {
+      afterClosed = undefined;
+      const c = build();
+      seedStudent(c);
+      students(c).at(0).get('assigned_tutor_id')?.setValue('t-1');
+      contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
+      c.openManageScheduleDialog(0);
+      expect(students(c).at(0).get('schedule')?.value).toEqual([
+        { weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' },
+      ]);
     });
 
     it('cancel without a prior edit snapshot just exits edit mode', () => {
