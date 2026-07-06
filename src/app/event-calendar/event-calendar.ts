@@ -35,6 +35,7 @@ import {AuthService} from '../services/auth.service';
 import {catchError, Observable, Subject} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {Response} from '../models/response.model';
 import {isSameDay, isSameMonth} from 'date-fns';
 import {EventColor} from 'calendar-utils';
@@ -83,6 +84,7 @@ const colors: Record<string, EventColor> = {
     MatCardModule,
     MatTableModule,
     MatIconModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './event-calendar.html',
   styleUrl: './event-calendar.scss',
@@ -104,6 +106,8 @@ export class EventCalendar implements OnInit {
   view: CalendarView = CalendarView.Month;
   viewDate: Date = new Date();
   events: CalendarEvent<Session>[] = [];
+  /** True while a month window is being fetched (inline header spinner). */
+  loading: boolean = false;
   private allSessions: Session[] = [];
   actions: CalendarEventAction[] = [
     {
@@ -194,12 +198,17 @@ export class EventCalendar implements OnInit {
       ? this.sessionsService.getAllSessions(range)
       : this.sessionsService.getSessionsByTutor(this.authService.contact().id!, range);
 
+    this.loading = true;
+    this.cdr.markForCheck();
     source$.pipe(
       catchError(error => {
         console.log(error);
+        this.loading = false;
+        this.cdr.markForCheck();
         return new Observable();
       })
     ).subscribe(response => {
+      this.loading = false;
       const sessions: Session[] = response as Session[];
       missing.forEach(anchor => this.fetchedMonths.add(this.monthKey(anchor)));
       // Merge by id so overlapping fetches never duplicate events.

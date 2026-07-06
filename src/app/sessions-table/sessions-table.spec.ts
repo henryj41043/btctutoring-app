@@ -87,6 +87,27 @@ describe('SessionsTable', () => {
     expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(2);
   });
 
+
+  it('view-child setters ignore null while the table is hidden', () => {
+    const c = build();
+    c.matSort = null as never;
+    c.matPaginator = null as never;
+    expect(c.dataSource.sort).toBeFalsy();
+    expect(c.dataSource.paginator).toBeFalsy();
+  });
+
+  it('clears the loading spinner on data, error, and no-source paths', () => {
+    sessionsService.getAllSessions.mockReturnValue(of([]));
+    const c = build();
+    expect(c.loading).toBe(true);
+    c.ngOnInit();
+    expect(c.loading).toBe(false);
+
+    sessionsService.getAllSessions.mockReturnValue(throwError(() => new Error('x')));
+    c.onDateChange(new Date(2026, 3, 1)); // triggers a failing refetch
+    expect(c.loading).toBe(false);
+  });
+
   it('shows nothing for a user who is neither admin nor tutor', () => {
     isAdmin = false;
     groups = [];
@@ -105,11 +126,12 @@ describe('SessionsTable', () => {
     expect(c.dataSource.data).toEqual([]);
   });
 
-  it('configures sort, paginator, and the sorting accessor after view init', () => {
+  it('configures sort, paginator, and the sorting accessor', () => {
+    sessionsService.getAllSessions.mockReturnValue(of([]));
     const c = build();
-    c.sort = {} as MatSort;
-    c.paginator = {} as MatPaginator;
-    c.ngAfterViewInit();
+    c.matSort = {} as MatSort;
+    c.matPaginator = {} as MatPaginator;
+    c.ngOnInit();
     const accessor = c.dataSource.sortingDataAccessor;
     const s = {
       start_datetime: '2026-01-01',

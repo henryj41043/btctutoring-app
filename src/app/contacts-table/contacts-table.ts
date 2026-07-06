@@ -1,4 +1,4 @@
-import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -7,6 +7,7 @@ import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {ContactDialog} from '../contact-dialog/contact-dialog';
@@ -30,6 +31,7 @@ import {PhonePipe} from '../pipes/phone.pipe';
     MatPaginatorModule,
     MatFormFieldModule,
     MatInputModule,
+    MatProgressSpinnerModule,
     PhonePipe,
   ],
   templateUrl: './contacts-table.html',
@@ -37,18 +39,25 @@ import {PhonePipe} from '../pipes/phone.pipe';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true
 })
-export class ContactsTable implements OnInit, AfterViewInit {
+export class ContactsTable implements OnInit {
   readonly contactDialog: MatDialog = inject(MatDialog);
   private contactService: ContactService = inject(ContactService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private router: Router = inject(Router);
 
-  @ViewChild(MatSort) sort!: MatSort;
-  @ViewChild(MatPaginator) paginator!: MatPaginator;
+  // Setter form: the table is inside an @if, so sort/paginator only exist
+  // once loading finishes.
+  @ViewChild(MatSort) set matSort(sort: MatSort) {
+    if (sort) { this.dataSource.sort = sort; }
+  }
+  @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
+    if (paginator) { this.dataSource.paginator = paginator; }
+  }
 
   contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'actions'];
   dataSource = new MatTableDataSource<Contact>([]);
+  loading: boolean = true;
 
   ngOnInit(): void {
     // Case-insensitive search across the visible columns.
@@ -67,23 +76,24 @@ export class ContactsTable implements OnInit, AfterViewInit {
     this.dataSource.paginator?.firstPage();
   }
 
-  ngAfterViewInit(): void {
-    this.dataSource.sort = this.sort;
-    this.dataSource.paginator = this.paginator;
-  }
-
   private updateClientData(): void {
-    if (this.authService.isAdmin()) {
-      this.contactService.getContacts().pipe(
-        catchError(error => {
-          console.log(error);
-          return EMPTY;
-        })
-      ).subscribe(response => {
-        this.dataSource.data = response as Contact[];
-        this.cdr.markForCheck();
-      });
+    if (!this.authService.isAdmin()) {
+      this.loading = false;
+      this.cdr.markForCheck();
+      return;
     }
+    this.contactService.getContacts().pipe(
+      catchError(error => {
+        console.log(error);
+        this.loading = false;
+        this.cdr.markForCheck();
+        return EMPTY;
+      })
+    ).subscribe(response => {
+      this.dataSource.data = response as Contact[];
+      this.loading = false;
+      this.cdr.markForCheck();
+    });
   }
 
   protected openContactDialog(): void {

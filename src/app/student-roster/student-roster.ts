@@ -1,9 +1,10 @@
-import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {StudentService} from '../services/student.service';
@@ -20,23 +21,31 @@ import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions
     MatIconModule,
     MatSortModule,
     MatPaginatorModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './student-roster.html',
   styleUrl: './student-roster.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
 })
-export class StudentRoster implements OnInit, AfterViewInit {
+export class StudentRoster implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
 
-  @ViewChild(MatSort) sort!: MatSort;
-  @ViewChild(MatPaginator) paginator!: MatPaginator;
+  // Setter form: the table is inside an @if, so sort/paginator only exist
+  // once loading finishes.
+  @ViewChild(MatSort) set matSort(sort: MatSort) {
+    if (sort) { this.dataSource.sort = sort; }
+  }
+  @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
+    if (paginator) { this.dataSource.paginator = paginator; }
+  }
 
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
   protected dataSource = new MatTableDataSource<Student>([]);
+  protected loading: boolean = true;
 
   ngOnInit(): void {
     const isAdmin = this.authService.isAdmin();
@@ -47,17 +56,15 @@ export class StudentRoster implements OnInit, AfterViewInit {
     source$.pipe(
       catchError(error => {
         console.log(error);
+        this.loading = false;
+        this.cdr.markForCheck();
         return EMPTY;
       })
     ).subscribe(students => {
       this.dataSource.data = students;
+      this.loading = false;
       this.cdr.markForCheck();
     });
-  }
-
-  ngAfterViewInit(): void {
-    this.dataSource.sort = this.sort;
-    this.dataSource.paginator = this.paginator;
   }
 
   openSessionsDialog(student: Student): void {

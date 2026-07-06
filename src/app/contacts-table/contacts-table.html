@@ -15,6 +15,12 @@
 
   <mat-card class="event-card" appearance="outlined">
     <mat-card-content>
+      @if (loading) {
+        <div class="table-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="table-spinner-label">Loading contacts…</span>
+        </div>
+      } @else {
       <div class="table-scroll">
       <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
         <ng-container matColumnDef="first_name">
@@ -56,6 +62,7 @@
       </table>
       </div>
       <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+      }
     </mat-card-content>
   </mat-card>
 </div>

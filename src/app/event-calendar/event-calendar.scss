@@ -93,3 +93,13 @@
     width: 100%;
   }
 }
+
+.calendar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.calendar-loading {
+  display: inline-block;
+}

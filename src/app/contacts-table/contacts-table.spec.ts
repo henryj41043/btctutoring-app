@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSort } from '@angular/material/sort';
@@ -58,13 +58,46 @@ describe('ContactsTable', () => {
     expect(contactService.getContacts).not.toHaveBeenCalled();
   });
 
-  it('wires sort and paginator after view init', () => {
+  it('wires sort and paginator through the view-child setters', () => {
     const c = build();
-    c.sort = {} as MatSort;
-    c.paginator = {} as MatPaginator;
-    c.ngAfterViewInit();
-    expect(data(c).sort).toBe(c.sort);
-    expect(data(c).paginator).toBe(c.paginator);
+    const sort = {} as MatSort;
+    const paginator = {} as MatPaginator;
+    c.matSort = sort;
+    c.matPaginator = paginator;
+    expect(data(c).sort).toBe(sort);
+    expect(data(c).paginator).toBe(paginator);
+  });
+
+
+  it('view-child setters ignore null while the table is hidden', () => {
+    const c = build();
+    c.matSort = null as never;
+    c.matPaginator = null as never;
+    expect(c.dataSource.sort).toBeFalsy();
+    expect(c.dataSource.paginator).toBeFalsy();
+  });
+
+  it('shows the spinner until contacts load', () => {
+    contactService.getContacts.mockReturnValue(of([]));
+    const c = build();
+    expect(c.loading).toBe(true);
+    c.ngOnInit();
+    expect(c.loading).toBe(false);
+  });
+
+  it('clears the spinner when loading fails', () => {
+    contactService.getContacts.mockReturnValue(throwError(() => new Error('x')));
+    const c = build();
+    c.ngOnInit();
+    expect(c.loading).toBe(false);
+  });
+
+  it('clears the spinner for a non-admin without fetching', () => {
+    isAdmin = false;
+    const c = build();
+    c.ngOnInit();
+    expect(c.loading).toBe(false);
+    expect(contactService.getContacts).not.toHaveBeenCalled();
   });
 
   it('applyFilter matches name, email, phone and service case-insensitively', () => {
