@@ -21,6 +21,12 @@ export class ContactService {
     return this.httpClient.get<Contact[]>(`${this.baseUrl}/contacts`);
   }
 
+  /** Current staff only (service=Hiring, status=Staff) — for tutor dropdowns. */
+  getStaff(): Observable<Contact[]> {
+    const params: HttpParams = new HttpParams().set('staff', 'true');
+    return this.httpClient.get<Contact[]>(`${this.baseUrl}/contacts`, { params });
+  }
+
   createContact(contact: Contact): Observable<Response> {
     return this.httpClient.post<Response>(`${this.baseUrl}/contacts`, contact);
   }

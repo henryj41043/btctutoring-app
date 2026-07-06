@@ -35,6 +35,11 @@ describe('BillingService', () => {
     req.flush([]);
   });
 
+  it('getBillingRecordsByMonth sets the month param', () => {
+    service.getBillingRecordsByMonth('2026-07').subscribe();
+    httpMock.expectOne(`${base}/billing?month=2026-07`).flush([]);
+  });
+
   it('getBillingRecordsByPeriod sets the period param', () => {
     service.getBillingRecordsByPeriod('2026-07-01').subscribe();
     const req = httpMock.expectOne(`${base}/billing?period=2026-07-01`);

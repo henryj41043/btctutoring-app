@@ -5,6 +5,12 @@ import {Observable} from 'rxjs';
 import {Session} from '../models/session.model';
 import {Response} from '../models/response.model';
 
+/** Optional start_datetime range (ISO strings) applied server-side. */
+export interface SessionRange {
+  from?: string;
+  to?: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -12,8 +18,16 @@ export class SessionsService {
   private baseUrl: string = environment.btctutoringServiceUrl;
   httpClient: HttpClient = inject(HttpClient);
 
-  getAllSessions(): Observable<Session[]> {
-    return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`);
+  /** Appends optional from/to range params. */
+  private withRange(params: HttpParams, range?: SessionRange): HttpParams {
+    if (range?.from) params = params.set('from', range.from);
+    if (range?.to) params = params.set('to', range.to);
+    return params;
+  }
+
+  getAllSessions(range?: SessionRange): Observable<Session[]> {
+    const params = this.withRange(new HttpParams(), range);
+    return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params });
   }
 
   getSessionsBySeries(seriesId: string): Observable<Session[]> {
@@ -21,9 +35,9 @@ export class SessionsService {
     return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params: params });
   }
 
-  getSessionsByTutor(tutor: string): Observable<Session[]> {
-    let params: HttpParams = new HttpParams().set('tutor', tutor);
-    return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params: params });
+  getSessionsByTutor(tutor: string, range?: SessionRange): Observable<Session[]> {
+    const params = this.withRange(new HttpParams().set('tutor', tutor), range);
+    return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params });
   }
 
   getSessionsByStudent(student: string): Observable<Session[]> {

@@ -1,6 +1,12 @@
 <div class="clients-table">
   <div class="btc-page-header">
     <h2>Contacts</h2>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="contacts-search">
+      <mat-label>Search</mat-label>
+      <input matInput #contactSearch placeholder="Name, email, phone, service"
+             (input)="applyFilter(contactSearch.value)">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
     <button mat-raised-button color="primary" (click)="openContactDialog()">
       <mat-icon>add</mat-icon>
       Create Contact

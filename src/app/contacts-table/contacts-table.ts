@@ -1,5 +1,7 @@
 import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
@@ -26,6 +28,8 @@ import {PhonePipe} from '../pipes/phone.pipe';
     MatIconModule,
     MatSortModule,
     MatPaginatorModule,
+    MatFormFieldModule,
+    MatInputModule,
     PhonePipe,
   ],
   templateUrl: './contacts-table.html',
@@ -47,7 +51,20 @@ export class ContactsTable implements OnInit, AfterViewInit {
   dataSource = new MatTableDataSource<Contact>([]);
 
   ngOnInit(): void {
+    // Case-insensitive search across the visible columns.
+    this.dataSource.filterPredicate = (contact, filter) => {
+      const haystack = [
+        contact.first_name, contact.last_name, contact.email,
+        contact.phone_number, contact.service,
+      ].join(' ').toLowerCase();
+      return haystack.includes(filter);
+    };
     this.updateClientData();
+  }
+
+  applyFilter(value: string): void {
+    this.dataSource.filter = value.trim().toLowerCase();
+    this.dataSource.paginator?.firstPage();
   }
 
   ngAfterViewInit(): void {

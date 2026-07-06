@@ -48,7 +48,7 @@ describe('Billing', () => {
   let isAdmin: boolean;
   const contactService = { getContacts: jest.fn() };
   const studentService = { getStudents: jest.fn() };
-  const billingService = { getBillingRecords: jest.fn(), upsertBillingRecord: jest.fn() };
+  const billingService = { getBillingRecords: jest.fn(), getBillingRecordsByMonth: jest.fn(), upsertBillingRecord: jest.fn() };
   const authService = { isAdmin: () => isAdmin };
 
   const build = (): Billing => {
@@ -73,7 +73,13 @@ describe('Billing', () => {
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     contactService.getContacts.mockReturnValue(of([contact()]));
     studentService.getStudents.mockReturnValue(of([student()]));
-    billingService.getBillingRecords.mockReturnValue(of([]));
+    billingService.getBillingRecordsByMonth.mockReturnValue(of([]));
+  });
+
+  it('fetches only the selected month of billing records', () => {
+    const c = build(); // selectedDate = July 2026
+    c.ngOnInit();
+    expect(billingService.getBillingRecordsByMonth).toHaveBeenCalledWith('2026-07');
   });
 
   it('builds a monthly billing entry with the full package cost', () => {
@@ -157,7 +163,7 @@ describe('Billing', () => {
   });
 
   it('reflects an existing paid record', () => {
-    billingService.getBillingRecords.mockReturnValue(
+    billingService.getBillingRecordsByMonth.mockReturnValue(
       of([{ contact_id: 'c-1', period_start: '2026-07-01', paid: true } as BillingRecord]),
     );
     const c = build();
@@ -203,7 +209,7 @@ describe('Billing', () => {
   });
 
   it('derives an entry with exact name, packages, amount and paid status', () => {
-    billingService.getBillingRecords.mockReturnValue(
+    billingService.getBillingRecordsByMonth.mockReturnValue(
       of([{ contact_id: 'c-1', period_start: '2026-07-01', paid: true } as BillingRecord]),
     );
     const c = build();
@@ -219,7 +225,7 @@ describe('Billing', () => {
   it('survives load errors from any source by showing an empty table', () => {
     contactService.getContacts.mockReturnValue(throwError(() => new Error('x')));
     studentService.getStudents.mockReturnValue(throwError(() => new Error('x')));
-    billingService.getBillingRecords.mockReturnValue(throwError(() => new Error('x')));
+    billingService.getBillingRecordsByMonth.mockReturnValue(throwError(() => new Error('x')));
     const c = build();
     c.ngOnInit();
     expect((c as any).dataSource.data).toHaveLength(0);

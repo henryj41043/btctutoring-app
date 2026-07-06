@@ -35,6 +35,18 @@ describe('SessionsService', () => {
     req.flush([]);
   });
 
+  it('getAllSessions appends from/to range params', () => {
+    service.getAllSessions({ from: 'A', to: 'B' }).subscribe();
+    httpMock.expectOne(`${base}/sessions?from=A&to=B`).flush([]);
+  });
+
+  it('getSessionsByTutor combines tutor with a partial range', () => {
+    service.getSessionsByTutor('t-1', { from: 'A' }).subscribe();
+    httpMock.expectOne(`${base}/sessions?tutor=t-1&from=A`).flush([]);
+    service.getSessionsByTutor('t-1', { to: 'B' }).subscribe();
+    httpMock.expectOne(`${base}/sessions?tutor=t-1&to=B`).flush([]);
+  });
+
   it('getSessionsBySeries sets the series param', () => {
     service.getSessionsBySeries('series-1').subscribe();
     httpMock.expectOne(`${base}/sessions?series=series-1`).flush([]);

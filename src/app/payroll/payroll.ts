@@ -170,8 +170,8 @@ export class Payroll implements OnInit {
     this.cdr.markForCheck();
 
     if (this.authService.isAdmin()) {
-      // Admins see payroll for every staff tutor.
-      this.contactService.getContacts()
+      // Admins see payroll for every staff tutor (server-side staff filter).
+      this.contactService.getStaff()
         .pipe(catchError(error => {
           console.log(error);
           this.finishLoading([]);
@@ -206,7 +206,13 @@ export class Payroll implements OnInit {
   }
 
   private buildPayrollEntry$(contact: Contact): Observable<PayrollEntry> {
-    return this.sessionsService.getSessionsByTutor(contact.id!).pipe(
+    // Only fetch the selected pay period (the calculateTime window) instead of
+    // the tutor's entire session history.
+    const range = {
+      from: this.startDate!.toISOString(),
+      to: new Date(this.endDate!.getFullYear(), this.endDate!.getMonth(), this.endDate!.getDate(), 23, 59, 59, 999).toISOString(),
+    };
+    return this.sessionsService.getSessionsByTutor(contact.id!, range).pipe(
       // Return an empty session list on error — EMPTY would never complete and
       // would hang the surrounding forkJoin.
       catchError(error => { console.log(error); return of([] as Session[]); }),
