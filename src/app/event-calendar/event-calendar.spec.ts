@@ -120,6 +120,19 @@ describe('EventCalendar', () => {
     expect(c.events).toHaveLength(2); // s-1 not duplicated
   });
 
+  it('toggles the header spinner around month fetches and on errors', () => {
+    sessionsService.getAllSessions.mockReturnValue(of([]));
+    const c = build();
+    expect(c.loading).toBe(false);
+    c.ngOnInit();
+    expect(c.loading).toBe(false); // synchronous mock completes immediately
+
+    sessionsService.getAllSessions.mockReturnValue(throwError(() => new Error('x')));
+    c.viewDate = new Date(2027, 0, 15); // uncached → failing fetch
+    c.onViewDateChange();
+    expect(c.loading).toBe(false); // cleared by the error path
+  });
+
   it('renders no events for a user who is neither admin nor tutor', () => {
     isAdmin = false;
     groups = [];

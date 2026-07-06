@@ -67,17 +67,41 @@ describe('StudentRoster', () => {
     expect((component as unknown as { dataSource: { data: Student[] } }).dataSource.data).toEqual([]);
   });
 
-  it('wires sort and paginator after view init', () => {
+  it('wires sort and paginator through the view-child setters', () => {
     studentService.getStudents.mockReturnValue(of([]));
     const component = build();
     const sort = {} as MatSort;
     const paginator = {} as MatPaginator;
-    component.sort = sort;
-    component.paginator = paginator;
-    component.ngAfterViewInit();
+    component.matSort = sort;
+    component.matPaginator = paginator;
     const ds = (component as unknown as { dataSource: MatSort & { sort: MatSort; paginator: MatPaginator } }).dataSource;
     expect(ds.sort).toBe(sort);
     expect(ds.paginator).toBe(paginator);
+  });
+
+  it('view-child setters ignore null while the table is hidden', () => {
+    studentService.getStudents.mockReturnValue(of([]));
+    const component = build();
+    component.matSort = null as never;
+    component.matPaginator = null as never;
+    const ds = (component as unknown as { dataSource: { sort: unknown; paginator: unknown } }).dataSource;
+    expect(ds.sort).toBeFalsy();
+    expect(ds.paginator).toBeFalsy();
+  });
+
+  it('shows the spinner until students load', () => {
+    studentService.getStudents.mockReturnValue(of([]));
+    const component = build();
+    expect((component as unknown as { loading: boolean }).loading).toBe(true);
+    component.ngOnInit();
+    expect((component as unknown as { loading: boolean }).loading).toBe(false);
+  });
+
+  it('clears the spinner when loading fails', () => {
+    studentService.getStudents.mockReturnValue(throwError(() => new Error('x')));
+    const component = build();
+    component.ngOnInit();
+    expect((component as unknown as { loading: boolean }).loading).toBe(false);
   });
 
   it('exposes the expected roster columns without available_minutes', () => {

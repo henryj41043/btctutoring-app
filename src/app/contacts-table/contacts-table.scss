@@ -14,3 +14,16 @@
     cursor: pointer;
   }
 }
+
+.table-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 56px 0;
+}
+
+.table-spinner-label {
+  color: var(--btc-teal-deep);
+  font-weight: 700;
+}

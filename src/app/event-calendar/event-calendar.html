@@ -9,7 +9,12 @@
     </button>
   </div>
 
-  <span class="calendar-title">{{ viewDate | calendarDate: view + 'ViewTitle' : 'en' }}</span>
+  <span class="calendar-title">
+    {{ viewDate | calendarDate: view + 'ViewTitle' : 'en' }}
+    @if (loading) {
+      <mat-spinner class="calendar-loading" [diameter]="22"></mat-spinner>
+    }
+  </span>
 
   <div class="cal-actions">
     @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
