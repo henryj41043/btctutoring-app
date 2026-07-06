@@ -46,6 +46,59 @@ describe('ContactService', () => {
     req.flush([]);
   });
 
+  it('getContactsSummary caches and serves stale-while-revalidate', () => {
+    const first = [{ id: 'c-1', first_name: 'Ada' }];
+    const second = [{ id: 'c-1', first_name: 'Ada' }, { id: 'c-2', first_name: 'Sam' }];
+
+    // First call: no cache — a single fresh emission.
+    const seen1: unknown[] = [];
+    service.getContactsSummary().subscribe(v => seen1.push(v));
+    httpMock.expectOne(`${base}/contacts?view=summary`).flush(first);
+    expect(seen1).toEqual([first]);
+
+    // Second call: cached copy emits immediately, then the fresh response.
+    const seen2: unknown[] = [];
+    service.getContactsSummary().subscribe(v => seen2.push(v));
+    expect(seen2).toEqual([first]); // synchronous cache emission
+    httpMock.expectOne(`${base}/contacts?view=summary`).flush(second);
+    expect(seen2).toEqual([first, second]);
+  });
+
+  it('contact writes invalidate the summary cache', () => {
+    // Prime the cache.
+    service.getContactsSummary().subscribe();
+    httpMock.expectOne(`${base}/contacts?view=summary`).flush([{ id: 'c-1' }]);
+
+    // A write clears it…
+    service.createContact({ first_name: 'New' } as never).subscribe();
+    httpMock.expectOne(`${base}/contacts`).flush({ id: 'c-2' });
+
+    // …so the next summary call has no synchronous cache emission.
+    const seen: unknown[] = [];
+    service.getContactsSummary().subscribe(v => seen.push(v));
+    expect(seen).toEqual([]);
+    httpMock.expectOne(`${base}/contacts?view=summary`).flush([]);
+    expect(seen).toEqual([[]]);
+  });
+
+  it('update and delete also invalidate the summary cache', () => {
+    service.getContactsSummary().subscribe();
+    httpMock.expectOne(`${base}/contacts?view=summary`).flush([{ id: 'c-1' }]);
+    service.updateContact({ id: 'c-1' } as never).subscribe();
+    httpMock.expectOne(`${base}/contacts`).flush({ id: 'c-1' });
+    const seen: unknown[] = [];
+    service.getContactsSummary().subscribe(v => seen.push(v));
+    expect(seen).toEqual([]); // no cache
+    httpMock.expectOne(`${base}/contacts?view=summary`).flush([{ id: 'c-1' }]);
+
+    service.deleteContact('c-1').subscribe();
+    httpMock.expectOne(`${base}/contacts/c-1`).flush({ id: 'c-1' });
+    const seen2: unknown[] = [];
+    service.getContactsSummary().subscribe(v => seen2.push(v));
+    expect(seen2).toEqual([]); // cleared again
+    httpMock.expectOne(`${base}/contacts?view=summary`).flush([]);
+  });
+
   it('getStaff sets the staff param', () => {
     service.getStaff().subscribe();
     httpMock.expectOne(`${base}/contacts?staff=true`).flush([]);

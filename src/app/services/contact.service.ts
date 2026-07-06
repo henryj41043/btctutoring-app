@@ -1,7 +1,7 @@
 import {inject, Injectable} from '@angular/core';
 import {environment} from '../../environments/environment';
 import {HttpClient, HttpParams} from '@angular/common/http';
-import {Observable} from 'rxjs';
+import {concat, Observable, of, tap} from 'rxjs';
 import {Response} from '../models/response.model';
 import {Contact} from '../models/contact.model';
 
@@ -27,16 +27,39 @@ export class ContactService {
     return this.httpClient.get<Contact[]>(`${this.baseUrl}/contacts`, { params });
   }
 
+  // In-memory copy of the last summary response. Repeat visits to the contacts
+  // table paint instantly from this while a background refresh runs
+  // (stale-while-revalidate); any contact write clears it.
+  private summaryCache: Contact[] | null = null;
+
+  /**
+   * The lean list projection for the contacts table (?view=summary). Emits the
+   * cached copy immediately when one exists, then the fresh server response.
+   */
+  getContactsSummary(): Observable<Contact[]> {
+    const params: HttpParams = new HttpParams().set('view', 'summary');
+    const fresh$ = this.httpClient
+      .get<Contact[]>(`${this.baseUrl}/contacts`, { params })
+      .pipe(tap(contacts => (this.summaryCache = contacts)));
+    return this.summaryCache ? concat(of(this.summaryCache), fresh$) : fresh$;
+  }
+
   createContact(contact: Contact): Observable<Response> {
-    return this.httpClient.post<Response>(`${this.baseUrl}/contacts`, contact);
+    return this.httpClient
+      .post<Response>(`${this.baseUrl}/contacts`, contact)
+      .pipe(tap(() => (this.summaryCache = null)));
   }
 
   updateContact(contact: Contact): Observable<Contact> {
-    return this.httpClient.put<Contact>(`${this.baseUrl}/contacts`, contact);
+    return this.httpClient
+      .put<Contact>(`${this.baseUrl}/contacts`, contact)
+      .pipe(tap(() => (this.summaryCache = null)));
   }
 
   deleteContact(id: string): Observable<Response> {
-    return this.httpClient.delete<Response>(`${this.baseUrl}/contacts/${id}`);
+    return this.httpClient
+      .delete<Response>(`${this.baseUrl}/contacts/${id}`)
+      .pipe(tap(() => (this.summaryCache = null)));
   }
 
   adminCreateUser(email: string, group: string, id: string): Observable<any> {
