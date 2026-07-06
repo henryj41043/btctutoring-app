@@ -9,35 +9,37 @@ export interface ScheduleSlot {
 }
 
 /**
- * Counts the package session slots a student "misses" by starting mid-month:
- * the weekly schedule slots that fall on or after the 1st of the start month
- * but strictly before their start date. Used to prorate the first month.
+ * Counts the package session slots a student actually receives in their partial
+ * first month: the weekly schedule slots from their start date (inclusive)
+ * through the end of that month. Used to prorate the first month.
  */
-export function countMissedSlots(schedule: ScheduleSlot[], startDate: Date): number {
+export function countRemainingSlots(schedule: ScheduleSlot[], startDate: Date): number {
   if (!schedule || schedule.length === 0) return 0;
   const weekdaysScheduled = schedule.map(s => s.weekday);
-  const firstOfMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
   const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endOfMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
 
-  let missed = 0;
-  const cursor = new Date(firstOfMonth);
-  while (cursor < start) {
+  let remaining = 0;
+  const cursor = new Date(start);
+  while (cursor <= endOfMonth) {
     const weekday = WEEKDAY_BY_JS_DAY[cursor.getDay()];
     // A single calendar day can carry more than one slot (two sessions same day).
-    missed += weekdaysScheduled.filter(w => w === weekday).length;
+    remaining += weekdaysScheduled.filter(w => w === weekday).length;
     cursor.setDate(cursor.getDate() + 1);
   }
-  return missed;
+  return remaining;
 }
 
 /**
- * The prorated cost of a partial first month: the flat monthly cost less the
- * per-session cost of each missed session. Matches the business formula, with
- * per-step penny rounding. Never goes below zero.
+ * The prorated cost of a partial first month: the per-session cost times the
+ * sessions the student actually receives (their remaining slots from the start
+ * date through month end), with per-step penny rounding. A calendar month can
+ * hold more weekly slots than the flat price covers (~4.3 weeks/month), so the
+ * result is capped at the monthly cost. e.g. Succeed $362: weekly =
+ * round(362*12/52) = 83.54, per-session = 41.77 → one slot left = $41.77.
  */
-export function proratedFirstMonthCost(def: PackageDef, missedSlots: number): number {
-  const reduction = round2(perSessionCost(def) * missedSlots);
-  return Math.max(0, round2(def.monthlyCost - reduction));
+export function proratedFirstMonthCost(def: PackageDef, remainingSlots: number): number {
+  return Math.min(def.monthlyCost, round2(perSessionCost(def) * remainingSlots));
 }
 
 /**
