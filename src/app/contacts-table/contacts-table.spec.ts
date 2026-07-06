@@ -16,7 +16,7 @@ const contact = (id: string): Contact => ({ id, first_name: id }) as Contact;
 describe('ContactsTable', () => {
   let isAdmin: boolean;
   let afterClosed: unknown;
-  const contactService = { getContacts: jest.fn() };
+  const contactService = { getContacts: jest.fn(), getContactsSummary: jest.fn() };
   const authService = { isAdmin: () => isAdmin };
   const router = { navigate: jest.fn() };
   const dialog = {
@@ -45,7 +45,7 @@ describe('ContactsTable', () => {
   });
 
   it('loads contacts for an admin on init', () => {
-    contactService.getContacts.mockReturnValue(of([contact('c-1')]));
+    contactService.getContactsSummary.mockReturnValue(of([contact('c-1')]));
     const c = build();
     c.ngOnInit();
     expect(data(c).data).toEqual([contact('c-1')]);
@@ -55,7 +55,7 @@ describe('ContactsTable', () => {
     isAdmin = false;
     const c = build();
     c.ngOnInit();
-    expect(contactService.getContacts).not.toHaveBeenCalled();
+    expect(contactService.getContactsSummary).not.toHaveBeenCalled();
   });
 
   it('wires sort and paginator through the view-child setters', () => {
@@ -78,7 +78,7 @@ describe('ContactsTable', () => {
   });
 
   it('shows the spinner until contacts load', () => {
-    contactService.getContacts.mockReturnValue(of([]));
+    contactService.getContactsSummary.mockReturnValue(of([]));
     const c = build();
     expect(c.loading).toBe(true);
     c.ngOnInit();
@@ -86,7 +86,7 @@ describe('ContactsTable', () => {
   });
 
   it('clears the spinner when loading fails', () => {
-    contactService.getContacts.mockReturnValue(throwError(() => new Error('x')));
+    contactService.getContactsSummary.mockReturnValue(throwError(() => new Error('x')));
     const c = build();
     c.ngOnInit();
     expect(c.loading).toBe(false);
@@ -97,7 +97,7 @@ describe('ContactsTable', () => {
     const c = build();
     c.ngOnInit();
     expect(c.loading).toBe(false);
-    expect(contactService.getContacts).not.toHaveBeenCalled();
+    expect(contactService.getContactsSummary).not.toHaveBeenCalled();
   });
 
   it('applyFilter matches name, email, phone and service case-insensitively', () => {

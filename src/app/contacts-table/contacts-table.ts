@@ -82,7 +82,10 @@ export class ContactsTable implements OnInit {
       this.cdr.markForCheck();
       return;
     }
-    this.contactService.getContacts().pipe(
+    // Summary projection + stale-while-revalidate: a cached copy (if any)
+    // arrives synchronously so revisits skip the spinner; the fresh response
+    // follows and updates the rows in place.
+    this.contactService.getContactsSummary().pipe(
       catchError(error => {
         console.log(error);
         this.loading = false;
