@@ -53,12 +53,39 @@ describe('ContactDialog', () => {
     expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-1' });
   });
 
-  it('createContact swallows errors without closing', () => {
+  it('shows a duplicate-contact message on a 409 conflict', () => {
     fillValid();
     contactService.createContact.mockReturnValue(
-      throwError(() => new Error('boom')),
+      throwError(() => ({ status: 409 })),
     );
     component.createContact();
     expect(dialogRef.close).not.toHaveBeenCalled();
+    const c = component as unknown as { hasError: boolean; errorMessage: string };
+    expect(c.hasError).toBe(true);
+    expect(c.errorMessage).toBe('A contact with this email already exists.');
+  });
+
+  it('shows a generic message on other create failures', () => {
+    fillValid();
+    contactService.createContact.mockReturnValue(
+      throwError(() => ({ status: 500 })),
+    );
+    component.createContact();
+    expect(dialogRef.close).not.toHaveBeenCalled();
+    const c = component as unknown as { hasError: boolean; errorMessage: string };
+    expect(c.hasError).toBe(true);
+    expect(c.errorMessage).toBe('Failed to create the contact. Please try again.');
+  });
+
+  it('clears a previous error on a successful retry', () => {
+    fillValid();
+    contactService.createContact.mockReturnValue(
+      throwError(() => ({ status: 409 })),
+    );
+    component.createContact();
+    contactService.createContact.mockReturnValue(of({ id: 'c-2' }));
+    component.createContact();
+    expect((component as unknown as { hasError: boolean }).hasError).toBe(false);
+    expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-2' });
   });
 });

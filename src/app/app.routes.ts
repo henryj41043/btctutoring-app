@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import {EventCalendar} from './event-calendar/event-calendar';
 import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
+import {AdminGuard} from './guards/admin.guard';
 import {ContactAccessGuard} from './guards/contact-access.guard';
 import {SessionsTable} from './sessions-table/sessions-table';
 import {ContactsTable} from './contacts-table/contacts-table';
@@ -53,7 +54,7 @@ export const routes: Routes = [
   {
     path: 'billing',
     component: Billing,
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, AdminGuard],
   },
   {
     path: '**',
