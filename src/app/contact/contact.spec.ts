@@ -39,6 +39,7 @@ describe('Contact', () => {
   const contactService = {
     getContact: jest.fn(),
     getContacts: jest.fn(),
+    getStaff: jest.fn(),
     updateContact: jest.fn(),
     adminCreateUser: jest.fn(),
     adminDeleteUser: jest.fn(),
@@ -67,6 +68,7 @@ describe('Contact', () => {
   const defaults = () => {
     contactService.getContact.mockReturnValue(of([fullContact()]));
     contactService.getContacts.mockReturnValue(of([]));
+    contactService.getStaff.mockReturnValue(of([]));
     studentService.getStudentsByContact.mockReturnValue(of([]));
     studentService.getStudentsByTutor.mockReturnValue(of([]));
     noteService.getNotesByRecipient.mockReturnValue(of([]));
@@ -105,7 +107,7 @@ describe('Contact', () => {
   });
 
   it('loads contact, students, notes, tutors and roster on init', () => {
-    contactService.getContacts.mockReturnValue(
+    contactService.getStaff.mockReturnValue(
       of([
         {
           id: 't-1',

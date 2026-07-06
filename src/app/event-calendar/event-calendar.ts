@@ -30,7 +30,7 @@ import {MatTableModule} from '@angular/material/table';
 import {SessionDialog} from '../session-dialog/session-dialog';
 import {Session} from '../models/session.model';
 import {MatDialog} from '@angular/material/dialog';
-import {SessionsService} from '../services/sessions.service';
+import {SessionRange, SessionsService} from '../services/sessions.service';
 import {AuthService} from '../services/auth.service';
 import {catchError, Observable, Subject} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
@@ -137,21 +137,62 @@ export class EventCalendar implements OnInit {
     this.updateSessionsData();
   }
 
-  private updateSessionsData(): void {
+  // Months ('YYYY-MM') whose sessions are already loaded. Sessions are fetched
+  // per visible month (±1 buffer) instead of the whole table, and merged in.
+  private fetchedMonths = new Set<string>();
+
+  private monthKey(date: Date): string {
+    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+  }
+
+  /** The visible month ±1 as month-anchor dates. */
+  private visibleWindow(): Date[] {
+    const y = this.viewDate.getFullYear();
+    const m = this.viewDate.getMonth();
+    return [new Date(y, m - 1, 1), new Date(y, m, 1), new Date(y, m + 1, 1)];
+  }
+
+  /** Refetches when the viewDate moves into months not yet loaded. */
+  onViewDateChange(): void {
+    this.activeDayIsOpen = false;
+    this.updateSessionsData();
+  }
+
+  private updateSessionsData(force: boolean = false): void {
     const isAdmin = this.authService.isAdmin();
     const isTutor = this.authService.user().groups.includes(UserGroup.TUTORS);
-
-    const source$ = isAdmin
-      ? this.sessionsService.getAllSessions()
-      : isTutor
-        ? this.sessionsService.getSessionsByTutor(this.authService.contact().id!)
-        : null;
-
-    if (!source$) {
+    if (!isAdmin && !isTutor) {
       this.events = [];
       this.cdr.markForCheck();
       return;
     }
+
+    if (force) {
+      // Data changed (session created/edited/deleted) — drop the cache and
+      // reload the visible window fresh.
+      this.fetchedMonths.clear();
+      this.allSessions = [];
+    }
+
+    const missing = this.visibleWindow().filter(
+      anchor => !this.fetchedMonths.has(this.monthKey(anchor)),
+    );
+    if (missing.length === 0) {
+      this.events = this.buildCalendarEvents(this.allSessions);
+      this.cdr.markForCheck();
+      return;
+    }
+
+    // One span covering every missing month.
+    const first = missing[0];
+    const last = missing[missing.length - 1];
+    const range: SessionRange = {
+      from: new Date(first.getFullYear(), first.getMonth(), 1).toISOString(),
+      to: new Date(last.getFullYear(), last.getMonth() + 1, 0, 23, 59, 59, 999).toISOString(),
+    };
+    const source$ = isAdmin
+      ? this.sessionsService.getAllSessions(range)
+      : this.sessionsService.getSessionsByTutor(this.authService.contact().id!, range);
 
     source$.pipe(
       catchError(error => {
@@ -160,8 +201,12 @@ export class EventCalendar implements OnInit {
       })
     ).subscribe(response => {
       const sessions: Session[] = response as Session[];
-      this.allSessions = sessions;
-      this.events = this.buildCalendarEvents(sessions);
+      missing.forEach(anchor => this.fetchedMonths.add(this.monthKey(anchor)));
+      // Merge by id so overlapping fetches never duplicate events.
+      const byId = new Map(this.allSessions.map(s => [s.id, s]));
+      sessions.forEach(s => byId.set(s.id, s));
+      this.allSessions = [...byId.values()];
+      this.events = this.buildCalendarEvents(this.allSessions);
       this.cdr.markForCheck();
     });
   }
@@ -268,7 +313,7 @@ export class EventCalendar implements OnInit {
       console.log('The dialog was closed');
       if (result !== undefined) {
         console.log(result);
-        this.updateSessionsData();
+        this.updateSessionsData(true);
       }
     });
   }
@@ -283,7 +328,7 @@ export class EventCalendar implements OnInit {
       console.log('The dialog was closed');
       if (result !== undefined) {
         console.log(result);
-        this.updateSessionsData();
+        this.updateSessionsData(true);
       }
     });
   }
@@ -298,7 +343,7 @@ export class EventCalendar implements OnInit {
       console.log('The dialog was closed');
       if (result !== undefined) {
         console.log(result);
-        this.updateSessionsData();
+        this.updateSessionsData(true);
       }
     });
   }

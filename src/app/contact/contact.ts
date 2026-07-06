@@ -180,7 +180,7 @@ export class Contact implements OnInit {
   }
 
   private getTutors() {
-    this.contactService.getContacts()
+    this.contactService.getStaff()
       .pipe(
         catchError(error => {
           console.log(error);

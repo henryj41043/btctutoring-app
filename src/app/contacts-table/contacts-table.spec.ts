@@ -67,6 +67,24 @@ describe('ContactsTable', () => {
     expect(data(c).paginator).toBe(c.paginator);
   });
 
+  it('applyFilter matches name, email, phone and service case-insensitively', () => {
+    const c = build();
+    c.ngOnInit();
+    (c as any).dataSource.data = [
+      { first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x.com', phone_number: '5551234567', service: 'Tutoring' },
+      { first_name: 'Sam', last_name: 'Roe', email: 'sam@y.com', phone_number: '5559876543', service: 'Hiring' },
+    ];
+    c.applyFilter('ADA');
+    expect((c as any).dataSource.filteredData).toHaveLength(1);
+    expect((c as any).dataSource.filteredData[0].first_name).toBe('Ada');
+    c.applyFilter('hiring');
+    expect((c as any).dataSource.filteredData[0].first_name).toBe('Sam');
+    c.applyFilter('555');
+    expect((c as any).dataSource.filteredData).toHaveLength(2);
+    c.applyFilter('  ');
+    expect((c as any).dataSource.filteredData).toHaveLength(2);
+  });
+
   it('navigates to a newly created contact after the dialog closes', () => {
     afterClosed = { id: 'new-1' };
     const c = build();

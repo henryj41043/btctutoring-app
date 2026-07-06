@@ -690,7 +690,7 @@ export class SessionDialog implements OnInit {
   }
 
   private getTutors() {
-    this.contactService.getContacts()
+    this.contactService.getStaff()
       .pipe(catchError(error => { console.log(error); return EMPTY; }))
       .subscribe(contacts => {
         this.tutors = contacts.filter(c => c.status === Status.STAFF && c.currently_accepting_students && c.service === Service.HIRING);

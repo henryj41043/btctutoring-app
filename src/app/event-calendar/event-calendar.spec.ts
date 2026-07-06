@@ -74,7 +74,50 @@ describe('EventCalendar', () => {
     sessionsService.getSessionsByTutor.mockReturnValue(of([]));
     const c = build();
     c.ngOnInit();
-    expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith('contact-1');
+    expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith(
+      'contact-1',
+      expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
+    );
+  });
+
+  it('fetches the visible month ±1 and skips refetching cached months', () => {
+    sessionsService.getAllSessions.mockReturnValue(of([]));
+    const c = build();
+    c.viewDate = new Date(2026, 6, 15); // July 2026
+    c.ngOnInit();
+    expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+    const range = sessionsService.getAllSessions.mock.calls.at(-1)![0] as {
+      from: string; to: string;
+    };
+    // Window = June 1 through August 31.
+    expect(new Date(range.from).getMonth()).toBe(5);
+    expect(new Date(range.to).getMonth()).toBe(7);
+
+    // Navigating within the cached window does not refetch…
+    c.viewDate = new Date(2026, 7, 1); // August (cached)
+    c.onViewDateChange();
+    expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(2); // Sept missing → fetch
+    // …and revisiting July (fully cached) does not.
+    c.viewDate = new Date(2026, 6, 15);
+    c.onViewDateChange();
+    expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(2);
+  });
+
+  it('merges refetched sessions by id without duplicating events', () => {
+    sessionsService.getAllSessions.mockReturnValue(of([
+      { id: 's-1', start_datetime: '2026-07-01T10:00:00', end_datetime: '2026-07-01T11:00:00' },
+    ] as Session[]));
+    const c = build();
+    c.viewDate = new Date(2026, 6, 15);
+    c.ngOnInit();
+    // Jump two months ahead so a new fetch happens, returning an overlap.
+    sessionsService.getAllSessions.mockReturnValue(of([
+      { id: 's-1', start_datetime: '2026-07-01T10:00:00', end_datetime: '2026-07-01T11:00:00' },
+      { id: 's-2', start_datetime: '2026-09-10T10:00:00', end_datetime: '2026-09-10T11:00:00' },
+    ] as Session[]));
+    c.viewDate = new Date(2026, 8, 15);
+    c.onViewDateChange();
+    expect(c.events).toHaveLength(2); // s-1 not duplicated
   });
 
   it('renders no events for a user who is neither admin nor tutor', () => {
@@ -98,12 +141,14 @@ describe('EventCalendar', () => {
     sessionsService.getAllSessions.mockReturnValue(
       of([
         {
+          id: 'sess-admin',
           type: SessionType.ADMIN,
           tutor_name: 'Tess',
           start_datetime: '2026-06-01T09:00:00',
           end_datetime: '2026-06-01T10:00:00',
         },
         {
+          id: 'sess-makeup',
           type: SessionType.MAKE_UP,
           tutor_name: 'Tess',
           student_name: 'Pat',

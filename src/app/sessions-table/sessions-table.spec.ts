@@ -64,7 +64,27 @@ describe('SessionsTable', () => {
     sessionsService.getSessionsByTutor.mockReturnValue(of([]));
     const c = build();
     c.ngOnInit();
-    expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith('contact-1');
+    expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith(
+      'contact-1',
+      expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
+    );
+  });
+
+  it('refetches when the month changes and ignores null dates', () => {
+    sessionsService.getAllSessions.mockReturnValue(of([]));
+    const c = build();
+    c.ngOnInit();
+    expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+    c.onDateChange(new Date(2026, 3, 10)); // April 2026
+    expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(2);
+    const range = sessionsService.getAllSessions.mock.calls.at(-1)![0] as {
+      from: string; to: string;
+    };
+    expect(new Date(range.from).getDate()).toBe(1);
+    expect(new Date(range.from).getMonth()).toBe(3);
+    expect(new Date(range.to).getMonth()).toBe(3);
+    c.onDateChange(null);
+    expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(2);
   });
 
   it('shows nothing for a user who is neither admin nor tutor', () => {

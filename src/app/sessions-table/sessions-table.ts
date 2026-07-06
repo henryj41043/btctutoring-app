@@ -6,7 +6,12 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatDialog} from '@angular/material/dialog';
-import {SessionsService} from '../services/sessions.service';
+import {SessionRange, SessionsService} from '../services/sessions.service';
+import {MatDatepickerModule} from '@angular/material/datepicker';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
+import {FormsModule} from '@angular/forms';
+import {provideNativeDateAdapter} from '@angular/material/core';
 import {AuthService} from '../services/auth.service';
 import {Session} from '../models/session.model';
 import {SessionType} from '../enums/session-type.enum';
@@ -18,6 +23,7 @@ import {DatePipe} from '@angular/common';
 
 @Component({
   selector: 'app-sessions-table',
+  providers: [provideNativeDateAdapter()],
   imports: [
     MatButtonModule,
     MatCardModule,
@@ -25,6 +31,10 @@ import {DatePipe} from '@angular/common';
     MatIconModule,
     MatSortModule,
     MatPaginatorModule,
+    MatDatepickerModule,
+    MatFormFieldModule,
+    MatInputModule,
+    FormsModule,
     DatePipe,
   ],
   templateUrl: './sessions-table.html',
@@ -43,11 +53,30 @@ export class SessionsTable implements OnInit, AfterViewInit {
   readonly SessionType = SessionType;
   eventColumns: string[] = ['date', 'tutor', 'student', 'start', 'end', 'attendance', 'notes', 'edit', 'delete'];
   dataSource = new MatTableDataSource<Session>([]);
+  /** The month whose sessions are shown; only that month is fetched. */
+  selectedDate: Date = new Date();
 
   constructor(private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
     this.updateSessionsData();
+  }
+
+  onDateChange(date: Date | null): void {
+    if (date) {
+      this.selectedDate = date;
+      this.updateSessionsData();
+    }
+  }
+
+  /** The selected month as an inclusive ISO datetime range. */
+  private selectedMonthRange(): SessionRange {
+    const y = this.selectedDate.getFullYear();
+    const m = this.selectedDate.getMonth();
+    return {
+      from: new Date(y, m, 1).toISOString(),
+      to: new Date(y, m + 1, 0, 23, 59, 59, 999).toISOString(),
+    };
   }
 
   ngAfterViewInit(): void {
@@ -67,11 +96,12 @@ export class SessionsTable implements OnInit, AfterViewInit {
   private updateSessionsData(): void {
     const isAdmin = this.authService.isAdmin();
     const isTutor = this.authService.user().groups.includes(UserGroup.TUTORS);
+    const range = this.selectedMonthRange();
 
     const source$ = isAdmin
-      ? this.sessionsService.getAllSessions()
+      ? this.sessionsService.getAllSessions(range)
       : isTutor
-        ? this.sessionsService.getSessionsByTutor(this.authService.contact().id!)
+        ? this.sessionsService.getSessionsByTutor(this.authService.contact().id!, range)
         : null;
 
     if (!source$) {

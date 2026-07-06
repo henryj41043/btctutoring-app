@@ -47,7 +47,7 @@ describe('Payroll', () => {
     contact: () => self,
   };
   const sessionsService = { getSessionsByTutor: jest.fn() };
-  const contactService = { getContacts: jest.fn() };
+  const contactService = { getContacts: jest.fn(), getStaff: jest.fn() };
 
   const build = (): Payroll => {
     TestBed.configureTestingModule({
@@ -169,7 +169,7 @@ describe('Payroll', () => {
     });
 
     it('builds an entry per staff tutor', () => {
-      contactService.getContacts.mockReturnValue(
+      contactService.getStaff.mockReturnValue(
         of([
           staffContact({ id: 'c-1', hourly_rate: undefined }), // exercises `?? 0`
           staffContact({ id: 'c-2', service: Service.TUTORING }), // not staff
@@ -183,7 +183,7 @@ describe('Payroll', () => {
     });
 
     it('shows nothing when there are no staff tutors', () => {
-      contactService.getContacts.mockReturnValue(
+      contactService.getStaff.mockReturnValue(
         of([staffContact({ status: Status.ACTIVE_STUDENT })]),
       );
       const p = build();
@@ -192,7 +192,7 @@ describe('Payroll', () => {
     });
 
     it('shows nothing when loading contacts fails', () => {
-      contactService.getContacts.mockReturnValue(
+      contactService.getStaff.mockReturnValue(
         throwError(() => new Error('boom')),
       );
       const p = build();
@@ -239,5 +239,16 @@ describe('Payroll', () => {
       expect(() => p.exportPDF()).not.toThrow();
       expect(autoTable).toHaveBeenCalled();
     });
+  });
+
+  it('fetches only the selected pay period of sessions per tutor', () => {
+    contactService.getStaff.mockReturnValue(of([staffContact()]));
+    sessionsService.getSessionsByTutor.mockReturnValue(of([]));
+    const c = build();
+    c.onDateChange(new Date(2026, 6, 15)); // Jul 1–15 period
+    const [tutorId, range] = sessionsService.getSessionsByTutor.mock.calls.at(-1)!;
+    expect(tutorId).toBeDefined();
+    expect(new Date(range.from).getDate()).toBe(1);
+    expect(new Date(range.to).getDate()).toBe(15);
   });
 });

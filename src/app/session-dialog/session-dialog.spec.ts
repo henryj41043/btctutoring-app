@@ -51,7 +51,7 @@ describe('SessionDialog', () => {
     deleteSession: jest.fn(),
     getSessionsBySeries: jest.fn(),
   };
-  const contactService = { getContacts: jest.fn() };
+  const contactService = { getContacts: jest.fn(), getStaff: jest.fn() };
   const studentService = { getStudents: jest.fn(), updateStudent: jest.fn() };
   const authService = { isAdmin: () => isAdmin };
 
@@ -165,7 +165,7 @@ describe('SessionDialog', () => {
 
   describe('ngOnInit', () => {
     it('hydrates fields from the session in edit mode and loads tutors/students', () => {
-      contactService.getContacts.mockReturnValue(of([tutor()]));
+      contactService.getStaff.mockReturnValue(of([tutor()]));
       studentService.getStudents.mockReturnValue(of([student()]));
       const c = build({
         type: 'edit',
@@ -187,7 +187,7 @@ describe('SessionDialog', () => {
     });
 
     it('does not hydrate fields in create mode', () => {
-      contactService.getContacts.mockReturnValue(of([]));
+      contactService.getStaff.mockReturnValue(of([]));
       studentService.getStudents.mockReturnValue(of([]));
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.ngOnInit();
@@ -197,7 +197,7 @@ describe('SessionDialog', () => {
 
   describe('tutor/student loading', () => {
     it('getTutors keeps only accepting staff hires; getStudents keeps active students', () => {
-      contactService.getContacts.mockReturnValue(
+      contactService.getStaff.mockReturnValue(
         of([tutor(), { id: 't-x', status: Status.ACTIVE_STUDENT } as Contact]),
       );
       studentService.getStudents.mockReturnValue(
@@ -224,7 +224,7 @@ describe('SessionDialog', () => {
     });
 
     it('swallows tutor/student load errors', () => {
-      contactService.getContacts.mockReturnValue(throwError(() => new Error('x')));
+      contactService.getStaff.mockReturnValue(throwError(() => new Error('x')));
       studentService.getStudents.mockReturnValue(throwError(() => new Error('x')));
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.ngOnInit();

@@ -46,6 +46,11 @@ describe('ContactService', () => {
     req.flush([]);
   });
 
+  it('getStaff sets the staff param', () => {
+    service.getStaff().subscribe();
+    httpMock.expectOne(`${base}/contacts?staff=true`).flush([]);
+  });
+
   it('createContact POSTs the contact body', () => {
     const contact = { first_name: 'Ada' } as Contact;
     service.createContact(contact).subscribe();

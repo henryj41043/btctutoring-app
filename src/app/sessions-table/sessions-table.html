@@ -1,6 +1,12 @@
 <div class="sessions-table">
   <div class="btc-page-header">
     <h2>Sessions</h2>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline">
+      <mat-label>Month</mat-label>
+      <input matInput [matDatepicker]="sessionsMonthPicker" [(ngModel)]="selectedDate" (dateChange)="onDateChange($event.value)">
+      <mat-datepicker-toggle [for]="sessionsMonthPicker" matSuffix/>
+      <mat-datepicker #sessionsMonthPicker/>
+    </mat-form-field>
     @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
       <button mat-raised-button color="primary" (click)="openCreateSessionDialog()">
         <mat-icon>add</mat-icon>

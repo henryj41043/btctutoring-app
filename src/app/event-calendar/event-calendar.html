@@ -1,10 +1,10 @@
 <div class="event-calendar-header">
   <div class="cal-nav">
-    <button matIconButton mwlCalendarPreviousView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()" aria-label="Previous">
+    <button matIconButton mwlCalendarPreviousView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="onViewDateChange()" aria-label="Previous">
       <mat-icon>chevron_left</mat-icon>
     </button>
-    <button matButton mwlCalendarToday [(viewDate)]="viewDate" class="cal-today-btn">Today</button>
-    <button matIconButton mwlCalendarNextView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="closeOpenMonthViewDay()" aria-label="Next">
+    <button matButton mwlCalendarToday [(viewDate)]="viewDate" (viewDateChange)="onViewDateChange()" class="cal-today-btn">Today</button>
+    <button matIconButton mwlCalendarNextView [view]="view" [(viewDate)]="viewDate" (viewDateChange)="onViewDateChange()" aria-label="Next">
       <mat-icon>chevron_right</mat-icon>
     </button>
   </div>

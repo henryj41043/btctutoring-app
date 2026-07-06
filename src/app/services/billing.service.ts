@@ -16,6 +16,12 @@ export class BillingService {
     return this.httpClient.get<BillingRecord[]>(`${this.baseUrl}/billing`);
   }
 
+  /** All of a month's records (1st + 15th periods); month is 'YYYY-MM'. */
+  getBillingRecordsByMonth(month: string): Observable<BillingRecord[]> {
+    const params: HttpParams = new HttpParams().set('month', month);
+    return this.httpClient.get<BillingRecord[]>(`${this.baseUrl}/billing`, { params });
+  }
+
   getBillingRecordsByPeriod(periodStart: string): Observable<BillingRecord[]> {
     const params: HttpParams = new HttpParams().set('period', periodStart);
     return this.httpClient.get<BillingRecord[]>(`${this.baseUrl}/billing`, { params });

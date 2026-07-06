@@ -88,6 +88,11 @@ export class Billing implements OnInit {
     }
   }
 
+  /** 'YYYY-MM' month key for the selected billing month. */
+  private monthKeyOf(date: Date): string {
+    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+  }
+
   /** 'YYYY-MM-DD' period key for the selected month and day-of-month. */
   private periodKey(date: Date, day: number): string {
     const y = date.getFullYear();
@@ -121,7 +126,9 @@ export class Billing implements OnInit {
     forkJoin({
       contacts: this.contactService.getContacts().pipe(catchError(() => of([] as Contact[]))),
       students: this.studentService.getStudents().pipe(catchError(() => of([] as Student[]))),
-      records: this.billingService.getBillingRecords().pipe(catchError(() => of([] as BillingRecord[]))),
+      records: this.billingService
+        .getBillingRecordsByMonth(this.monthKeyOf(date))
+        .pipe(catchError(() => of([] as BillingRecord[]))),
     }).subscribe(({contacts, students, records}) => {
       this.finishLoading(this.buildEntries(date, contacts, students, records));
     });
