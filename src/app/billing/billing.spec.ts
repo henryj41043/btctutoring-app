@@ -97,40 +97,44 @@ describe('Billing', () => {
     expect(entry.due_first + entry.due_fifteenth).toBe(entry.total);
   });
 
-  it('bills a semi-monthly prorated first month in full on the 15th (start before the 15th)', () => {
-    const s = student({ package_start_date: '2026-07-10T00:00:00' }); // default Monday schedule
+  it('splits a semi-monthly prorated first month evenly across the 1st and 15th (start before the 15th)', () => {
+    // Default Monday schedule; July 2026 Mondays: 6, 13, 20, 27. Start Jul 10 →
+    // 3 remaining slots → 3 × $41.77 = $125.31, split evenly across both dates.
+    const s = student({ package_start_date: '2026-07-10T00:00:00' });
     contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
     studentService.getStudents.mockReturnValue(of([s]));
     const c = build(); // viewing July 2026
     c.ngOnInit();
     const entry = (c as any).dataSource.data[0];
-    const prorated = studentMonthlyCharge(s, 2026, 6);
-    expect(prorated).toBeGreaterThan(0);
-    expect(prorated).toBeLessThan(362);
-    expect(entry.due_first).toBeNull(); // 1st left blank
-    expect(entry.due_fifteenth).toBe(prorated); // full prorated amount, not split
-    expect(entry.total).toBe(prorated);
+    expect(studentMonthlyCharge(s, 2026, 6)).toBe(125.31);
+    expect(entry.due_first).toBe(62.66);
+    expect(entry.due_fifteenth).toBe(62.65);
+    expect(entry.total).toBe(125.31);
   });
 
-  it('defers a semi-monthly prorated first month to the 1st of next month (start on/after the 15th)', () => {
+  it('bills a semi-monthly prorated first month entirely on the 15th of the start month (start on/after the 15th)', () => {
+    // Start Jul 20 → 2 remaining Mondays → $83.54, all on July's 15th; 1st blank.
     const s = student({ package_start_date: '2026-07-20T00:00:00' });
     contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
     studentService.getStudents.mockReturnValue(of([s]));
-
-    // Start month (July): nothing billed yet → no row.
-    const july = build();
+    const july = build(); // viewing July 2026 — the START month shows the charge
     july.ngOnInit();
-    expect((july as any).dataSource.data).toHaveLength(0);
+    const entry = (july as any).dataSource.data[0];
+    expect(entry.due_first).toBeNull(); // 1st left blank
+    expect(entry.due_fifteenth).toBe(83.54);
+    expect(entry.total).toBe(83.54);
+  });
 
-    // Next month (August): full prorated amount on the 1st, 15th blank.
-    const aug = build();
-    aug.selectedDate = new Date(2026, 7, 1);
-    aug.ngOnInit();
-    const entry = (aug as any).dataSource.data[0];
-    const prorated = studentMonthlyCharge(s, 2026, 6);
-    expect(entry.due_first).toBe(prorated);
+  it('shows a prorated monthly first month on the 1st of the start month', () => {
+    // Monthly cycle, start Jul 20 → bill date is July 1st with the prorated amount.
+    const s = student({ package_start_date: '2026-07-20T00:00:00' });
+    studentService.getStudents.mockReturnValue(of([s]));
+    const c = build(); // monthly contact fixture, viewing July 2026
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    expect(entry.due_first).toBe(83.54);
     expect(entry.due_fifteenth).toBeNull();
-    expect(entry.total).toBe(prorated);
+    expect(entry.total).toBe(83.54);
   });
 
   it('resumes the normal 50/50 split the month after a prorated first month', () => {
