@@ -34,6 +34,38 @@ describe('ContactDialog', () => {
       service: 'Tutoring',
     });
 
+  it('initializes form defaults, validators and error state', () => {
+    const f = form();
+    // Defaults
+    expect(f.controls['first_name'].value).toBe('');
+    expect(f.controls['last_name'].value).toBe('');
+    expect(f.controls['email'].value).toBe('');
+    expect(f.controls['phone_number'].value).toBe('');
+    expect(f.controls['service'].value).toBeNull(); // FormBuilder normalizes undefined -> null
+    const c = component as unknown as {
+      hasError: boolean; errorMessage: string; serviceOptions: string[];
+    };
+    expect(c.hasError).toBe(false);
+    expect(c.errorMessage).toBe('');
+    expect(c.serviceOptions.length).toBeGreaterThan(0);
+
+    // Validators: required on first_name, email, service; none on last_name.
+    expect(f.controls['first_name'].hasError('required')).toBe(true);
+    f.controls['first_name'].setValue('Ada');
+    expect(f.controls['first_name'].valid).toBe(true);
+    expect(f.controls['last_name'].valid).toBe(true);
+    expect(f.controls['email'].hasError('required')).toBe(true);
+    f.controls['email'].setValue('not-an-email');
+    expect(f.controls['email'].hasError('email')).toBe(true);
+    f.controls['email'].setValue('ada@example.com');
+    expect(f.controls['email'].valid).toBe(true);
+    f.controls['phone_number'].setValue('123');
+    expect(f.controls['phone_number'].hasError('phoneNumber')).toBe(true);
+    f.controls['phone_number'].setValue('1234567890');
+    expect(f.controls['phone_number'].valid).toBe(true);
+    expect(f.controls['service'].hasError('required')).toBe(true);
+  });
+
   it('cancel closes the dialog', () => {
     component.cancel();
     expect(dialogRef.close).toHaveBeenCalledWith();
@@ -53,12 +85,39 @@ describe('ContactDialog', () => {
     expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-1' });
   });
 
-  it('createContact swallows errors without closing', () => {
+  it('shows a duplicate-contact message on a 409 conflict', () => {
     fillValid();
     contactService.createContact.mockReturnValue(
-      throwError(() => new Error('boom')),
+      throwError(() => ({ status: 409 })),
     );
     component.createContact();
     expect(dialogRef.close).not.toHaveBeenCalled();
+    const c = component as unknown as { hasError: boolean; errorMessage: string };
+    expect(c.hasError).toBe(true);
+    expect(c.errorMessage).toBe('A contact with this email already exists.');
+  });
+
+  it('shows a generic message on other create failures', () => {
+    fillValid();
+    contactService.createContact.mockReturnValue(
+      throwError(() => ({ status: 500 })),
+    );
+    component.createContact();
+    expect(dialogRef.close).not.toHaveBeenCalled();
+    const c = component as unknown as { hasError: boolean; errorMessage: string };
+    expect(c.hasError).toBe(true);
+    expect(c.errorMessage).toBe('Failed to create the contact. Please try again.');
+  });
+
+  it('clears a previous error on a successful retry', () => {
+    fillValid();
+    contactService.createContact.mockReturnValue(
+      throwError(() => ({ status: 409 })),
+    );
+    component.createContact();
+    contactService.createContact.mockReturnValue(of({ id: 'c-2' }));
+    component.createContact();
+    expect((component as unknown as { hasError: boolean }).hasError).toBe(false);
+    expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-2' });
   });
 });

@@ -39,7 +39,7 @@ test.describe('Login', () => {
   test('renders the login card', async ({ page }) => {
     await page.goto('/login');
     await expect(
-      page.getByRole('heading', { name: 'Beyond the Chalkboard Hub' }),
+      page.getByRole('heading', { name: 'Beyond the Chalkboard Tutoring Hub' }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Login' })).toBeVisible();
   });

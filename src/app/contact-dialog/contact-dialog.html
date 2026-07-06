@@ -31,6 +31,9 @@
         }
       </mat-select>
     </mat-form-field>
+    @if (hasError) {
+      <mat-error class="create-error">{{errorMessage}}</mat-error>
+    }
   </mat-dialog-content>
   <mat-dialog-actions>
     <button matButton (click)="cancel()">Cancel</button>

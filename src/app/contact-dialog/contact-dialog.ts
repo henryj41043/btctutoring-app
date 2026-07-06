@@ -6,6 +6,7 @@ import {
   MatDialogTitle,
 } from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
+import {HttpErrorResponse} from '@angular/common/http';
 import {FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
@@ -48,6 +49,8 @@ export class ContactDialog {
     service: [undefined, Validators.required],
   });
   protected serviceOptions: string[] = Object.values(Service);
+  protected errorMessage: string = '';
+  protected hasError: boolean = false;
 
   cancel(): void {
     this.dialogRef.close();
@@ -55,11 +58,17 @@ export class ContactDialog {
 
   createContact(): void {
     if (this.contactForm.valid) {
+      this.hasError = false;
       let contact: Contact = this.contactForm.value as Contact;
       this.contactService.createContact(contact).pipe(
-        catchError(error =>  {
+        catchError((error: HttpErrorResponse) =>  {
           console.log(error);
-          // TODO: show error message in dialog view
+          // 409 = a contact with this email already exists (email is the
+          // unique identifier for contacts).
+          this.errorMessage = error.status === 409
+            ? 'A contact with this email already exists.'
+            : 'Failed to create the contact. Please try again.';
+          this.hasError = true;
           return EMPTY;
         })
       ).subscribe(response => {
