@@ -43,6 +43,7 @@ describe('Contact', () => {
     updateContact: jest.fn(),
     adminCreateUser: jest.fn(),
     adminDeleteUser: jest.fn(),
+    adminUpdateUserGroup: jest.fn(),
   };
   const studentService = {
     getStudentsByContact: jest.fn(),
@@ -72,6 +73,7 @@ describe('Contact', () => {
     studentService.getStudentsByContact.mockReturnValue(of([]));
     studentService.getStudentsByTutor.mockReturnValue(of([]));
     noteService.getNotesByRecipient.mockReturnValue(of([]));
+    contactService.updateContact.mockReturnValue(of({} as ContactModel));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -503,15 +505,21 @@ describe('Contact', () => {
   });
 
   describe('account management', () => {
-    it('creates an account when the email and group are set', () => {
+    it('creates an account and mirrors it onto the contact record', () => {
       const c = build();
       c.ngOnInit();
       form(c).controls['user_group'].setValue('Tutors');
       contactService.adminCreateUser.mockReturnValue(of({ message: 'ok' }));
       c.createAccount();
-      expect(contactService.adminCreateUser).toHaveBeenCalled();
+      expect(contactService.adminCreateUser).toHaveBeenCalledWith(
+        'ada@example.com', 'Tutors', 'c-1',
+      );
       expect((c as unknown as { accountCreated: boolean }).accountCreated).toBe(true);
       expect(form(c).controls['user_profile_created'].value).toBe(true);
+      // The mirror is persisted so the table matches Cognito without a manual save.
+      expect(contactService.updateContact).toHaveBeenCalledWith(
+        expect.objectContaining({ user_profile_created: true, user_group: 'Tutors' }),
+      );
     });
 
     it('flags an error when the group is missing', () => {
@@ -533,7 +541,7 @@ describe('Contact', () => {
       expect((c as unknown as { accountLoading: boolean }).accountLoading).toBe(false);
     });
 
-    it('deletes an account', () => {
+    it('deletes an account and mirrors it onto the contact record', () => {
       const c = build();
       c.ngOnInit();
       contactService.adminDeleteUser.mockReturnValue(of({ message: 'ok' }));
@@ -541,6 +549,9 @@ describe('Contact', () => {
       expect(contactService.adminDeleteUser).toHaveBeenCalled();
       expect((c as unknown as { accountCreated: boolean }).accountCreated).toBe(false);
       expect(form(c).controls['user_profile_created'].value).toBe(false);
+      expect(contactService.updateContact).toHaveBeenCalledWith(
+        expect.objectContaining({ user_profile_created: false }),
+      );
     });
 
     it('handles a delete-account error', () => {
@@ -575,6 +586,62 @@ describe('Contact', () => {
       expect((c as unknown as { updateError: boolean }).updateError).toBe(true);
       jest.advanceTimersByTime(1000);
       expect((c as unknown as { updateError: boolean }).updateError).toBe(false);
+    });
+
+    it('syncs Cognito when the group changes on an existing account', () => {
+      contactService.getContact.mockReturnValue(
+        of([fullContact({ user_profile_created: true, user_group: 'Tutors' })]),
+      );
+      contactService.adminUpdateUserGroup.mockReturnValue(of({ success: true }));
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['user_group'].setValue('Admins');
+      c.updateContact();
+      expect(contactService.adminUpdateUserGroup).toHaveBeenCalledWith(
+        'ada@example.com', 'Admins',
+      );
+      // The contact is saved only after Cognito is updated.
+      expect(contactService.updateContact).toHaveBeenCalled();
+      expect((c as unknown as { updatedSuccessfully: boolean }).updatedSuccessfully).toBe(true);
+    });
+
+    it('does not save the contact when the Cognito group sync fails', () => {
+      contactService.getContact.mockReturnValue(
+        of([fullContact({ user_profile_created: true, user_group: 'Tutors' })]),
+      );
+      contactService.adminUpdateUserGroup.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['user_group'].setValue('Admins');
+      c.updateContact();
+      // Cognito failed → the record must not drift ahead of the real group.
+      expect(contactService.updateContact).not.toHaveBeenCalled();
+      expect((c as unknown as { updateError: boolean }).updateError).toBe(true);
+      jest.advanceTimersByTime(1000);
+    });
+
+    it('does not touch Cognito when the group is unchanged', () => {
+      contactService.getContact.mockReturnValue(
+        of([fullContact({ user_profile_created: true, user_group: 'Tutors' })]),
+      );
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['first_name'].setValue('Renamed');
+      c.updateContact();
+      expect(contactService.adminUpdateUserGroup).not.toHaveBeenCalled();
+      expect(contactService.updateContact).toHaveBeenCalled();
+    });
+
+    it('does not sync Cognito for a group change when no account exists', () => {
+      contactService.getContact.mockReturnValue(
+        of([fullContact({ user_profile_created: false, user_group: 'Tutors' })]),
+      );
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['user_group'].setValue('Admins');
+      c.updateContact();
+      expect(contactService.adminUpdateUserGroup).not.toHaveBeenCalled();
+      expect(contactService.updateContact).toHaveBeenCalled();
     });
   });
 
