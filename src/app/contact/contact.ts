@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, Input, OnInit, ViewChild} from '@angular/core';
 import {ContactService} from '../services/contact.service';
-import {catchError, EMPTY, of} from 'rxjs';
+import {catchError, EMPTY, of, switchMap} from 'rxjs';
 import {AbstractControl, FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
 import {AvailabilityBlock} from '../models/availability-block.model';
@@ -621,90 +621,123 @@ export class Contact implements OnInit {
   }
 
   createAccount() {
-    if (this.contactForm.controls['email'].valid && this.contactForm.controls['user_group'].value !== '') {
-      this.accountLoading = true;
-      this.accountError = false;
-      this.cdr.markForCheck();
-      this.contactService.adminCreateUser(
-        this.contactForm.controls['email'].value,
-        this.contactForm.controls['user_group'].value,
-        this.id
-      ).pipe(
-        catchError(error => {
-          console.log(error);
-          this.accountError = true;
-          this.accountLoading = false;
-          this.cdr.markForCheck();
-          return EMPTY;
-        })
-      ).subscribe(response => {
-        console.log(response);
-        this.accountError = false;
-        this.accountCreated = true;
-        this.accountLoading = false;
-        this.contactForm.controls['user_profile_created'].setValue(true);
-        this.contactForm.controls['user_profile_created'].markAsDirty();
-        this.cdr.markForCheck();
-        this.contactForm.updateValueAndValidity();
-      });
-    } else {
+    // A user with no group is locked out of the whole app, so a group is
+    // mandatory. The Create button is also disabled until one is chosen.
+    if (!this.contactForm.controls['email'].valid || !this.contactForm.controls['user_group'].value) {
       this.accountError = true;
       this.cdr.markForCheck();
+      return;
     }
+    this.accountLoading = true;
+    this.accountError = false;
+    this.cdr.markForCheck();
+    this.contactService.adminCreateUser(
+      this.contactForm.controls['email'].value,
+      this.contactForm.controls['user_group'].value,
+      this.id
+    ).pipe(
+      catchError(error => {
+        console.log(error);
+        this.accountError = true;
+        this.accountLoading = false;
+        this.cdr.markForCheck();
+        return EMPTY;
+      })
+    ).subscribe(() => {
+      this.accountError = false;
+      this.accountCreated = true;
+      this.contactForm.controls['user_profile_created'].setValue(true);
+      // Mirror the new Cognito account onto the contact record so the two stay
+      // in sync without waiting for a manual save.
+      this.persistAccountMirror();
+    });
   }
 
   deleteAccount() {
-    if (this.contactForm.controls['email'].valid) {
-      this.accountLoading = true;
-      this.cdr.markForCheck();
-      this.contactService.adminDeleteUser(this.contactForm.controls['email'].value!).pipe(
-        catchError(error => {
-          console.log(error);
-          this.accountLoading = false;
-          this.cdr.markForCheck();
-          return EMPTY;
-        })
-      ).subscribe(response => {
-        console.log(response);
-        this.accountCreated = false;
-        this.accountLoading = false;
-        this.contactForm.controls['user_profile_created'].setValue(false);
-        this.contactForm.controls['user_profile_created'].markAsDirty();
-        this.cdr.markForCheck();
-        this.contactForm.updateValueAndValidity();
-      });
+    if (!this.contactForm.controls['email'].valid) {
+      return;
     }
+    this.accountLoading = true;
+    this.cdr.markForCheck();
+    this.contactService.adminDeleteUser(this.contactForm.controls['email'].value!).pipe(
+      catchError(error => {
+        console.log(error);
+        this.accountError = true;
+        this.accountLoading = false;
+        this.cdr.markForCheck();
+        return EMPTY;
+      })
+    ).subscribe(() => {
+      this.accountError = false;
+      this.accountCreated = false;
+      this.contactForm.controls['user_profile_created'].setValue(false);
+      this.persistAccountMirror();
+    });
+  }
+
+  /** Persists user_profile_created + user_group to the contact record so it
+   *  mirrors the Cognito account. Used after create/delete account. */
+  private persistAccountMirror(): void {
+    const contact: _Contact = this.contactForm.getRawValue() as _Contact;
+    this.contactService.updateContact(contact).pipe(
+      catchError(error => {
+        console.log(error);
+        this.accountLoading = false;
+        this.cdr.markForCheck();
+        return EMPTY;
+      })
+    ).subscribe(() => {
+      this.loadedContact = contact;
+      this.accountLoading = false;
+      this.contactForm.markAsPristine();
+      this.contactForm.markAsUntouched();
+      this.cdr.markForCheck();
+    });
   }
 
   updateContact() {
-    if (this.contactForm.valid) {
-      let contact: _Contact = this.contactForm.value as _Contact;
-      this.contactService.updateContact(contact)
-        .pipe(
-          catchError(error => {
-            console.log(error);
-            this.updatedSuccessfully = false;
-            this.updateError = true;
-            this.cdr.markForCheck();
-            setTimeout(() => {
-              this.updateError = false;
-              this.cdr.markForCheck();
-            }, 1000);
-            return EMPTY;
-          })
-        )
-        .subscribe(() => {
-          this.updatedSuccessfully = true;
-          this.updateError = false;
-          this.contactForm.markAsPristine();
-          this.contactForm.markAsUntouched();
+    if (!this.contactForm.valid) {
+      return;
+    }
+    const contact: _Contact = this.contactForm.value as _Contact;
+    // If the group changed on a contact that already has an account, Cognito
+    // must be updated too. Doing it first means a Cognito failure aborts the
+    // save, so the contact record can't drift ahead of the actual group.
+    const accountExists = this.loadedContact?.user_profile_created ?? false;
+    const groupChanged =
+      accountExists && !!contact.email && contact.user_group !== this.loadedContact?.user_group;
+    const save$ = groupChanged
+      ? this.contactService
+          .adminUpdateUserGroup(contact.email!, contact.user_group ?? '')
+          .pipe(switchMap(() => this.contactService.updateContact(contact)))
+      : this.contactService.updateContact(contact);
+
+    save$
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          this.updatedSuccessfully = false;
+          this.updateError = true;
           this.cdr.markForCheck();
           setTimeout(() => {
-            this.updatedSuccessfully = false;
+            this.updateError = false;
             this.cdr.markForCheck();
           }, 1000);
-        });
-    }
+          return EMPTY;
+        })
+      )
+      .subscribe(() => {
+        this.loadedContact = contact;
+        this.updatedSuccessfully = true;
+        this.updateError = false;
+        this.contactForm.markAsPristine();
+        this.contactForm.markAsUntouched();
+        this.cdr.markForCheck();
+        setTimeout(() => {
+          this.updatedSuccessfully = false;
+          this.cdr.markForCheck();
+        }, 1000);
+      });
   }
 
   openDeleteDialog(): void {

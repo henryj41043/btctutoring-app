@@ -65,7 +65,12 @@
           @if (accountLoading) {
             <mat-spinner diameter="24"></mat-spinner>
           } @else if (!accountCreated) {
-            <button matButton type="button" (click)="createAccount()">Create Account</button>
+            <button matButton type="button"
+                    [disabled]="!contactForm.controls['user_group'].value"
+                    (click)="createAccount()">Create Account</button>
+            @if (!contactForm.controls['user_group'].value) {
+              <span class="account-hint">Select a group to enable account creation.</span>
+            }
           } @else {
             <button matButton type="button" (click)="deleteAccount()">Delete Account</button>
           }

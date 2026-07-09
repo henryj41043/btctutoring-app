@@ -73,4 +73,9 @@ export class ContactService {
   adminDeleteUser(id: string): Observable<any> {
     return this.httpClient.delete(`${this.baseUrl}/auth/user/${id}`);
   }
+
+  /** Moves an existing Cognito user to a different group (Admins/Tutors). */
+  adminUpdateUserGroup(email: string, group: string): Observable<any> {
+    return this.httpClient.put(`${this.baseUrl}/auth/user/group`, {email, group});
+  }
 }

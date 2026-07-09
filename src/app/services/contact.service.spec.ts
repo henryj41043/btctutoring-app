@@ -146,4 +146,12 @@ describe('ContactService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush({});
   });
+
+  it('adminUpdateUserGroup PUTs to /auth/user/group', () => {
+    service.adminUpdateUserGroup('a@b.com', 'Admins').subscribe();
+    const req = httpMock.expectOne(`${base}/auth/user/group`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ email: 'a@b.com', group: 'Admins' });
+    req.flush({});
+  });
 });
