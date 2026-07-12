@@ -1,0 +1,28 @@
+.student-dialog-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  padding-top: 8px;
+}
+
+.student-dialog-content mat-form-field {
+  width: 100%;
+}
+
+.student-dialog-content mat-checkbox {
+  margin: 4px 0 12px;
+}
+
+.onboarding-hint {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.dialog-error {
+  margin-top: 4px;
+}
+
+.dialog-saving-spinner {
+  margin: 4px 8px;
+}

@@ -98,8 +98,8 @@ describe('Contact', () => {
     (c as unknown as { contactForm: FormGroup }).contactForm;
   const notes = (c: Contact): FormArray =>
     (c as unknown as { notes: FormArray }).notes;
-  const students = (c: Contact): FormArray =>
-    (c as unknown as { students: FormArray }).students;
+  const students = (c: Contact): Student[] =>
+    (c as unknown as { students: Student[] }).students;
 
   beforeEach(() => {
     isAdmin = true;
@@ -160,6 +160,13 @@ describe('Contact', () => {
     expect(() => c.ngOnInit()).not.toThrow();
   });
 
+  it('swallows a staff (tutors) load error', () => {
+    contactService.getStaff.mockReturnValue(throwError(() => new Error('x')));
+    const c = build();
+    c.ngOnInit();
+    expect((c as unknown as { tutors: unknown[] }).tutors).toEqual([]);
+  });
+
   it('initializes form defaults, validators and view state', () => {
     const c = build();
     const f = form(c);
@@ -203,7 +210,6 @@ describe('Contact', () => {
     expect(ci['accountError']).toBe(false);
     expect(ci['accountLoading']).toBe(false);
     expect(ci['notesEditIndex']).toBe(-1);
-    expect(ci['studentsEditIndex']).toBe(-1);
     expect(ci['updatedSuccessfully']).toBe(false);
     expect(ci['updateError']).toBe(false);
     expect(ci['rosterColumns']).toEqual(['name', 'status', 'package', 'make_up_minutes', 'scholarship']);
@@ -319,52 +325,58 @@ describe('Contact', () => {
       c.ngOnInit();
     };
 
-    it('sets the edit index', () => {
-      const c = build();
-      c.setStudentsEditIndex(1);
-      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(1);
-    });
-
-    it('deletes a student', () => {
+    it('loads students into a plain array', () => {
       const c = build();
       seedStudent(c);
-      studentService.deleteStudent.mockReturnValue(of({ message: 'deleted' }));
-      c.deleteStudentAt(0);
-      expect(studentService.deleteStudent).toHaveBeenCalledWith('s-1');
-      expect(students(c).length).toBe(0);
+      expect(students(c)).toHaveLength(1);
+      expect(students(c)[0].name).toBe('Pat');
     });
 
-    it('saves a student', () => {
+    it('opens the Student dialog in create mode with the contact id and tutors', () => {
+      afterClosed = false;
+      const c = build();
+      c.ngOnInit();
+      c.openStudentDialog('create');
+      expect(dialog.open).toHaveBeenCalled();
+      const config = dialog.open.mock.calls.at(-1)![1] as { data: Record<string, unknown> };
+      expect(config.data['mode']).toBe('create');
+      expect(config.data['contactId']).toBe('c-1');
+      expect(config.data['student']).toBeUndefined();
+    });
+
+    it('passes the student through in edit mode', () => {
+      afterClosed = false;
       const c = build();
       seedStudent(c);
-      studentService.updateStudent.mockReturnValue(of({ id: 's-1' } as Student));
-      c.saveStudentAt(0);
-      expect(studentService.updateStudent).toHaveBeenCalled();
+      c.openStudentDialog('edit', students(c)[0]);
+      const config = dialog.open.mock.calls.at(-1)![1] as { data: Record<string, unknown> };
+      expect(config.data['mode']).toBe('edit');
+      expect((config.data['student'] as Student).id).toBe('s-1');
     });
 
-    it('adds a student and opens it for editing', () => {
+    it('reloads students when the dialog reports a change', () => {
+      afterClosed = true;
       const c = build();
-      c.ngOnInit();
-      studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
-      c.addStudent();
-      expect(studentService.createStudent).toHaveBeenCalled();
-      expect(students(c).length).toBe(1);
-      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(0);
+      seedStudent(c); // getStudentsByContact called once on init
+      c.openStudentDialog('delete', students(c)[0]);
+      // A truthy close triggers a reload — a second fetch.
+      expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(2);
     });
 
-    it('new student form carries schedule/billing fields and drops available_minutes', () => {
+    it('does not reload when the dialog is dismissed', () => {
+      afterClosed = false;
       const c = build();
-      c.ngOnInit();
-      studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
-      c.addStudent();
-      const group = students(c).at(0);
-      // Carried-through fields prevent a save here from wiping the session
-      // dialog's schedule and the billing flow's start date / auto-renew.
-      expect(group.get('schedule')).toBeTruthy();
-      expect(group.get('package_start_date')).toBeTruthy();
-      expect(group.get('auto_renew')).toBeTruthy();
-      expect(group.get('custom_monthly_cost')).toBeTruthy();
-      expect(group.get('available_minutes')).toBeNull();
+      seedStudent(c);
+      c.openStudentDialog('edit', students(c)[0]);
+      expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(1);
+    });
+
+    it('swallows a students reload error', () => {
+      afterClosed = true;
+      const c = build();
+      seedStudent(c);
+      studentService.getStudentsByContact.mockReturnValue(throwError(() => new Error('x')));
+      expect(() => c.openStudentDialog('delete', { id: 's-1' } as Student)).not.toThrow();
     });
   });
 
@@ -376,29 +388,6 @@ describe('Contact', () => {
       );
       c.ngOnInit();
     };
-
-    it('cancels a student edit, reverting changes and exiting edit mode', () => {
-      const c = build();
-      seedStudent(c);
-      c.setStudentsEditIndex(0);
-      students(c).at(0).get('name')?.setValue('Changed');
-      c.cancelStudentEdit(0);
-      expect(students(c).at(0).get('name')?.value).toBe('Pat');
-      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
-      expect(studentService.deleteStudent).not.toHaveBeenCalled();
-    });
-
-    it('cancels a newly added student by removing the placeholder', () => {
-      const c = build();
-      c.ngOnInit();
-      studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
-      c.addStudent();
-      studentService.deleteStudent.mockReturnValue(of({ message: 'deleted' }));
-      c.cancelStudentEdit(0);
-      expect(studentService.deleteStudent).toHaveBeenCalledWith('s-new');
-      expect(students(c).length).toBe(0);
-      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
-    });
 
     it('cancels a note edit, reverting changes', () => {
       const c = build();
@@ -436,65 +425,45 @@ describe('Contact', () => {
       const c = build();
       seedStudent(c);
       scheduleService.scheduleSummary.mockReturnValue(['Mon 10:00 AM', 'Wed 10:00 AM']);
-      expect(c.scheduleSummary(students(c).at(0))).toBe('Mon 10:00 AM · Wed 10:00 AM');
+      expect(c.scheduleSummary(students(c)[0])).toBe('Mon 10:00 AM · Wed 10:00 AM');
     });
 
     it('canManageSchedule requires both an assigned tutor and a package', () => {
       const c = build();
-      seedStudent(c);
-      const group = students(c).at(0);
-      expect(c.canManageSchedule(group)).toBe(false);
-      group.get('assigned_tutor_id')?.setValue('t-1');
-      group.get('package')?.setValue(Package.DETERMINATION);
-      expect(c.canManageSchedule(group)).toBe(true);
+      expect(c.canManageSchedule({} as Student)).toBe(false);
+      expect(c.canManageSchedule({ assigned_tutor_id: 't-1' } as Student)).toBe(false);
+      expect(c.canManageSchedule({ package: Package.DETERMINATION } as Student)).toBe(false);
+      expect(
+        c.canManageSchedule({ assigned_tutor_id: 't-1', package: Package.DETERMINATION } as Student),
+      ).toBe(true);
     });
 
-    it('opens the Manage Schedule dialog and applies the result to the card', () => {
-      const updated = {
-        assigned_tutor_id: 't-1',
-        schedule: [{ weekday: 'MONDAY', start_time: '09:00', end_time: '10:00' }],
-        package_start_date: '2026-07-01',
-        auto_renew: true,
-      } as unknown as Student;
-      afterClosed = updated;
+    it('opens the Manage Schedule dialog and reloads on a persisted change', () => {
+      afterClosed = { id: 's-1', schedule: [] } as unknown as Student;
       const c = build();
-      seedStudent(c);
-      students(c).at(0).get('assigned_tutor_id')?.setValue('t-1');
+      seedStudent(c); // one fetch on init
       contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
-      c.openManageScheduleDialog(0);
+      c.openManageScheduleDialog({ id: 's-1', assigned_tutor_id: 't-1' } as Student);
       expect(dialog.open).toHaveBeenCalled();
-      expect(students(c).at(0).get('auto_renew')?.value).toBe(true);
-      expect(students(c).at(0).get('schedule')?.value).toEqual(updated.schedule);
+      expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(2);
     });
 
     it('opens the schedule dialog even when the tutor fetch fails', () => {
       afterClosed = undefined;
       const c = build();
       seedStudent(c);
-      students(c).at(0).get('assigned_tutor_id')?.setValue('t-1');
       contactService.getContact.mockReturnValue(throwError(() => new Error('x')));
-      c.openManageScheduleDialog(0);
+      c.openManageScheduleDialog({ id: 's-1', assigned_tutor_id: 't-1' } as Student);
       expect(dialog.open).toHaveBeenCalled();
     });
 
-    it('leaves the card unchanged when the Manage Schedule dialog is cancelled', () => {
+    it('does not reload when the Manage Schedule dialog is cancelled', () => {
       afterClosed = undefined;
       const c = build();
       seedStudent(c);
-      students(c).at(0).get('assigned_tutor_id')?.setValue('t-1');
       contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
-      c.openManageScheduleDialog(0);
-      expect(students(c).at(0).get('schedule')?.value).toEqual([
-        { weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' },
-      ]);
-    });
-
-    it('cancel without a prior edit snapshot just exits edit mode', () => {
-      const c = build();
-      seedStudent(c); // no setStudentsEditIndex → no snapshot
-      c.cancelStudentEdit(0);
-      expect((c as unknown as { studentsEditIndex: number }).studentsEditIndex).toBe(-1);
-      expect(studentService.deleteStudent).not.toHaveBeenCalled();
+      c.openManageScheduleDialog({ id: 's-1', assigned_tutor_id: 't-1' } as Student);
+      expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(1);
     });
 
     it('discard with no loaded contact only resets the form state', () => {
@@ -558,6 +527,15 @@ describe('Contact', () => {
       const c = build();
       c.ngOnInit();
       contactService.adminDeleteUser.mockReturnValue(throwError(() => new Error('x')));
+      c.deleteAccount();
+      expect((c as unknown as { accountLoading: boolean }).accountLoading).toBe(false);
+    });
+
+    it('clears the loading flag when mirroring the account onto the contact fails', () => {
+      const c = build();
+      c.ngOnInit();
+      contactService.adminDeleteUser.mockReturnValue(of({ message: 'ok' }));
+      contactService.updateContact.mockReturnValue(throwError(() => new Error('x')));
       c.deleteAccount();
       expect((c as unknown as { accountLoading: boolean }).accountLoading).toBe(false);
     });
@@ -739,17 +717,6 @@ describe('Contact', () => {
       expect(notes(c).length).toBe(1); // not removed
     });
 
-    it('swallows a student deletion error', () => {
-      studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT }]),
-      );
-      const c = build();
-      c.ngOnInit();
-      studentService.deleteStudent.mockReturnValue(throwError(() => new Error('x')));
-      c.deleteStudentAt(0);
-      expect(students(c).length).toBe(1);
-    });
-
     it('swallows a note save error', () => {
       noteService.getNotesByRecipient.mockReturnValue(of([{ id: 'n-1' } as Note]));
       const c = build();
@@ -758,30 +725,12 @@ describe('Contact', () => {
       expect(() => c.saveNoteAt(0)).not.toThrow();
     });
 
-    it('swallows a student save error', () => {
-      studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT }]),
-      );
-      const c = build();
-      c.ngOnInit();
-      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
-      expect(() => c.saveStudentAt(0)).not.toThrow();
-    });
-
     it('swallows an add-note error', () => {
       const c = build();
       c.ngOnInit();
       noteService.createNote.mockReturnValue(throwError(() => new Error('x')));
       c.addNote();
       expect(notes(c).length).toBe(0);
-    });
-
-    it('swallows an add-student error', () => {
-      const c = build();
-      c.ngOnInit();
-      studentService.createStudent.mockReturnValue(throwError(() => new Error('x')));
-      c.addStudent();
-      expect(students(c).length).toBe(0);
     });
 
     it('sorts notes that are missing a timestamp', () => {
