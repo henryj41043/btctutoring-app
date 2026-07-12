@@ -36,7 +36,13 @@
     }
   </mat-dialog-content>
   <mat-dialog-actions>
-    <button matButton (click)="cancel()">Cancel</button>
-    <button matButton (click)="createContact()">Create</button>
+    <button matButton (click)="cancel()" [disabled]="submitting">Cancel</button>
+    <button mat-raised-button color="primary" (click)="createContact()" [disabled]="submitting">
+      @if (submitting) {
+        <mat-spinner [diameter]="18"></mat-spinner>
+      } @else {
+        Create
+      }
+    </button>
   </mat-dialog-actions>
 </div>

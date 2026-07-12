@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { SessionDialog } from './session-dialog';
 import { SessionsService } from '../services/sessions.service';
@@ -455,6 +455,76 @@ describe('SessionDialog', () => {
       c.chooseSeriesScope('single');
       expect(c.showScheduleWarning).toBe(false);
       expect(sessionsService.updateSession).toHaveBeenCalled();
+    });
+  });
+
+  describe('submit spinner / spam-guard', () => {
+    it('sets submitting while a create is in flight and blocks a second submit', () => {
+      const c = primedCreate();
+      const inflight = new Subject<unknown>();
+      sessionsService.createSession.mockReturnValue(inflight.asObservable());
+      c.createSession();
+      expect(c.submitting).toBe(true);
+      c.createSession(); // spam click — no second request
+      expect(sessionsService.createSession).toHaveBeenCalledTimes(1);
+      inflight.next({ id: 'x' });
+    });
+
+    it('clears submitting when a create fails', () => {
+      const c = primedCreate();
+      sessionsService.createSession.mockReturnValue(throwError(() => new Error('x')));
+      c.createSession();
+      expect(c.submitting).toBe(false);
+    });
+
+    it('sets submitting while a delete is in flight', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1', start_datetime: '2026-06-01T10:00:00Z' } as Session,
+        existingSessions: [],
+      } as SessionDialogData);
+      c.tutors = [tutor()];
+      c.selectedTutor = 't-1';
+      const inflight = new Subject<unknown>();
+      sessionsService.deleteSession.mockReturnValue(inflight.asObservable());
+      c.deleteSession();
+      expect(c.submitting).toBe(true);
+      inflight.next({ message: 'ok' });
+    });
+
+    it('updateSession no-ops while a submit is already in flight', () => {
+      const c = primedCreate();
+      c.submitting = true;
+      c.updateSession();
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+    });
+
+    it('deleteSession no-ops while a submit is already in flight', () => {
+      const c = build({
+        type: 'delete', session: { id: 'sess-1' } as Session, existingSessions: [],
+      } as SessionDialogData);
+      c.submitting = true;
+      c.deleteSession();
+      expect(sessionsService.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it('confirmStatusChange no-ops while a submit is already in flight', () => {
+      const c = primedCreate();
+      c.submitting = true;
+      (c as unknown as { pendingSession: Session }).pendingSession = { id: 'x' } as Session;
+      c.confirmStatusChange();
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+    });
+
+    it('clears submitting when a delete fails', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1' } as Session,
+        existingSessions: [],
+      } as SessionDialogData);
+      sessionsService.deleteSession.mockReturnValue(throwError(() => new Error('x')));
+      c.deleteSession();
+      expect(c.submitting).toBe(false);
     });
   });
 
