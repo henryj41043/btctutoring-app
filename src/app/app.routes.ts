@@ -10,6 +10,7 @@ import {Contact} from './contact/contact';
 import {Payroll} from './payroll/payroll';
 import {Billing} from './billing/billing';
 import {StudentRoster} from './student-roster/student-roster';
+import {Onboarding} from './onboarding/onboarding';
 
 export const routes: Routes = [
   {
@@ -45,6 +46,11 @@ export const routes: Routes = [
     path: 'roster',
     component: StudentRoster,
     canActivate: [AuthGuard],
+  },
+  {
+    path: 'onboarding',
+    component: Onboarding,
+    canActivate: [AuthGuard, AdminGuard],
   },
   {
     path: 'payroll',

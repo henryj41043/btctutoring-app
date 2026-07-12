@@ -4,6 +4,7 @@ import {HttpClient, HttpParams} from '@angular/common/http';
 import {Observable} from 'rxjs';
 import {Response} from '../models/response.model';
 import {Student} from '../models/student.model';
+import {OnboardingRow} from '../models/onboarding-row.model';
 
 @Injectable({
   providedIn: 'root'
@@ -29,6 +30,11 @@ export class StudentService {
 
   getStudents(): Observable<Student[]> {
     return this.httpClient.get<Student[]>(`${this.baseUrl}/students`);
+  }
+
+  /** Denormalized rows for the admin Onboarding page (students in Onboarding status). */
+  getOnboardingStudents(): Observable<OnboardingRow[]> {
+    return this.httpClient.get<OnboardingRow[]>(`${this.baseUrl}/students/onboarding`);
   }
 
   createStudent(student: Student): Observable<Response> {

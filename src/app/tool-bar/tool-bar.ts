@@ -48,6 +48,10 @@ export class ToolBar {
     void this.router.navigate(['/roster']);
   }
 
+  onboardingNav(): void {
+    void this.router.navigate(['/onboarding']);
+  }
+
   payrollNav(): void {
     void this.router.navigate(['/payroll']);
   }
