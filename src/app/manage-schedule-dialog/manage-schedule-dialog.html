@@ -73,7 +73,9 @@
   }
 </mat-dialog-content>
 <mat-dialog-actions>
-  @if (showAvailabilityConfirm) {
+  @if (saving) {
+    <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+  } @else if (showAvailabilityConfirm) {
     <button matButton (click)="cancelAvailabilityOverride()">Go Back</button>
     <button matButton color="warn" (click)="confirmAvailabilityOverride()">Save Anyway</button>
   } @else if (showDeleteConfirm) {

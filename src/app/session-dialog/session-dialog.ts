@@ -15,6 +15,7 @@ import {MatTimepickerModule} from '@angular/material/timepicker';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSelectModule} from '@angular/material/select';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {SessionsService} from '../services/sessions.service';
 import {Session} from '../models/session.model';
 import {Response} from '../models/response.model';
@@ -45,6 +46,7 @@ import {PackageDef, resolvePackageDef} from '../utils/package-config';
     MatTimepickerModule,
     MatDatepickerModule,
     MatSelectModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './session-dialog.html',
   standalone: true,
@@ -73,6 +75,9 @@ export class SessionDialog implements OnInit {
   students: Student[] = [];
   filteredStudents: Student[] = [];
   showStatusConfirm: boolean = false;
+  // True while a backend call is in flight — the action buttons are replaced by
+  // a spinner so the user can't submit the same session twice.
+  submitting: boolean = false;
   showAvailabilityConfirm: boolean = false;
   availabilityTutorName: string = '';
   private availabilityOverridden: boolean = false;
@@ -323,12 +328,14 @@ export class SessionDialog implements OnInit {
   }
 
   confirmStatusChange(): void {
-    if (!this.pendingSession) return;
+    if (this.submitting || !this.pendingSession) return;
+    this.submitting = true;
     const doUpdate = () => {
       this.sessionsService.updateSession(this.pendingSession!).pipe(
         catchError(err => {
           this.errorMessage = 'Update session failed';
           this.hasError = true;
+          this.submitting = false;
           return new Observable();
         })
       ).subscribe(response => {
@@ -342,6 +349,7 @@ export class SessionDialog implements OnInit {
         catchError(err => {
           this.errorMessage = 'Failed to update student minutes';
           this.hasError = true;
+          this.submitting = false;
           return new Observable();
         })
       ).subscribe(() => doUpdate());
@@ -355,6 +363,7 @@ export class SessionDialog implements OnInit {
   }
 
   createSession(): void {
+    if (this.submitting) return;
     if(this.date && this.startTime && this.endTime) {
       if(this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
@@ -405,10 +414,12 @@ export class SessionDialog implements OnInit {
       session.end_datetime = submitEndDate.toISOString();
       session.status = SessionStatus.PENDING;
       session.notes = this.notes;
+      this.submitting = true;
       this.sessionsService.createSession(session).pipe(
         catchError(err => {
           this.errorMessage = 'Create session failed';
           this.hasError = true;
+          this.submitting = false;
           return new Observable();
         })
       ).subscribe(response => {
@@ -423,6 +434,7 @@ export class SessionDialog implements OnInit {
   }
 
   updateSession(): void {
+    if (this.submitting) return;
     if(this.date && this.startTime && this.endTime) {
       if (this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
@@ -516,10 +528,12 @@ export class SessionDialog implements OnInit {
         this.pendingSession = session;
         this.showStatusConfirm = true;
       } else {
+        this.submitting = true;
         this.sessionsService.updateSession(session).pipe(
           catchError(err => {
             this.errorMessage = 'Update session failed';
             this.hasError = true;
+            this.submitting = false;
             return new Observable();
           })
         ).subscribe(response => {
@@ -534,6 +548,7 @@ export class SessionDialog implements OnInit {
   }
 
   deleteSession(): void {
+    if (this.submitting) return;
     // Series sessions: ask whether to delete this occurrence or this + future.
     if (this.dialogData.session.series_id && this.seriesScope === null) {
       this.seriesAction = 'delete';
@@ -545,10 +560,12 @@ export class SessionDialog implements OnInit {
       return;
     }
     const id: string = this.dialogData.session.id as string;
+    this.submitting = true;
     this.sessionsService.deleteSession(id).pipe(
       catchError(err => {
         this.errorMessage = 'Delete session failed';
         this.hasError = true;
+        this.submitting = false;
         return new Observable();
       })
     ).subscribe(response => {
@@ -565,8 +582,9 @@ export class SessionDialog implements OnInit {
       this.hasError = true;
       return;
     }
+    this.submitting = true;
     this.sessionsService.getSessionsBySeries(current.series_id).pipe(
-      catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; return of([]); })
+      catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; this.submitting = false; return of([]); })
     ).subscribe(sessions => {
       const allSessions = sessions as Session[];
       const targets = allSessions.filter(s =>
@@ -587,6 +605,8 @@ export class SessionDialog implements OnInit {
         ));
         if (failing.length > 0) {
           this.availabilityTutorName = tutor.first_name ?? 'this tutor';
+          // Stop for the override prompt — drop the spinner so its buttons show.
+          this.submitting = false;
           if (this.authService.isAdmin()) {
             this.pendingAction = () => { this.availabilityOverridden = true; this.updateSeriesFuture(); };
             this.showAvailabilityConfirm = true;
@@ -611,8 +631,9 @@ export class SessionDialog implements OnInit {
         upd.notes = this.notes;
         return upd;
       });
+      this.submitting = true;
       forkJoin(updates.map(u => this.sessionsService.updateSession(u))).pipe(
-        catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; return new Observable(); })
+        catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; this.submitting = false; return new Observable(); })
       ).subscribe(() => {
         this.hasError = false;
         this.dialogRef.close({ updated: updates.length });
@@ -627,8 +648,9 @@ export class SessionDialog implements OnInit {
       this.hasError = true;
       return;
     }
+    this.submitting = true;
     this.sessionsService.getSessionsBySeries(current.series_id).pipe(
-      catchError(err => { this.errorMessage = 'Delete session series failed'; this.hasError = true; return of([]); })
+      catchError(err => { this.errorMessage = 'Delete session series failed'; this.hasError = true; this.submitting = false; return of([]); })
     ).subscribe(sessions => {
       const targets = (sessions as Session[]).filter(s =>
         s.status === SessionStatus.PENDING &&
@@ -639,7 +661,7 @@ export class SessionDialog implements OnInit {
         return;
       }
       forkJoin(targets.map(s => this.sessionsService.deleteSession(s.id!))).pipe(
-        catchError(err => { this.errorMessage = 'Delete session series failed'; this.hasError = true; return new Observable(); })
+        catchError(err => { this.errorMessage = 'Delete session series failed'; this.hasError = true; this.submitting = false; return new Observable(); })
       ).subscribe(() => {
         this.hasError = false;
         this.dialogRef.close({ deleted: targets.length });

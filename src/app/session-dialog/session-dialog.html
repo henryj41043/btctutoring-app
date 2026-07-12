@@ -119,7 +119,9 @@
   }
 </mat-dialog-content>
 <mat-dialog-actions>
-  @if (showSeriesScopePrompt) {
+  @if (submitting) {
+    <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+  } @else if (showSeriesScopePrompt) {
     <button matButton (click)="cancelSeriesScope()">Cancel</button>
     <button matButton (click)="chooseSeriesScope('single')">This occurrence</button>
     <button matButton color="warn" (click)="chooseSeriesScope('future')">This &amp; future</button>

@@ -12,6 +12,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {Service} from '../enums/service.enum';
 import {ContactService} from '../services/contact.service';
@@ -31,6 +32,7 @@ import {phoneValidator} from '../utils/phone.util';
     ReactiveFormsModule,
     MatButtonModule,
     MatSelectModule,
+    MatProgressSpinnerModule,
     PhoneFormatDirective,
   ],
   templateUrl: './contact-dialog.html',
@@ -51,29 +53,38 @@ export class ContactDialog {
   protected serviceOptions: string[] = Object.values(Service);
   protected errorMessage: string = '';
   protected hasError: boolean = false;
+  // True while the create request is in flight — swaps the button for a spinner
+  // and disables the actions so the user can't submit twice.
+  protected submitting: boolean = false;
 
   cancel(): void {
+    if (this.submitting) {
+      return;
+    }
     this.dialogRef.close();
   }
 
   createContact(): void {
-    if (this.contactForm.valid) {
-      this.hasError = false;
-      let contact: Contact = this.contactForm.value as Contact;
-      this.contactService.createContact(contact).pipe(
-        catchError((error: HttpErrorResponse) =>  {
-          console.log(error);
-          // 409 = a contact with this email already exists (email is the
-          // unique identifier for contacts).
-          this.errorMessage = error.status === 409
-            ? 'A contact with this email already exists.'
-            : 'Failed to create the contact. Please try again.';
-          this.hasError = true;
-          return EMPTY;
-        })
-      ).subscribe(response => {
-        this.dialogRef.close(response);
-      });
+    if (!this.contactForm.valid || this.submitting) {
+      return;
     }
+    this.hasError = false;
+    this.submitting = true;
+    const contact: Contact = this.contactForm.value as Contact;
+    this.contactService.createContact(contact).pipe(
+      catchError((error: HttpErrorResponse) =>  {
+        console.log(error);
+        // 409 = a contact with this email already exists (email is the
+        // unique identifier for contacts).
+        this.errorMessage = error.status === 409
+          ? 'A contact with this email already exists.'
+          : 'Failed to create the contact. Please try again.';
+        this.hasError = true;
+        this.submitting = false;
+        return EMPTY;
+      })
+    ).subscribe(response => {
+      this.dialogRef.close(response);
+    });
   }
 }

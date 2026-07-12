@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { MatDialogRef } from '@angular/material/dialog';
 import { FormGroup } from '@angular/forms';
 import { ContactDialog } from './contact-dialog';
@@ -120,4 +120,29 @@ describe('ContactDialog', () => {
     expect((component as unknown as { hasError: boolean }).hasError).toBe(false);
     expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-2' });
   });
+
+
+  it('shows the spinner and blocks a second submit while the request is in flight', () => {
+    fillValid();
+    const inflight = new Subject<unknown>();
+    contactService.createContact.mockReturnValue(inflight.asObservable());
+    component.createContact();
+    const c = component as unknown as { submitting: boolean };
+    expect(c.submitting).toBe(true);
+    // A second click (or a spam re-invoke) issues no further request.
+    component.createContact();
+    expect(contactService.createContact).toHaveBeenCalledTimes(1);
+    // cancel is a no-op while submitting.
+    component.cancel();
+    expect(dialogRef.close).not.toHaveBeenCalled();
+    inflight.next({ id: 'c-1' });
+  });
+
+  it('clears submitting on error so the user can retry', () => {
+    fillValid();
+    contactService.createContact.mockReturnValue(throwError(() => ({ status: 500 })));
+    component.createContact();
+    expect((component as unknown as { submitting: boolean }).submitting).toBe(false);
+  });
+
 });
