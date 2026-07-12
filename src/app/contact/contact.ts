@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, Input, OnInit, ViewChild} from '@angular/core';
 import {ContactService} from '../services/contact.service';
 import {catchError, EMPTY, of, switchMap} from 'rxjs';
-import {AbstractControl, FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
+import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
 import {AvailabilityBlock} from '../models/availability-block.model';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
@@ -17,7 +17,6 @@ import {MatIconModule} from '@angular/material/icon';
 import {StudentService} from '../services/student.service';
 import {NoteService} from '../services/note.service';
 import {Student} from '../models/student.model';
-import {ScheduleSlot} from '../utils/proration';
 import {Note} from '../models/note.model';
 import {Status} from '../enums/status.enum';
 import {Package} from '../enums/package.enum';
@@ -36,6 +35,7 @@ import {MatDialog} from '@angular/material/dialog';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
 import {ManageScheduleDialog} from '../manage-schedule-dialog/manage-schedule-dialog';
+import {StudentDialog, StudentDialogMode} from '../student-dialog/student-dialog';
 import {ScheduleService} from '../services/schedule.service';
 import {Router} from '@angular/router';
 
@@ -135,27 +135,25 @@ export class Contact implements OnInit {
     user_profile_created: false,
     user_group: '',
   });
-  protected studentsForm: FormGroup = this.formBuilder.group({
-    students: this.formBuilder.array([])
-  });
   protected notesForm: FormGroup = this.formBuilder.group({
     notes: this.formBuilder.array([])
   });
   protected notesEditIndex: number = -1;
-  protected studentsEditIndex: number = -1;
-  // Snapshots of the card being edited, so Cancel can revert unsaved changes.
-  private studentEditSnapshot: Record<string, unknown> | null = null;
+  // Snapshot of the note card being edited, so Cancel can revert unsaved changes.
   private noteEditSnapshot: Record<string, unknown> | null = null;
-  // Ids of cards added this session but not yet saved with real data — Cancel
-  // on one of these removes the placeholder record entirely.
-  private readonly newStudentIds = new Set<string>();
+  // Ids of note cards added this session but not yet saved with real data —
+  // Cancel on one of these removes the placeholder record entirely.
   private readonly newNoteIds = new Set<string>();
   // The contact as last loaded/saved, used to discard unsaved form changes.
   private loadedContact?: _Contact;
   protected readonly Service = Service;
   protected readonly Package = Package;
+  protected readonly Status = Status;
   protected updatedSuccessfully: boolean = false;
   protected updateError: boolean = false;
+  // The contact's students (parent/family view). Edited via the Student dialog,
+  // reloaded from the backend after every create/edit/delete/schedule change.
+  protected students: Student[] = [];
   protected rosterDataSource = new MatTableDataSource<Student>([]);
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
 
@@ -196,10 +194,6 @@ export class Contact implements OnInit {
 
   get notes(): FormArray {
     return this.notesForm.controls['notes'] as FormArray;
-  }
-
-  get students(): FormArray {
-    return this.studentsForm.controls['students'] as FormArray;
   }
 
   // ── Tutoring availability ────────────────────────────────────────────────
@@ -322,35 +316,23 @@ export class Contact implements OnInit {
         return EMPTY;
       })
     ).subscribe(students => {
-      this.buildStudentsFormArray(students);
+      this.students = students;
       this.studentsLoading = false;
       this.cdr.markForCheck();
     });
   }
 
-  private buildStudentsFormArray(students: Student[]) {
-    students.forEach(student => {
-      this.students.push(this.formBuilder.group({
-        id: [student.id, Validators.required],
-        contact_id: [student.contact_id, Validators.required],
-        name: [student.name, Validators.required],
-        birthday: student.birthday,
-        status: [student.status, Validators.required],
-        assigned_tutor_id: student.assigned_tutor_id,
-        package: student.package,
-        scholarship: student.scholarship,
-        // Carried through edits so saving a student here never wipes the
-        // schedule/billing fields owned by the session dialog + billing flow.
-        schedule: [student.schedule ?? null],
-        package_start_date: [student.package_start_date ?? null],
-        auto_renew: [student.auto_renew ?? false],
-        custom_monthly_cost: student.custom_monthly_cost ?? null,
-        custom_sessions_per_week: student.custom_sessions_per_week ?? null,
-        custom_session_length_min: student.custom_session_length_min ?? null,
-        make_up_minutes: student.make_up_minutes,
-      }));
+  /** Re-fetches the students list after a create/edit/delete/schedule change. */
+  private reloadStudents() {
+    this.studentService.getStudentsByContact(this.id).pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      })
+    ).subscribe(students => {
+      this.students = students;
+      this.cdr.markForCheck();
     });
-    this.students.updateValueAndValidity();
   }
 
   private loadNotes() {
@@ -393,32 +375,8 @@ export class Contact implements OnInit {
     this.cdr.markForCheck();
   }
 
-  setStudentsEditIndex(index: number) {
-    if (index >= 0) {
-      this.studentEditSnapshot = this.students.at(index)?.getRawValue() as Record<string, unknown>;
-    }
-    this.studentsEditIndex = index;
-    this.cdr.markForCheck();
-  }
-
-  /** Cancels editing a student card: a brand-new card is removed entirely, an
+  /** Cancels editing a note card: a brand-new card is removed entirely, an
    *  existing one is reverted to its values from when editing began. */
-  cancelStudentEdit(index: number) {
-    const group = this.students.at(index)!;
-    const id = group.get('id')!.value as string;
-    this.studentsEditIndex = -1;
-    if (this.newStudentIds.has(id)) {
-      this.newStudentIds.delete(id);
-      this.deleteStudentAt(index);
-      return;
-    }
-    if (this.studentEditSnapshot) {
-      group.reset(this.studentEditSnapshot);
-    }
-    this.cdr.markForCheck();
-  }
-
-  /** Cancels editing a note card (see {@link cancelStudentEdit}). */
   cancelNoteEdit(index: number) {
     const group = this.notes.at(index)!;
     const id = group.get('id')!.value as string;
@@ -445,20 +403,17 @@ export class Contact implements OnInit {
   }
 
   /** True once a student has both an assigned tutor and a package — required to schedule. */
-  canManageSchedule(group: AbstractControl): boolean {
-    return !!group.get('assigned_tutor_id')?.value && !!group.get('package')?.value;
+  canManageSchedule(student: Student): boolean {
+    return !!student.assigned_tutor_id && !!student.package;
   }
 
   /** A read-only one-line summary of a student's schedule, e.g. "Mon 10:00 AM · Wed 10:00 AM". */
-  scheduleSummary(group: AbstractControl): string {
-    const schedule = group.get('schedule')?.value as ScheduleSlot[] | undefined;
-    return this.scheduleService.scheduleSummary(schedule).join(' · ');
+  scheduleSummary(student: Student): string {
+    return this.scheduleService.scheduleSummary(student.schedule).join(' · ');
   }
 
-  /** Opens the Manage Schedule dialog for a student and applies the result to the card. */
-  openManageScheduleDialog(index: number): void {
-    const group = this.students.at(index)!;
-    const student: Student = group.getRawValue() as Student;
+  /** Opens the Manage Schedule dialog for a student; reloads on a persisted change. */
+  openManageScheduleDialog(student: Student): void {
     this.contactService.getContact(student.assigned_tutor_id!).pipe(
       catchError(error => {
         console.log(error);
@@ -470,14 +425,9 @@ export class Contact implements OnInit {
         width: '520px',
       });
       ref.afterClosed().subscribe((updated?: Student) => {
-        if (!updated) return;
-        group.patchValue({
-          assigned_tutor_id: updated.assigned_tutor_id ?? student.assigned_tutor_id,
-          schedule: updated.schedule ?? null,
-          package_start_date: updated.package_start_date ?? null,
-          auto_renew: updated.auto_renew ?? false,
-        });
-        this.cdr.markForCheck();
+        if (updated) {
+          this.reloadStudents();
+        }
       });
     });
   }
@@ -499,21 +449,17 @@ export class Contact implements OnInit {
       });
   }
 
-  deleteStudentAt(index: number) {
-    const studentToDelete: Student = this.students.controls.at(index)?.value as Student;
-    this.studentService.deleteStudent(studentToDelete.id!)
-      .pipe(
-        catchError(error => {
-          console.log(error);
-          return EMPTY;
-        })
-      )
-      .subscribe(response => {
-        console.log(response.message);
-        this.students.removeAt(index);
-        this.students.updateValueAndValidity();
-        this.cdr.markForCheck();
-      });
+  /** Opens the Student dialog for create/edit/delete; reloads on a persisted change. */
+  openStudentDialog(mode: StudentDialogMode, student?: Student): void {
+    const ref = this.dialog.open(StudentDialog, {
+      data: {mode, contactId: this.id, student, tutors: this.tutors},
+      width: '480px',
+    });
+    ref.afterClosed().subscribe((changed?: boolean) => {
+      if (changed) {
+        this.reloadStudents();
+      }
+    });
   }
 
   saveNoteAt(index: number) {
@@ -529,22 +475,6 @@ export class Contact implements OnInit {
         console.log(`Note ${note.id} updated successfully.`);
         this.newNoteIds.delete(noteToSave.id!);
         this.setNotesEditIndex(-1);
-      });
-  }
-
-  saveStudentAt(index: number) {
-    const studentToSave: Student = this.students.controls.at(index)?.value as Student;
-    this.studentService.updateStudent(studentToSave)
-      .pipe(
-        catchError(error => {
-          console.log(error);
-          return EMPTY;
-        })
-      )
-      .subscribe(student => {
-        console.log(`Student ${student.id} updated successfully.`);
-        this.newStudentIds.delete(studentToSave.id!);
-        this.setStudentsEditIndex(-1);
       });
   }
 
@@ -584,40 +514,6 @@ export class Contact implements OnInit {
         this.newNoteIds.add(response.id);
         this.setNotesEditIndex(0);
       });
-  }
-
-  addStudent() {
-    let student: Student = new Student();
-    student.contact_id = this.id;
-    this.studentService.createStudent(student)
-    .pipe(
-      catchError(error => {
-        console.log(error);
-        return EMPTY;
-      })
-    )
-    .subscribe(response => {
-      this.students.push(this.formBuilder.group({
-        id: response.id,
-        contact_id: this.id,
-        name: ['', Validators.required],
-        birthday: '',
-        status: ['', Validators.required],
-        assigned_tutor_id: '',
-        package: ['', Validators.required],
-        scholarship: false,
-        schedule: [null],
-        package_start_date: [null],
-        auto_renew: [false],
-        custom_monthly_cost: [null],
-        custom_sessions_per_week: [null],
-        custom_session_length_min: [null],
-        make_up_minutes: 0
-      }));
-      this.students.updateValueAndValidity();
-      this.newStudentIds.add(response.id);
-      this.setStudentsEditIndex(this.students.controls.length - 1);
-    });
   }
 
   createAccount() {
@@ -765,7 +661,7 @@ export class Contact implements OnInit {
     });
   }
 
-  getTutorName(id: string): string {
+  getTutorName(id?: string): string {
     if (!id) return '—';
     const tutor = this.tutors.find(t => t.id === id);
     return tutor ? `${tutor.first_name} ${tutor.last_name}`.trim() : id;

@@ -122,7 +122,7 @@
       }
     </div>
   </div>
-  <div class="contact-tutoring contact-section" [formGroup]="studentsForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
+  <div class="contact-tutoring contact-section" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>Student Roster</h2>
       <div class="table-scroll">
@@ -160,124 +160,67 @@
       <mat-paginator #rosterPaginator [pageSizeOptions]="[5, 10, 25]" showFirstLastButtons/>
     } @else {
       <h2>Students</h2>
-      <button matIconButton type="button" (click)="addStudent()">
+      <button matIconButton type="button" (click)="openStudentDialog('create')" aria-label="Add student">
         <mat-icon>add</mat-icon>
       </button>
-      <div formArrayName="students">
-        @for (studentControl of students.controls; track studentControl; let i = $index) {
-          <mat-card class="student-card" appearance="outlined" [formGroupName]="i">
+      @if (studentsLoading) {
+        <div class="table-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="table-spinner-label">Loading students…</span>
+        </div>
+      } @else {
+        @for (student of students; track student.id) {
+          <mat-card class="student-card" appearance="outlined">
             <mat-card-header>
-              <div [hidden]="studentsEditIndex === i">
-                <mat-card-title>{{studentControl.get('name')?.value}}</mat-card-title>
-              </div>
-              <div [hidden]="studentsEditIndex !== i">
-                <mat-form-field>
-                  <mat-label>Name</mat-label>
-                  <input matInput formControlName="name">
-                </mat-form-field>
-              </div>
+              <mat-card-title>{{student.name}}</mat-card-title>
+              <mat-card-subtitle>
+                {{student.status}}
+                @if (student.status === Status.ONBOARDING) {
+                  · Onboarding {{student.onboarding_complete ? 'complete' : 'in progress'}}
+                }
+              </mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
-              <div [hidden]="studentsEditIndex === i">
-                <div class="student-grid">
-                  <div>Birthday: {{studentControl.get('birthday')?.value}}</div>
-                  <div>Status: {{studentControl.get('status')?.value}}</div>
-                  <div>Assigned Tutor: {{getTutorName(studentControl.get('assigned_tutor_id')?.value)}}</div>
-                  <div>Make Up Minutes: {{studentControl.get('make_up_minutes')?.value}}</div>
-                  <div>Package: {{studentControl.get('package')?.value}}</div>
-                  <div>Scholarship:
-                    @if (studentControl.get('scholarship')?.value) {
-                      <mat-icon style="color: green;">check</mat-icon>
-                    } @else {
-                      <mat-icon style="color: red;">close</mat-icon>
-                    }
-                  </div>
-                  <div class="schedule-summary">
-                    @if (studentControl.get('schedule')?.value?.length) {
-                      <span>Schedule: {{scheduleSummary(studentControl)}}</span>
-                      <span>Auto-renew: {{studentControl.get('auto_renew')?.value ? 'On' : 'Off'}}</span>
-                    } @else if (canManageSchedule(studentControl)) {
-                      <span>Schedule: None set</span>
-                    } @else {
-                      <span>Schedule: set a tutor &amp; package first</span>
-                    }
-                  </div>
-                </div>
-              </div>
-              <div [hidden]="studentsEditIndex !== i">
-                <div class="student-grid">
-                  <mat-form-field>
-                    <mat-label>Birthday</mat-label>
-                    <input matInput formControlName="birthday">
-                  </mat-form-field>
-                  <mat-form-field>
-                    <mat-label>Select Status</mat-label>
-                    <mat-select formControlName="status">
-                      @for (statusOption of statusOptions; track statusOption) {
-                        <mat-option [value]="statusOption">{{statusOption}}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-                  <mat-form-field>
-                    <mat-label>Assign Tutor</mat-label>
-                    <mat-select formControlName="assigned_tutor_id">
-                      @for (tutorOption of tutors; track tutorOption) {
-                        <mat-option [value]="tutorOption.id">{{tutorOption.first_name}}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-                  <mat-form-field>
-                    <mat-label>Make Up Minutes</mat-label>
-                    <input matInput type="number" formControlName="make_up_minutes">
-                  </mat-form-field>
-                  <mat-form-field>
-                    <mat-label>Select Package</mat-label>
-                    <mat-select formControlName="package">
-                      @for (packageOption of packageOptions; track packageOption) {
-                        <mat-option [value]="packageOption">{{packageOption}}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-                  @if (studentControl.get('package')?.value === Package.CUSTOM) {
-                    <mat-form-field>
-                      <mat-label>Custom Monthly Cost</mat-label>
-                      <input matInput type="number" formControlName="custom_monthly_cost">
-                    </mat-form-field>
-                    <mat-form-field>
-                      <mat-label>Custom Sessions / Week</mat-label>
-                      <input matInput type="number" formControlName="custom_sessions_per_week">
-                    </mat-form-field>
-                    <mat-form-field>
-                      <mat-label>Custom Session Length (min)</mat-label>
-                      <input matInput type="number" formControlName="custom_session_length_min">
-                    </mat-form-field>
+              <div class="student-grid">
+                <div>Birthday: {{student.birthday || '—'}}</div>
+                <div>Status: {{student.status}}</div>
+                <div>Assigned Tutor: {{getTutorName(student.assigned_tutor_id)}}</div>
+                <div>Make Up Minutes: {{student.make_up_minutes}}</div>
+                <div>Package: {{student.package || '—'}}</div>
+                <div>Scholarship:
+                  @if (student.scholarship) {
+                    <mat-icon style="color: green;">check</mat-icon>
+                  } @else {
+                    <mat-icon style="color: red;">close</mat-icon>
                   }
-                  <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
+                </div>
+                <div class="schedule-summary">
+                  @if (student.schedule?.length) {
+                    <span>Schedule: {{scheduleSummary(student)}}</span>
+                    <span>Auto-renew: {{student.auto_renew ? 'On' : 'Off'}}</span>
+                  } @else if (canManageSchedule(student)) {
+                    <span>Schedule: None set</span>
+                  } @else {
+                    <span>Schedule: set a tutor &amp; package first</span>
+                  }
                 </div>
               </div>
             </mat-card-content>
             <mat-card-actions>
-              <button matIconButton type="button" (click)="setStudentsEditIndex(i)" [hidden]="studentsEditIndex === i">
+              <button matIconButton type="button" (click)="openStudentDialog('edit', student)" aria-label="Edit student">
                 <mat-icon>edit</mat-icon>
               </button>
-              <button matIconButton type="button" (click)="openManageScheduleDialog(i)"
-                      [hidden]="studentsEditIndex === i" [disabled]="!canManageSchedule(studentControl)"
-                      aria-label="Manage schedule">
+              <button matIconButton type="button" (click)="openManageScheduleDialog(student)"
+                      [disabled]="!canManageSchedule(student)" aria-label="Manage schedule">
                 <mat-icon>event_repeat</mat-icon>
               </button>
-              <button matIconButton type="button" (click)="saveStudentAt(i)" [hidden]="studentsEditIndex !== i">
-                <mat-icon>save</mat-icon>
-              </button>
-              <button matIconButton type="button" (click)="cancelStudentEdit(i)" [hidden]="studentsEditIndex !== i" aria-label="Cancel edit">
-                <mat-icon>close</mat-icon>
-              </button>
-              <button matIconButton type="button" (click)="deleteStudentAt(i)" [hidden]="studentsEditIndex === i">
+              <button matIconButton type="button" (click)="openStudentDialog('delete', student)" aria-label="Delete student">
                 <mat-icon>delete</mat-icon>
               </button>
             </mat-card-actions>
           </mat-card>
         }
-      </div>
+      }
     }
   </div>
   <div class="contact-billing contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
@@ -347,7 +290,7 @@
           </div>
         }
       </div>
-    } @else if (students.length > 0 && students.at(0).get('scholarship')?.value) {
+    } @else if (students.length > 0 && students[0].scholarship) {
       <h2>Scholarship</h2>
       <div class="scholarship-grid">
         <mat-form-field>
@@ -484,7 +427,6 @@
         </mat-form-field>
         <mat-form-field>
           <mat-label>Registration Received</mat-label>
-          <input matInput formControlName="registration_received">
           <input matInput [matDatepicker]="registrationReceivedDatepicker" formControlName="registration_received">
           <mat-datepicker #registrationReceivedDatepicker/>
           <mat-datepicker-toggle [for]="registrationReceivedDatepicker" matSuffix/>

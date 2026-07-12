@@ -1,0 +1,124 @@
+<h2 mat-dialog-title>
+  @if (mode === 'create') {
+    Add Student
+  } @else if (mode === 'edit') {
+    Edit Student
+  } @else {
+    Delete Student
+  }
+</h2>
+
+@if (mode === 'delete') {
+  <mat-dialog-content>
+    <p>
+      Delete <strong>{{ data.student?.name || 'this student' }}</strong>? This
+      permanently removes the student and cannot be undone.
+    </p>
+    @if (hasError) {
+      <mat-error class="dialog-error">{{ errorMessage }}</mat-error>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions>
+    @if (submitting) {
+      <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+    } @else {
+      <button matButton (click)="cancel()">Cancel</button>
+      <button mat-raised-button color="warn" (click)="confirmDelete()">Delete</button>
+    }
+  </mat-dialog-actions>
+} @else {
+  <mat-dialog-content class="student-dialog-content" [formGroup]="studentForm">
+    <mat-form-field>
+      <mat-label>Name</mat-label>
+      <input matInput formControlName="name">
+      @if (studentForm.get('name')?.touched && studentForm.get('name')?.hasError('required')) {
+        <mat-error>Name is required</mat-error>
+      }
+    </mat-form-field>
+
+    @if (mode === 'edit') {
+      <mat-form-field>
+        <mat-label>Birthday</mat-label>
+        <input matInput [matDatepicker]="birthdayPicker" formControlName="birthday">
+        <mat-datepicker-toggle [for]="birthdayPicker" matSuffix/>
+        <mat-datepicker #birthdayPicker/>
+      </mat-form-field>
+
+      @if (showOnboardingToggle) {
+        <mat-checkbox formControlName="onboarding_complete"
+                      (change)="onOnboardingCompleteChange($event.checked)">
+          Onboarding Complete
+        </mat-checkbox>
+        @if (locked) {
+          <p class="onboarding-hint">
+            Mark onboarding complete to set status, package, assigned tutor, and schedule.
+          </p>
+        }
+      }
+
+      @if (!locked) {
+        <mat-form-field>
+          <mat-label>Status</mat-label>
+          <mat-select formControlName="status">
+            @for (statusOption of statusOptions; track statusOption) {
+              <mat-option [value]="statusOption">{{ statusOption }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Assign Tutor</mat-label>
+          <mat-select formControlName="assigned_tutor_id">
+            @for (tutorOption of tutors; track tutorOption) {
+              <mat-option [value]="tutorOption.id">{{ tutorOption.first_name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Package</mat-label>
+          <mat-select formControlName="package">
+            @for (packageOption of packageOptions; track packageOption) {
+              <mat-option [value]="packageOption">{{ packageOption }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        @if (studentForm.get('package')?.value === Package.CUSTOM) {
+          <mat-form-field>
+            <mat-label>Custom Monthly Cost</mat-label>
+            <input matInput type="number" formControlName="custom_monthly_cost">
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Custom Sessions / Week</mat-label>
+            <input matInput type="number" formControlName="custom_sessions_per_week">
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Custom Session Length (min)</mat-label>
+            <input matInput type="number" formControlName="custom_session_length_min">
+          </mat-form-field>
+        }
+        <mat-form-field>
+          <mat-label>Make Up Minutes</mat-label>
+          <input matInput type="number" formControlName="make_up_minutes">
+        </mat-form-field>
+        <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
+      }
+    }
+
+    @if (hasError) {
+      <mat-error class="dialog-error">{{ errorMessage }}</mat-error>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions>
+    @if (submitting) {
+      <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+    } @else {
+      <button matButton (click)="cancel()">Cancel</button>
+      <button mat-raised-button color="primary" (click)="save()">
+        @if (mode === 'create') {
+          Add
+        } @else {
+          Save
+        }
+      </button>
+    }
+  </mat-dialog-actions>
+}
