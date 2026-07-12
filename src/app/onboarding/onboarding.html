@@ -1,0 +1,92 @@
+<div class="onboarding">
+  <div class="btc-page-header">
+    <h2>Onboarding</h2>
+  </div>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      @if (loading) {
+        <div class="table-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="table-spinner-label">Loading students…</span>
+        </div>
+      } @else {
+        <div class="table-scroll">
+          <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Student</th>
+              <td mat-cell *matCellDef="let row">{{row.name}}</td>
+            </ng-container>
+            <ng-container matColumnDef="contact_name">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Family</th>
+              <td mat-cell *matCellDef="let row">{{row.contact_name}}</td>
+            </ng-container>
+            <ng-container matColumnDef="onboarding_complete">
+              <th mat-header-cell *matHeaderCellDef>Onboarding Complete</th>
+              <td mat-cell *matCellDef="let row" (click)="$event.stopPropagation()">
+                @if (isSaving(row)) {
+                  <mat-spinner [diameter]="20"></mat-spinner>
+                } @else {
+                  <mat-checkbox [checked]="row.onboarding_complete"
+                                (change)="completeOnboarding(row, $event.checked)"
+                                aria-label="Mark onboarding complete"></mat-checkbox>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="inquiry_received">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Inquiry Received</th>
+              <td mat-cell *matCellDef="let row">{{row.inquiry_received | date:'shortDate'}}</td>
+            </ng-container>
+            <ng-container matColumnDef="inquiry_note_from_parent">
+              <th mat-header-cell *matHeaderCellDef>Inquiry Note</th>
+              <td mat-cell *matCellDef="let row">{{row.inquiry_note_from_parent}}</td>
+            </ng-container>
+            <ng-container matColumnDef="consult_date">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Consult</th>
+              <td mat-cell *matCellDef="let row">{{row.consult_date | date:'shortDate'}}</td>
+            </ng-container>
+            <ng-container matColumnDef="trial_date">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Trial</th>
+              <td mat-cell *matCellDef="let row">{{row.trial_date | date:'shortDate'}}</td>
+            </ng-container>
+            <ng-container matColumnDef="registration_sent">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Registration Sent</th>
+              <td mat-cell *matCellDef="let row">{{row.registration_sent | date:'shortDate'}}</td>
+            </ng-container>
+            <ng-container matColumnDef="registration_received">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Registration Received</th>
+              <td mat-cell *matCellDef="let row">{{row.registration_received | date:'shortDate'}}</td>
+            </ng-container>
+            <ng-container matColumnDef="scholarship_name">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Scholarship</th>
+              <td mat-cell *matCellDef="let row">{{row.scholarship_name}}</td>
+            </ng-container>
+            <ng-container matColumnDef="scholarship_student">
+              <th mat-header-cell *matHeaderCellDef>Scholarship Student</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.scholarship_student) {
+                  <mat-icon class="icon-yes">check_circle</mat-icon>
+                } @else {
+                  <mat-icon class="icon-no">cancel</mat-icon>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="twenty_five_received">
+              <th mat-header-cell *matHeaderCellDef>$25 Received</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.twenty_five_received) {
+                  <mat-icon class="icon-yes">check_circle</mat-icon>
+                } @else {
+                  <mat-icon class="icon-no">cancel</mat-icon>
+                }
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="columns"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns;" (click)="openContact(row)"></tr>
+          </table>
+        </div>
+        <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

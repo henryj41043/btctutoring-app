@@ -42,6 +42,7 @@ describe('ToolBar', () => {
     ['sessionsNav', '/sessions'],
     ['contactsNav', '/contacts'],
     ['rosterNav', '/roster'],
+    ['onboardingNav', '/onboarding'],
     ['payrollNav', '/payroll'],
   ])('%s navigates to %s', (method, route) => {
     (component as unknown as Record<string, () => void>)[method]();

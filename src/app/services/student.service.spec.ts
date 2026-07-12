@@ -48,6 +48,13 @@ describe('StudentService', () => {
     httpMock.expectOne(`${base}/students`).flush([]);
   });
 
+  it('getOnboardingStudents GETs /students/onboarding', () => {
+    service.getOnboardingStudents().subscribe();
+    const req = httpMock.expectOne(`${base}/students/onboarding`);
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
+
   it('createStudent POSTs to /students', () => {
     const student = { id: 's-1' } as Student;
     service.createStudent(student).subscribe();
