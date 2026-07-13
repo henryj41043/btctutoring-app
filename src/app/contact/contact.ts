@@ -26,6 +26,8 @@ import {UserGroup} from '../enums/user-group.enum';
 import {AuthService} from '../services/auth.service';
 import {DatePipe} from '@angular/common';
 import {MatDatepickerModule} from '@angular/material/datepicker';
+import {MatTimepickerModule} from '@angular/material/timepicker';
+import {CdkDragDrop, DragDropModule} from '@angular/cdk/drag-drop';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
@@ -57,6 +59,8 @@ import {Router} from '@angular/router';
     MatCheckbox,
     DatePipe,
     MatDatepickerModule,
+    MatTimepickerModule,
+    DragDropModule,
     MatProgressSpinnerModule,
     MatTableModule,
     MatSortModule,
@@ -357,22 +361,54 @@ export class Contact implements OnInit {
   }
 
   private buildNotesFormArray(notes: Note[]) {
-    const sortedNotes = [...notes].sort(
-      (a, b) => new Date(b.date_time ?? 0).getTime() - new Date(a.date_time ?? 0).getTime(),
-    );
-    sortedNotes.forEach(note => {
-      this.notes.push(this.formBuilder.group({
-        id: [note.id, Validators.required],
-        message: note.message,
-        date_time: note.date_time,
-        author: note.author,
-        author_id: note.author_id,
-        recipient: note.recipient,
-        recipient_id: note.recipient_id,
-        type: note.type,
-      }));
-    });
+    this.sortNotes(notes).forEach(note => this.notes.push(this.noteGroup(note)));
     this.notes.updateValueAndValidity();
+  }
+
+  /** A note card's form group. date_time is held as a Date for the pickers. */
+  private noteGroup(note: Note): FormGroup {
+    return this.formBuilder.group({
+      id: [note.id, Validators.required],
+      message: note.message,
+      date_time: this.noteDate(note.date_time),
+      author: note.author,
+      author_id: note.author_id,
+      recipient: note.recipient,
+      recipient_id: note.recipient_id,
+      type: note.type ?? '',
+      order: note.order ?? null,
+    });
+  }
+
+  /** Manual order when every note has one; otherwise newest-first by date. */
+  private sortNotes(notes: Note[]): Note[] {
+    const manual = notes.length > 0 && notes.every(n => n.order != null);
+    return [...notes].sort(manual
+      ? (a, b) => (a.order! - b.order!)
+      : (a, b) => new Date(b.date_time ?? 0).getTime() - new Date(a.date_time ?? 0).getTime());
+  }
+
+  private noteDate(value?: string): Date | null {
+    return value ? new Date(value) : null;
+  }
+
+  /** Serializes the date_time control (a Date) back to an ISO string for the API. */
+  private noteDateIso(value: unknown): string {
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'string' && value) return value;
+    return new Date().toISOString();
+  }
+
+  /** True once every note carries a manual order (i.e. the user has dragged). */
+  get notesHaveManualOrder(): boolean {
+    return this.notes.length > 0 && this.notes.controls.every(c => c.get('order')?.value != null);
+  }
+
+  private minNoteOrder(): number {
+    const orders = this.notes.controls
+      .map(c => c.get('order')?.value as number)
+      .filter(o => o != null);
+    return orders.length ? Math.min(...orders) : 0;
   }
 
   setNotesEditIndex(index: number) {
@@ -561,7 +597,8 @@ export class Contact implements OnInit {
   }
 
   saveNoteAt(index: number) {
-    const noteToSave: Note = this.notes.controls.at(index)?.value as Note;
+    const raw = this.notes.controls.at(index)?.getRawValue() as Record<string, unknown>;
+    const noteToSave: Note = {...raw, date_time: this.noteDateIso(raw['date_time'])} as Note;
     this.noteService.updateNote(noteToSave)
       .pipe(
         catchError(error => {
@@ -576,19 +613,62 @@ export class Contact implements OnInit {
       });
   }
 
+  /** Reorders notes via drag-and-drop: assigns a manual order to all and persists. */
+  dropNote(event: CdkDragDrop<unknown>): void {
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
+    const control = this.notes.at(event.previousIndex);
+    this.notes.removeAt(event.previousIndex);
+    this.notes.insert(event.currentIndex, control);
+    this.notes.controls.forEach((c, i) => c.get('order')!.setValue(i));
+    this.persistNoteOrder();
+    this.cdr.markForCheck();
+  }
+
+  /** Clears the manual order on every note and re-sorts the list by date. */
+  sortNotesByDate(): void {
+    this.notes.controls.forEach(c => c.get('order')!.setValue(null));
+    this.persistNoteOrder(); // order: null → the backend removes it (date sort)
+    const controls = [...this.notes.controls].sort(
+      (a, b) => new Date(b.get('date_time')?.value ?? 0).getTime() - new Date(a.get('date_time')?.value ?? 0).getTime(),
+    );
+    this.notes.clear();
+    controls.forEach(c => this.notes.push(c));
+    this.cdr.markForCheck();
+  }
+
+  /** Persists every note's current order (used after a drag or a date-sort reset). */
+  private persistNoteOrder(): void {
+    this.notes.controls.forEach(control => {
+      const raw = control.getRawValue() as Record<string, unknown>;
+      const note: Note = {...raw, date_time: this.noteDateIso(raw['date_time'])} as Note;
+      this.noteService.updateNote(note).pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      ).subscribe();
+    });
+  }
+
   addNote() {
-    let date = new Date();
-    let note: Note = new Note();
-    const dateString = date.toISOString();
+    const dateString = new Date().toISOString();
     const author = this.authService.contact().first_name;
     const authorId = this.authService.contact().id;
     const recipient = this.contactForm.controls['first_name'].value;
     const recipientId = this.contactForm.controls['id'].value;
-    note.date_time = dateString;
-    note.author = author;
-    note.author_id = authorId;
-    note.recipient = recipient;
-    note.recipient_id = recipientId;
+    // In manual-order mode a new note goes to the top (lowest order); otherwise
+    // its default "now" date_time already sorts it to the top.
+    const order = this.notesHaveManualOrder ? this.minNoteOrder() - 1 : undefined;
+    const note: Note = {
+      date_time: dateString,
+      author,
+      author_id: authorId,
+      recipient,
+      recipient_id: recipientId,
+      order,
+    };
     this.noteService.createNote(note)
       .pipe(
         catchError(error => {
@@ -597,17 +677,9 @@ export class Contact implements OnInit {
         })
       )
       .subscribe(response => {
-        // Newest note goes to the top so it matches the most-recent-first order.
-        this.notes.insert(0, this.formBuilder.group({
-          id: response.id,
-          message: response.message,
-          date_time: dateString,
-          author: author,
-          author_id: authorId,
-          recipient: recipient,
-          recipient_id: recipientId,
-          type: '',
-        }));
+        // Newest note goes to the top; the date/time defaults to now but is
+        // editable in the card that opens for editing.
+        this.notes.insert(0, this.noteGroup({...note, id: response.id, message: response.message, type: ''}));
         this.notes.updateValueAndValidity();
         this.newNoteIds.add(response.id);
         this.setNotesEditIndex(0);
