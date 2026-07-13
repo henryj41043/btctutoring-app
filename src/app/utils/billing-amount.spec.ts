@@ -1,4 +1,4 @@
-import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from './billing-amount';
+import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal, monthKey, midMonthAdjustment} from './billing-amount';
 import {Student} from '../models/student.model';
 import {Package} from '../enums/package.enum';
 import {Weekday} from '../enums/weekday.enum';
@@ -191,5 +191,56 @@ describe('siblingDiscountedTotal', () => {
 
   it('rounds to the nearest penny', () => {
     expect(siblingDiscountedTotal(100, 33, 3)).toBe(67);
+  });
+});
+
+describe('monthKey', () => {
+  it('formats a 0-indexed month as YYYY-MM', () => {
+    expect(monthKey(2026, 0)).toBe('2026-01');
+    expect(monthKey(2026, 11)).toBe('2026-12');
+  });
+});
+
+describe('midMonthAdjustment', () => {
+  it('returns the stored prior charge only for the matching period', () => {
+    const s = succeed({ mid_month_prior_charge: 88.5, mid_month_change_period: '2026-07' });
+    expect(midMonthAdjustment(s, 2026, 6)).toBe(88.5);
+    expect(midMonthAdjustment(s, 2026, 7)).toBe(0);
+  });
+
+  it('returns zero without a stored prior charge', () => {
+    expect(midMonthAdjustment(succeed({ mid_month_change_period: '2026-07' }), 2026, 6)).toBe(0);
+    expect(midMonthAdjustment(succeed(), 2026, 6)).toBe(0);
+  });
+});
+
+describe('mid-month package change charges', () => {
+  // Custom $400/mo, 1×45min on Wednesdays; changed on Jul 15 → new package
+  // prorates over 3 Wednesdays (15, 22, 29) = 276.93, plus a $120 old portion.
+  const changed = (over: Partial<Student> = {}): Student =>
+    ({
+      package: Package.CUSTOM,
+      custom_monthly_cost: 400,
+      custom_sessions_per_week: 1,
+      custom_session_length_min: 45,
+      package_start_date: '2026-07-15T00:00:00',
+      schedule: [{ weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '10:45' }],
+      mid_month_prior_charge: 120,
+      mid_month_change_period: '2026-07',
+      ...over,
+    }) as Student;
+
+  it('adds the old package portion on top of the new package charge in the change month', () => {
+    expect(studentMonthlyCharge(changed(), 2026, 6)).toBe(396.93);
+  });
+
+  it('does not leak the adjustment into other months', () => {
+    // August: started Jul 15 (prior month) → full new monthly cost, no adjustment.
+    expect(studentMonthlyCharge(changed(), 2026, 7)).toBe(400);
+  });
+
+  it('splits the whole change-month charge evenly for a semi-monthly family', () => {
+    // 396.93 → round2(396.93/2)=198.47, remainder 198.46.
+    expect(studentSemiMonthlyCharge(changed(), 2026, 6)).toEqual({ first: 198.47, fifteenth: 198.46 });
   });
 });

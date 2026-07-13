@@ -13,6 +13,9 @@ import { Student } from '../models/student.model';
 import { Note } from '../models/note.model';
 import { StudentSessionsDialog } from '../student-sessions-dialog/student-sessions-dialog';
 import { DeleteContactDialog } from '../delete-contact-dialog/delete-contact-dialog';
+import { ManageScheduleDialog } from '../manage-schedule-dialog/manage-schedule-dialog';
+import { BillingService } from '../services/billing.service';
+import { BillingCycle } from '../enums/billing-cycle.enum';
 import { Service } from '../enums/service.enum';
 import { Status } from '../enums/status.enum';
 import { Package } from '../enums/package.enum';
@@ -65,6 +68,10 @@ describe('Contact', () => {
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
   const router = { navigate: jest.fn() };
   const scheduleService = { scheduleSummary: jest.fn().mockReturnValue([]) };
+  const billingService = {
+    getBillingRecordsByContact: jest.fn(),
+    upsertBillingRecord: jest.fn(),
+  };
 
   const defaults = () => {
     contactService.getContact.mockReturnValue(of([fullContact()]));
@@ -74,6 +81,8 @@ describe('Contact', () => {
     studentService.getStudentsByTutor.mockReturnValue(of([]));
     noteService.getNotesByRecipient.mockReturnValue(of([]));
     contactService.updateContact.mockReturnValue(of({} as ContactModel));
+    billingService.getBillingRecordsByContact.mockReturnValue(of([]));
+    billingService.upsertBillingRecord.mockReturnValue(of({}));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -87,6 +96,7 @@ describe('Contact', () => {
         { provide: MatDialog, useValue: dialog },
         { provide: Router, useValue: router },
         { provide: ScheduleService, useValue: scheduleService },
+        { provide: BillingService, useValue: billingService },
       ],
     });
     const c = TestBed.createComponent(Contact).componentInstance;
@@ -415,6 +425,110 @@ describe('Contact', () => {
       seedStudent(c);
       studentService.getStudentsByContact.mockReturnValue(throwError(() => new Error('x')));
       expect(() => c.openStudentDialog('delete', { id: 's-1' } as Student)).not.toThrow();
+    });
+
+    it('opens Manage Schedule after a mid-month package change', () => {
+      afterClosed = { openScheduleForStudentId: 's-1' };
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT, assigned_tutor_id: 't-1' }]),
+      );
+      contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
+      const c = build();
+      c.ngOnInit();
+      c.openStudentDialog('edit', { id: 's-1' } as Student);
+      // First open is the Student dialog; the package-change result opens Manage Schedule.
+      const opened = dialog.open.mock.calls.map(call => call[0]);
+      expect(opened).toContain(ManageScheduleDialog);
+    });
+  });
+
+  describe('mid-month billing recompute', () => {
+    const period = (day: number): string => {
+      const now = new Date();
+      const m = (now.getMonth() + 1).toString().padStart(2, '0');
+      return `${now.getFullYear()}-${m}-${day.toString().padStart(2, '0')}`;
+    };
+    const enrolled = (over = {}) => ({
+      id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT,
+      package: Package.SUCCEED, package_start_date: '2020-01-01T00:00:00',
+      schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '10:30' }], ...over,
+    });
+    const recompute = (c: Contact) => (c as unknown as { recomputeCurrentPeriodBilling: () => void }).recomputeCurrentPeriodBilling();
+
+    it('adjusts an existing monthly record to the recomputed amount, keeping paid state', () => {
+      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
+      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
+      billingService.getBillingRecordsByContact.mockReturnValue(
+        of([{ contact_id: 'c-1', period_start: period(1), cycle: 'monthly', amount: 999, paid: true, paid_date: 'd1' }]),
+      );
+      const c = build();
+      c.ngOnInit();
+      recompute(c);
+      expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ period_start: period(1), amount: 362, paid: true, paid_date: 'd1' }),
+      );
+    });
+
+    it('does not create a record where none existed', () => {
+      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
+      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
+      billingService.getBillingRecordsByContact.mockReturnValue(of([])); // nothing generated yet
+      const c = build();
+      c.ngOnInit();
+      recompute(c);
+      expect(billingService.upsertBillingRecord).not.toHaveBeenCalled();
+    });
+
+    it('adjusts both halves of an existing semi-monthly record set', () => {
+      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
+      billingService.getBillingRecordsByContact.mockReturnValue(
+        of([
+          { contact_id: 'c-1', period_start: period(1), cycle: 'semi_monthly', amount: 500, paid: false },
+          { contact_id: 'c-1', period_start: period(15), cycle: 'semi_monthly', amount: 500, paid: false },
+        ]),
+      );
+      const c = build();
+      c.ngOnInit();
+      recompute(c);
+      const amounts = billingService.upsertBillingRecord.mock.calls.map(call => call[0].amount);
+      expect(amounts).toEqual([181, 181]);
+    });
+
+    it('does nothing when the contact has no enrolled students', () => {
+      studentService.getStudentsByContact.mockReturnValue(of([]));
+      const c = build();
+      c.ngOnInit();
+      recompute(c);
+      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when no contact is loaded', () => {
+      const c = build(); // no ngOnInit → loadedContact undefined
+      recompute(c);
+      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
+    });
+
+    it('swallows a billing-records fetch error', () => {
+      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
+      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
+      billingService.getBillingRecordsByContact.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      c.ngOnInit();
+      expect(() => recompute(c)).not.toThrow();
+      expect(billingService.upsertBillingRecord).not.toHaveBeenCalled();
+    });
+
+    it('swallows a billing-record upsert error', () => {
+      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
+      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
+      billingService.getBillingRecordsByContact.mockReturnValue(
+        of([{ contact_id: 'c-1', period_start: period(1), cycle: 'monthly', amount: 999, paid: false }]),
+      );
+      billingService.upsertBillingRecord.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      c.ngOnInit();
+      expect(() => recompute(c)).not.toThrow();
     });
   });
 

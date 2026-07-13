@@ -37,20 +37,25 @@ function proratedCharge(def: PackageDef, student: Student, start: Date): number 
   return proratedFirstMonthCost(def, countRemainingSlots(schedule, start));
 }
 
-/**
- * The amount to charge a student for a given billing month (`month` is
- * 0-indexed). Returns the prorated cost for their first partial month, the full
- * monthly cost for ongoing months, or 0 if the package hasn't started by
- * month-end or isn't configured (e.g. an unconfigured CUSTOM student).
- */
-export function studentMonthlyCharge(student: Student, year: number, month: number): number {
-  const def = resolvePackageDef(student.package, {
-    monthlyCost: student.custom_monthly_cost,
-    sessionsPerWeek: student.custom_sessions_per_week,
-    sessionLengthMin: student.custom_session_length_min,
-  });
-  if (!def) return 0;
+/** A month key 'YYYY-MM' (month is 0-indexed) — the mid-month-change tag format. */
+export function monthKey(year: number, month: number): string {
+  return `${year}-${(month + 1).toString().padStart(2, '0')}`;
+}
 
+/**
+ * The old package's prorated portion to add on top of the new package's charge,
+ * but only in the month a mid-month package change happened. Mirror of the
+ * backend billing-amount helper.
+ */
+export function midMonthAdjustment(student: Student, year: number, month: number): number {
+  if (student.mid_month_change_period === monthKey(year, month) && student.mid_month_prior_charge) {
+    return student.mid_month_prior_charge;
+  }
+  return 0;
+}
+
+/** The package charge for a month before any mid-month adjustment. */
+function baseMonthlyCharge(def: PackageDef, student: Student, year: number, month: number): number {
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0);
 
@@ -66,6 +71,24 @@ export function studentMonthlyCharge(student: Student, year: number, month: numb
     return proratedCharge(def, student, start);
   }
   return def.monthlyCost;
+}
+
+/**
+ * The amount to charge a student for a given billing month (`month` is
+ * 0-indexed). Returns the prorated cost for their first partial month, the full
+ * monthly cost for ongoing months, or 0 if the package hasn't started by
+ * month-end or isn't configured (e.g. an unconfigured CUSTOM student).
+ */
+export function studentMonthlyCharge(student: Student, year: number, month: number): number {
+  const def = resolvePackageDef(student.package, {
+    monthlyCost: student.custom_monthly_cost,
+    sessionsPerWeek: student.custom_sessions_per_week,
+    sessionLengthMin: student.custom_session_length_min,
+  });
+  if (!def) return 0;
+
+  const base = baseMonthlyCharge(def, student, year, month);
+  return round2(base + midMonthAdjustment(student, year, month));
 }
 
 /**
@@ -88,6 +111,14 @@ export function studentSemiMonthlyCharge(student: Student, year: number, month: 
     const [first, fifteenth] = semiMonthlySplit(def.monthlyCost);
     return {first, fifteenth};
   };
+
+  // In a mid-month package-change month, split the whole change-month charge
+  // (new package prorated + the old package's portion) evenly, matching the
+  // backend's total-then-split behavior.
+  if (midMonthAdjustment(student, year, month) > 0) {
+    const [first, fifteenth] = semiMonthlySplit(studentMonthlyCharge(student, year, month));
+    return {first, fifteenth};
+  }
 
   // Legacy student with no recorded start date: treat every month as a full month.
   if (!student.package_start_date) return normalSplit();

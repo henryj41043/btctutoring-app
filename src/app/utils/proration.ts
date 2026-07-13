@@ -31,6 +31,26 @@ export function countRemainingSlots(schedule: ScheduleSlot[], startDate: Date): 
 }
 
 /**
+ * Counts the package session slots occurring from the 1st of `date`'s month up
+ * to (but not including) `date`. Used at a mid-month package change to price the
+ * old package's portion by the sessions received before the change.
+ */
+export function countSlotsBeforeInMonth(schedule: ScheduleSlot[], date: Date): number {
+  if (!schedule || schedule.length === 0) return 0;
+  const weekdaysScheduled = schedule.map(s => s.weekday);
+  const cursor = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate()); // exclusive
+
+  let count = 0;
+  while (cursor < end) {
+    const weekday = WEEKDAY_BY_JS_DAY[cursor.getDay()];
+    count += weekdaysScheduled.filter(w => w === weekday).length;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
+/**
  * The prorated cost of a partial first month: the per-session cost times the
  * sessions the student actually receives (their remaining slots from the start
  * date through month end), with per-step penny rounding. A calendar month can
