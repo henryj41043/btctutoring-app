@@ -103,6 +103,7 @@ export class Contact implements OnInit {
     service: ['', Validators.required],
     status: '',
     billing_cycle: '',
+    sibling_discount: 0,
     cc_authorization_received: false,
     twenty_five_deducted: false,
     special_circumstance: '',
@@ -259,6 +260,7 @@ export class Contact implements OnInit {
     this.contactForm.controls['phone_number'].setValue(contact.phone_number);
     this.contactForm.controls['service'].setValue(contact.service);
     this.contactForm.controls['billing_cycle'].setValue(contact.billing_cycle);
+    this.contactForm.controls['sibling_discount'].setValue(contact.sibling_discount ?? 0);
     this.contactForm.controls['cc_authorization_received'].setValue(contact.cc_authorization_received);
     this.contactForm.controls['twenty_five_deducted'].setValue(contact.twenty_five_deducted);
     this.contactForm.controls['special_circumstance'].setValue(contact.special_circumstance);
@@ -400,6 +402,11 @@ export class Contact implements OnInit {
     this.contactForm.markAsPristine();
     this.contactForm.markAsUntouched();
     this.cdr.markForCheck();
+  }
+
+  /** True when the family has 2+ active, enrolled students — the sibling-discount condition. */
+  get hasMultipleEnrolledStudents(): boolean {
+    return this.students.filter(s => s.status === Status.ACTIVE_STUDENT && !!s.package).length >= 2;
   }
 
   /** True once a student has both an assigned tutor and a package — required to schedule. */

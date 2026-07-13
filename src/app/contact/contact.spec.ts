@@ -332,6 +332,44 @@ describe('Contact', () => {
       expect(students(c)[0].name).toBe('Pat');
     });
 
+    it('hasMultipleEnrolledStudents is true with 2+ active packaged students', () => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([
+          { id: 's-1', status: Status.ACTIVE_STUDENT, package: Package.SUCCEED },
+          { id: 's-2', status: Status.ACTIVE_STUDENT, package: Package.THRIVE },
+        ]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.hasMultipleEnrolledStudents).toBe(true);
+    });
+
+    it('hasMultipleEnrolledStudents ignores onboarding and package-less students', () => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([
+          { id: 's-1', status: Status.ACTIVE_STUDENT, package: Package.SUCCEED },
+          { id: 's-2', status: Status.ONBOARDING, package: Package.THRIVE },
+          { id: 's-3', status: Status.ACTIVE_STUDENT }, // no package
+        ]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.hasMultipleEnrolledStudents).toBe(false);
+    });
+
+    it('defaults the sibling discount to 0 when the contact has none', () => {
+      const c = build();
+      c.ngOnInit();
+      expect(form(c).controls['sibling_discount'].value).toBe(0);
+    });
+
+    it('loads an existing sibling discount into the form', () => {
+      contactService.getContact.mockReturnValue(of([fullContact({ sibling_discount: 15 })]));
+      const c = build();
+      c.ngOnInit();
+      expect(form(c).controls['sibling_discount'].value).toBe(15);
+    });
+
     it('opens the Student dialog in create mode with the contact id and tutors', () => {
       afterClosed = false;
       const c = build();

@@ -93,6 +93,48 @@ describe('Billing', () => {
     expect(entry.cycle).toBe(BillingCycle.MONTHLY);
   });
 
+  it('applies the sibling discount to a family with 2+ enrolled students', () => {
+    contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
+    studentService.getStudents.mockReturnValue(
+      of([student({ id: 's-1' }), student({ id: 's-2', name: 'Sam' })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    // 2 × $362 = $724, less 10% = $651.60.
+    expect(entry.total).toBe(651.6);
+    expect(entry.due_first).toBe(651.6);
+    expect(entry.discount).toBe(72.4);
+    expect(entry.discount_percent).toBe(10);
+  });
+
+  it('does not apply the sibling discount to an only child', () => {
+    contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
+    const c = build();
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    expect(entry.total).toBe(362);
+    expect(entry.discount).toBe(0);
+    expect(entry.discount_percent).toBe(0);
+  });
+
+  it('discounts both halves of a semi-monthly family', () => {
+    contactService.getContacts.mockReturnValue(
+      of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY, sibling_discount: 50 })]),
+    );
+    studentService.getStudents.mockReturnValue(
+      of([student({ id: 's-1' }), student({ id: 's-2', name: 'Sam' })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    // 724 → 362/362 halves → 50% off → 181/181 → total 362, discount 362.
+    expect(entry.due_first).toBe(181);
+    expect(entry.due_fifteenth).toBe(181);
+    expect(entry.total).toBe(362);
+    expect(entry.discount).toBe(362);
+  });
+
   it('splits a semi-monthly contact across the 1st and 15th', () => {
     contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
     const c = build();
@@ -330,8 +372,8 @@ describe('Billing', () => {
         due_first: 362, due_fifteenth: null, total: 362,
       } as BillingEntry,
       {
-        name: 'Sam Roe', packages: 'Kai: Thrive', cycle: BillingCycle.SEMI_MONTHLY,
-        due_first: 181, due_fifteenth: 181, total: 362,
+        name: 'Sam Roe', packages: 'Kai: Thrive; Rio: Thrive', cycle: BillingCycle.SEMI_MONTHLY,
+        due_first: 163, due_fifteenth: 163, total: 326, discount: 36, discount_percent: 10,
       } as BillingEntry,
       // Undefined amounts: due columns render blank ('—'), total uses the formatMoney `?? 0` fallback.
       {} as BillingEntry,
@@ -344,11 +386,11 @@ describe('Billing', () => {
     expect(doc.save).toHaveBeenCalledWith('billing-July-2026.pdf');
 
     const config = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
-    expect(config.head).toEqual([['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Total']]);
+    expect(config.head).toEqual([['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Discount', 'Total']]);
     expect(config.body).toEqual([
-      ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '$362.00'],
-      ['Sam Roe', 'Kai: Thrive', 'Semi-monthly', '$181.00', '$181.00', '$362.00'],
-      ['', '', 'Monthly', '—', '—', '$0.00'],
+      ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '—', '$362.00'],
+      ['Sam Roe', 'Kai: Thrive; Rio: Thrive', 'Semi-monthly', '$163.00', '$163.00', '-$36.00 (10%)', '$326.00'],
+      ['', '', 'Monthly', '—', '—', '—', '$0.00'],
     ]);
   });
 });

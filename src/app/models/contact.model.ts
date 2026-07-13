@@ -13,6 +13,8 @@ export class Contact {
   service?: Service;
   status?: Status;
   billing_cycle?: BillingCycle;
+  /** Percent (0–100) off the family's recurring billing when 2+ students are enrolled. */
+  sibling_discount?: number;
   cc_authorization_received?: boolean;
   twenty_five_deducted?: boolean;
   special_circumstance?: string;
