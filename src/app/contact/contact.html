@@ -83,13 +83,21 @@
   </div>
   <div class="contact-notes contact-section" [formGroup]="notesForm">
     <h2>Notes</h2>
-    <button matIconButton type="button" (click)="addNote()">
+    <button matIconButton type="button" (click)="addNote()" aria-label="Add note">
       <mat-icon>add</mat-icon>
     </button>
-    <div formArrayName="notes">
+    @if (notesHaveManualOrder) {
+      <button matButton type="button" (click)="sortNotesByDate()">Sort by date</button>
+    }
+    <div formArrayName="notes" cdkDropList (cdkDropListDropped)="dropNote($event)">
       @for (noteControl of notes.controls; track noteControl; let i = $index) {
-        <mat-card class="note-card" appearance="outlined" [formGroupName]="i">
+        <mat-card class="note-card" appearance="outlined" [formGroupName]="i"
+                  cdkDrag [cdkDragDisabled]="notesEditIndex === i">
           <mat-card-header>
+            <button matIconButton type="button" cdkDragHandle class="note-drag-handle"
+                    [hidden]="notesEditIndex === i" aria-label="Drag to reorder">
+              <mat-icon>drag_indicator</mat-icon>
+            </button>
             <mat-card-title>{{noteControl.get('author')?.value}}</mat-card-title>
             <mat-card-subtitle>{{noteControl.get('date_time')?.value | date:'short'}}</mat-card-subtitle>
           </mat-card-header>
@@ -101,6 +109,18 @@
               <mat-form-field class="notes-form-field">
                 <mat-label>Message</mat-label>
                 <textarea matInput formControlName="message"></textarea>
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>Date</mat-label>
+                <input matInput [matDatepicker]="notePicker" formControlName="date_time">
+                <mat-datepicker-toggle [for]="notePicker" matSuffix/>
+                <mat-datepicker #notePicker/>
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>Time</mat-label>
+                <input matInput [matTimepicker]="noteTimePicker" formControlName="date_time">
+                <mat-timepicker-toggle [for]="noteTimePicker" matSuffix/>
+                <mat-timepicker #noteTimePicker/>
               </mat-form-field>
             </div>
           </mat-card-content>

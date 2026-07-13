@@ -325,6 +325,133 @@ describe('Contact', () => {
       expect(notes(c).at(0).value.id).toBe('n-new');
       expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(0);
     });
+
+    it('serializes the edited date back to an ISO string on save', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([{ id: 'a', date_time: '2026-01-01T00:00:00Z', message: 'hi' } as Note]),
+      );
+      noteService.updateNote.mockReturnValue(of({ id: 'a' } as Note));
+      const c = build();
+      c.ngOnInit();
+      c.saveNoteAt(0); // the control holds a Date; save must send a string
+      expect(typeof noteService.updateNote.mock.calls[0][0].date_time).toBe('string');
+    });
+
+    it('uses no order for a new note in date mode', () => {
+      noteService.createNote.mockReturnValue(of({ id: 'n-new' }));
+      const c = build(); // no existing notes → date mode
+      c.ngOnInit();
+      c.addNote();
+      expect(noteService.createNote).toHaveBeenCalledWith(
+        expect.objectContaining({ order: undefined }),
+      );
+    });
+  });
+
+  describe('notes ordering', () => {
+    const ids = (c: Contact) => notes(c).controls.map(ct => ct.get('id')!.value);
+
+    it('sorts by manual order when every note has one', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-01-01', order: 2 },
+          { id: 'b', date_time: '2026-03-01', order: 0 },
+          { id: 'c', date_time: '2026-02-01', order: 1 },
+        ] as Note[]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(ids(c)).toEqual(['b', 'c', 'a']);
+      expect(c.notesHaveManualOrder).toBe(true);
+    });
+
+    it('falls back to date order when any note lacks an order', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-01-01', order: 0 },
+          { id: 'b', date_time: '2026-03-01' }, // no order
+        ] as Note[]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(ids(c)).toEqual(['b', 'a']); // newest first
+      expect(c.notesHaveManualOrder).toBe(false);
+    });
+
+    it('reorders by drag, assigns a contiguous order, and persists every note', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-03-01' },
+          { id: 'b', date_time: '2026-01-01' },
+        ] as Note[]),
+      );
+      noteService.updateNote.mockReturnValue(of({} as Note));
+      const c = build();
+      c.ngOnInit();
+      c.dropNote({ previousIndex: 1, currentIndex: 0 } as never);
+      expect(ids(c)).toEqual(['b', 'a']);
+      expect(notes(c).controls.map(ct => ct.get('order')!.value)).toEqual([0, 1]);
+      expect(noteService.updateNote).toHaveBeenCalledTimes(2);
+      expect(c.notesHaveManualOrder).toBe(true);
+    });
+
+    it('drag is a no-op when the position is unchanged', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([{ id: 'a', date_time: '2026-03-01' }] as Note[]),
+      );
+      const c = build();
+      c.ngOnInit();
+      c.dropNote({ previousIndex: 0, currentIndex: 0 } as never);
+      expect(noteService.updateNote).not.toHaveBeenCalled();
+    });
+
+    it('places a new note at the top order in manual mode', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-01-01', order: 0 },
+          { id: 'b', date_time: '2026-03-01', order: 5 },
+        ] as Note[]),
+      );
+      noteService.createNote.mockReturnValue(of({ id: 'n-new' }));
+      const c = build();
+      c.ngOnInit();
+      c.addNote();
+      expect(noteService.createNote).toHaveBeenCalledWith(
+        expect.objectContaining({ order: -1 }), // min order 0 → new -1
+      );
+      expect(notes(c).at(0).get('id')!.value).toBe('n-new');
+    });
+
+    it('sortNotesByDate clears the order, persists null, and re-sorts by date', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-01-01', order: 0 },
+          { id: 'b', date_time: '2026-03-01', order: 1 },
+        ] as Note[]),
+      );
+      noteService.updateNote.mockReturnValue(of({} as Note));
+      const c = build();
+      c.ngOnInit();
+      expect(ids(c)).toEqual(['a', 'b']); // manual order
+      c.sortNotesByDate();
+      expect(notes(c).controls.every(ct => ct.get('order')!.value === null)).toBe(true);
+      expect(noteService.updateNote.mock.calls.every(call => call[0].order === null)).toBe(true);
+      expect(ids(c)).toEqual(['b', 'a']); // now date-sorted
+      expect(c.notesHaveManualOrder).toBe(false);
+    });
+
+    it('swallows a reorder persist error', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-03-01' },
+          { id: 'b', date_time: '2026-01-01' },
+        ] as Note[]),
+      );
+      noteService.updateNote.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      c.ngOnInit();
+      expect(() => c.dropNote({ previousIndex: 1, currentIndex: 0 } as never)).not.toThrow();
+    });
   });
 
   describe('students', () => {
