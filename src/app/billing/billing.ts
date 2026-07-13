@@ -27,7 +27,7 @@ import {CurrencyPipe, DatePipe} from '@angular/common';
 import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {Status} from '../enums/status.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
-import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention} from '../utils/billing-amount';
+import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
 
 @Component({
@@ -69,7 +69,7 @@ export class Billing implements OnInit {
   }
 
   protected billingColumns: string[] = [
-    'name', 'packages', 'cycle', 'due_first', 'due_fifteenth', 'total', 'paid',
+    'name', 'packages', 'cycle', 'due_first', 'due_fifteenth', 'discount', 'total', 'paid',
   ];
   protected dataSource = new MatTableDataSource<BillingEntry>([]);
   protected selectedDate: Date = new Date();
@@ -166,9 +166,15 @@ export class Billing implements OnInit {
       const cycle = this.normalizeCycle(contact.billing_cycle);
       const semi = cycle === BillingCycle.SEMI_MONTHLY;
 
+      // Sibling discount: a family-level percent, applied only when the family
+      // has 2+ enrolled students (contactStudents are already active + packaged).
+      const pct = contact.sibling_discount;
+      const enrolled = contactStudents.length;
+
       let dueFirst: number | null;
       let dueFifteenth: number | null;
       let total: number;
+      let preDiscountTotal: number;
       if (semi) {
         let first = 0;
         let fifteenth = 0;
@@ -179,17 +185,23 @@ export class Billing implements OnInit {
         }
         first = round2(first);
         fifteenth = round2(fifteenth);
-        total = round2(first + fifteenth);
+        preDiscountTotal = round2(first + fifteenth);
+        const discFirst = siblingDiscountedTotal(first, pct, enrolled);
+        const discFifteenth = siblingDiscountedTotal(fifteenth, pct, enrolled);
+        total = round2(discFirst + discFifteenth);
         // A half with no charge (e.g. the blank side of a prorated first month,
         // billed in full on the other date) renders as blank rather than $0.00.
-        dueFirst = first === 0 ? null : first;
-        dueFifteenth = fifteenth === 0 ? null : fifteenth;
+        dueFirst = discFirst === 0 ? null : discFirst;
+        dueFifteenth = discFifteenth === 0 ? null : discFifteenth;
       } else {
-        total = round2(contactStudents.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+        preDiscountTotal = round2(contactStudents.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+        total = siblingDiscountedTotal(preDiscountTotal, pct, enrolled);
         dueFirst = total;
         dueFifteenth = null;
       }
-      if (total <= 0) continue; // nobody is billable this month
+      if (preDiscountTotal <= 0) continue; // nobody is billable this month
+
+      const discount = round2(preDiscountTotal - total);
 
       const entry: BillingEntry = {
         contact_id: contactId,
@@ -199,6 +211,8 @@ export class Billing implements OnInit {
         due_first: dueFirst,
         due_fifteenth: dueFifteenth,
         total,
+        discount,
+        discount_percent: discount > 0 ? (pct ?? 0) : 0,
         paid_first: recordMap.get(`${contactId}#${periodFirst}`)?.paid ?? false,
         paid_fifteenth: semi ? (recordMap.get(`${contactId}#${periodFifteenth}`)?.paid ?? false) : false,
         needs_attention: contactStudents.some(studentNeedsAttention),
@@ -255,13 +269,14 @@ export class Billing implements OnInit {
 
     autoTable(doc, {
       startY: 28,
-      head: [['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Total']],
+      head: [['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Discount', 'Total']],
       body: this.dataSource.data.map(e => [
         e.name ?? '',
         e.packages ?? '',
         e.cycle === BillingCycle.SEMI_MONTHLY ? 'Semi-monthly' : 'Monthly',
         e.due_first == null ? '—' : this.formatMoney(e.due_first),
         e.due_fifteenth == null ? '—' : this.formatMoney(e.due_fifteenth),
+        e.discount ? `-${this.formatMoney(e.discount)} (${e.discount_percent}%)` : '—',
         this.formatMoney(e.total),
       ]),
       styles: { fontSize: 9 },

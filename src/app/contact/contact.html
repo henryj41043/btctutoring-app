@@ -342,6 +342,13 @@
             }
           </mat-select>
         </mat-form-field>
+        @if (hasMultipleEnrolledStudents) {
+          <mat-form-field>
+            <mat-label>Sibling Discount (%)</mat-label>
+            <input matInput type="number" min="0" max="100" formControlName="sibling_discount">
+            <span matTextSuffix>%</span>
+          </mat-form-field>
+        }
         <mat-form-field class="billing-textbox">
           <mat-label>Special Circumstance</mat-label>
           <textarea matInput formControlName="special_circumstance"></textarea>

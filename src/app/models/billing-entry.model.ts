@@ -8,6 +8,10 @@ export class BillingEntry {
   due_first?: number | null; // null when no charge falls on the 1st (blank half of a prorated month)
   due_fifteenth?: number | null; // null for monthly contacts or a blank 15th half
   total?: number;
+  /** Dollar amount taken off by the family's sibling discount (0 when none applies). */
+  discount?: number;
+  /** The sibling-discount percent actually applied (0 when none applies). */
+  discount_percent?: number;
   paid_first?: boolean;
   paid_fifteenth?: boolean;
   /** True when a student can't be priced confidently (unconfigured/missing schedule). */

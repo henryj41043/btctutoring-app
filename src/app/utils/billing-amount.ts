@@ -1,6 +1,23 @@
 import {Student} from '../models/student.model';
-import {PackageDef, resolvePackageDef} from './package-config';
+import {PackageDef, resolvePackageDef, round2} from './package-config';
 import {countRemainingSlots, proratedFirstMonthCost, semiMonthlySplit} from './proration';
+
+/**
+ * Applies a family's sibling discount to an amount, but only when the family
+ * actually has 2+ enrolled students. A stale percent never discounts an only
+ * child. Mirror of the backend billing-amount helper.
+ */
+export function siblingDiscountedTotal(
+  amount: number,
+  percent: number | undefined,
+  enrolledStudentCount: number,
+): number {
+  if (!percent || percent <= 0 || enrolledStudentCount < 2) {
+    return amount;
+  }
+  const pct = Math.min(100, Math.max(0, percent));
+  return round2(amount * (1 - pct / 100));
+}
 
 /** A student's charge split across a month's two semi-monthly billing dates. */
 export interface SemiMonthlyCharge {

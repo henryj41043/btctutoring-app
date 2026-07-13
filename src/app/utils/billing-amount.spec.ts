@@ -1,4 +1,4 @@
-import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention} from './billing-amount';
+import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from './billing-amount';
 import {Student} from '../models/student.model';
 import {Package} from '../enums/package.enum';
 import {Weekday} from '../enums/weekday.enum';
@@ -168,5 +168,28 @@ describe('studentNeedsAttention', () => {
       schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
     });
     expect(studentNeedsAttention(student)).toBe(false);
+  });
+});
+
+describe('siblingDiscountedTotal', () => {
+  it('discounts the amount when 2+ students are enrolled', () => {
+    expect(siblingDiscountedTotal(1000, 10, 2)).toBe(900);
+  });
+
+  it('does not discount an only child', () => {
+    expect(siblingDiscountedTotal(1000, 10, 1)).toBe(1000);
+  });
+
+  it('is a no-op when the percent is missing or zero', () => {
+    expect(siblingDiscountedTotal(1000, undefined, 2)).toBe(1000);
+    expect(siblingDiscountedTotal(1000, 0, 2)).toBe(1000);
+  });
+
+  it('clamps a percent above 100 to a full discount', () => {
+    expect(siblingDiscountedTotal(1000, 150, 2)).toBe(0);
+  });
+
+  it('rounds to the nearest penny', () => {
+    expect(siblingDiscountedTotal(100, 33, 3)).toBe(67);
   });
 });
