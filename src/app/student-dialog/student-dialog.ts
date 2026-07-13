@@ -21,8 +21,18 @@ import {Contact} from '../models/contact.model';
 import {Status} from '../enums/status.enum';
 import {Package} from '../enums/package.enum';
 import {StudentService} from '../services/student.service';
+import {perSessionCost, resolvePackageDef, round2} from '../utils/package-config';
+import {countSlotsBeforeInMonth} from '../utils/proration';
+import {monthKey} from '../utils/billing-amount';
 
 export type StudentDialogMode = 'create' | 'edit' | 'delete';
+
+/**
+ * What the Student dialog closes with. `true` for a plain create/edit/delete;
+ * an object when a mid-month package change needs the caller to open Manage
+ * Schedule so the admin redefines the new package's slots.
+ */
+export type StudentDialogResult = true | {openScheduleForStudentId?: string};
 
 /** Data needed to open the Student dialog. */
 export interface StudentDialogData {
@@ -189,6 +199,7 @@ export class StudentDialog implements OnInit {
       ...raw,
       birthday: this.toDateString(raw.birthday),
     };
+    const packageChanged = this.applyMidMonthPackageChange(student);
     this.studentService
       .updateStudent(student)
       .pipe(
@@ -198,7 +209,44 @@ export class StudentDialog implements OnInit {
           return EMPTY;
         }),
       )
-      .subscribe(() => this.dialogRef.close(true));
+      .subscribe(() =>
+        this.dialogRef.close(
+          packageChanged ? {openScheduleForStudentId: student.id} : true,
+        ),
+      );
+  }
+
+  /**
+   * When an existing student's package changes, stamps the student so billing
+   * prorates the old package before today and the new package after (Option A):
+   * records the old package's per-session portion for the sessions already
+   * received this month, and restarts the package from today. Returns true if a
+   * change was applied (the caller then routes the admin to Manage Schedule to
+   * redefine the new package's slots).
+   */
+  private applyMidMonthPackageChange(student: Student): boolean {
+    const prior = this.data.student;
+    const oldPackage = prior?.package;
+    if (!oldPackage || oldPackage === student.package) {
+      return false;
+    }
+
+    const changeDate = new Date();
+    const oldDef = resolvePackageDef(oldPackage, {
+      monthlyCost: prior?.custom_monthly_cost,
+      sessionsPerWeek: prior?.custom_sessions_per_week,
+      sessionLengthMin: prior?.custom_session_length_min,
+    });
+    const priorSlots = countSlotsBeforeInMonth(prior?.schedule ?? [], changeDate);
+    const priorCharge = oldDef ? round2(perSessionCost(oldDef) * priorSlots) : 0;
+
+    const y = changeDate.getFullYear();
+    const m = (changeDate.getMonth() + 1).toString().padStart(2, '0');
+    const d = changeDate.getDate().toString().padStart(2, '0');
+    student.package_start_date = `${y}-${m}-${d}T00:00:00`;
+    student.mid_month_prior_charge = priorCharge;
+    student.mid_month_change_period = monthKey(y, changeDate.getMonth());
+    return true;
   }
 
   confirmDelete(): void {

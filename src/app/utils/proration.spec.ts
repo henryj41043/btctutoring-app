@@ -1,4 +1,4 @@
-import {countRemainingSlots, proratedFirstMonthCost, ScheduleSlot, semiMonthlySplit} from './proration';
+import {countRemainingSlots, countSlotsBeforeInMonth, proratedFirstMonthCost, ScheduleSlot, semiMonthlySplit} from './proration';
 import {PACKAGE_CONFIG} from './package-config';
 import {Package} from '../enums/package.enum';
 import {Weekday} from '../enums/weekday.enum';
@@ -76,5 +76,28 @@ describe('proration', () => {
       const [a, b] = semiMonthlySplit(181.01);
       expect(a + b).toBeCloseTo(181.01, 2);
     });
+  });
+});
+
+describe('countSlotsBeforeInMonth', () => {
+  // July 2026 Mondays: 6, 13, 20, 27.
+  it('counts slots from the 1st up to (but not including) the given date', () => {
+    // Before the 20th → Mondays 6 and 13 = 2.
+    expect(countSlotsBeforeInMonth([slot(Weekday.MONDAY)], new Date(2026, 6, 20))).toBe(2);
+  });
+
+  it('returns zero on the 1st (empty range)', () => {
+    expect(countSlotsBeforeInMonth([slot(Weekday.MONDAY)], new Date(2026, 6, 1))).toBe(0);
+  });
+
+  it('counts multiple weekday slots and same-day doubles', () => {
+    // Before the 16th: Wednesdays 1, 8, 15 (3) + Mondays 6, 13 (2) = 5.
+    expect(
+      countSlotsBeforeInMonth([slot(Weekday.WEDNESDAY), slot(Weekday.MONDAY)], new Date(2026, 6, 16)),
+    ).toBe(5);
+  });
+
+  it('returns zero for an empty schedule', () => {
+    expect(countSlotsBeforeInMonth([], new Date(2026, 6, 20))).toBe(0);
   });
 });

@@ -35,7 +35,11 @@ import {MatDialog} from '@angular/material/dialog';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
 import {ManageScheduleDialog} from '../manage-schedule-dialog/manage-schedule-dialog';
-import {StudentDialog, StudentDialogMode} from '../student-dialog/student-dialog';
+import {StudentDialog, StudentDialogMode, StudentDialogResult} from '../student-dialog/student-dialog';
+import {BillingService} from '../services/billing.service';
+import {BillingRecord} from '../models/billing-record.model';
+import {studentMonthlyCharge, studentSemiMonthlyCharge, siblingDiscountedTotal} from '../utils/billing-amount';
+import {round2} from '../utils/package-config';
 import {ScheduleService} from '../services/schedule.service';
 import {Router} from '@angular/router';
 
@@ -74,6 +78,7 @@ export class Contact implements OnInit {
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
   private scheduleService: ScheduleService = inject(ScheduleService);
+  private billingService: BillingService = inject(BillingService);
   private router: Router = inject(Router);
 
   @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
@@ -325,7 +330,7 @@ export class Contact implements OnInit {
   }
 
   /** Re-fetches the students list after a create/edit/delete/schedule change. */
-  private reloadStudents() {
+  private reloadStudents(then?: () => void) {
     this.studentService.getStudentsByContact(this.id).pipe(
       catchError(error => {
         console.log(error);
@@ -334,6 +339,7 @@ export class Contact implements OnInit {
     ).subscribe(students => {
       this.students = students;
       this.cdr.markForCheck();
+      then?.();
     });
   }
 
@@ -420,7 +426,7 @@ export class Contact implements OnInit {
   }
 
   /** Opens the Manage Schedule dialog for a student; reloads on a persisted change. */
-  openManageScheduleDialog(student: Student): void {
+  openManageScheduleDialog(student: Student, recomputeBilling: boolean = false): void {
     this.contactService.getContact(student.assigned_tutor_id!).pipe(
       catchError(error => {
         console.log(error);
@@ -433,9 +439,82 @@ export class Contact implements OnInit {
       });
       ref.afterClosed().subscribe((updated?: Student) => {
         if (updated) {
-          this.reloadStudents();
+          this.reloadStudents(recomputeBilling ? () => this.recomputeCurrentPeriodBilling() : undefined);
         }
       });
+    });
+  }
+
+  /**
+   * After a mid-month package change, adjusts any already-generated billing
+   * record for the current period to the recomputed (Option A) amount, keeping
+   * its paid state. New periods aren't created here — the Billing page derives
+   * those live.
+   */
+  private recomputeCurrentPeriodBilling(): void {
+    const contact = this.loadedContact;
+    if (!contact?.id) {
+      return;
+    }
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const enrolled = this.students.filter(s => s.status === Status.ACTIVE_STUDENT && !!s.package);
+    if (enrolled.length === 0) {
+      return;
+    }
+    const semi =
+      contact.billing_cycle === BillingCycle.SEMI_MONTHLY ||
+      (contact.billing_cycle as string) === 'biweekly';
+    const cycle = semi ? BillingCycle.SEMI_MONTHLY : BillingCycle.MONTHLY;
+    const pct = contact.sibling_discount;
+    const count = enrolled.length;
+
+    const amounts: {day: number; amount: number}[] = [];
+    if (semi) {
+      let first = 0;
+      let fifteenth = 0;
+      for (const s of enrolled) {
+        const charge = studentSemiMonthlyCharge(s, year, month);
+        first += charge.first;
+        fifteenth += charge.fifteenth;
+      }
+      amounts.push({day: 1, amount: siblingDiscountedTotal(round2(first), pct, count)});
+      amounts.push({day: 15, amount: siblingDiscountedTotal(round2(fifteenth), pct, count)});
+    } else {
+      const total = round2(enrolled.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+      amounts.push({day: 1, amount: siblingDiscountedTotal(total, pct, count)});
+    }
+
+    this.billingService.getBillingRecordsByContact(contact.id).pipe(
+      catchError(error => {
+        console.log(error);
+        return of([] as BillingRecord[]);
+      })
+    ).subscribe(existing => {
+      const m = (month + 1).toString().padStart(2, '0');
+      for (const {day, amount} of amounts) {
+        const period = `${year}-${m}-${day.toString().padStart(2, '0')}`;
+        const prior = existing.find(r => r.period_start === period);
+        if (!prior) {
+          continue; // only adjust records that already exist
+        }
+        const record: BillingRecord = {
+          contact_id: contact.id!,
+          period_start: period,
+          cycle,
+          amount,
+          paid: prior.paid,
+          paid_date: prior.paid_date,
+          invoice_number: prior.invoice_number,
+        };
+        this.billingService.upsertBillingRecord(record).pipe(
+          catchError(error => {
+            console.log(error);
+            return EMPTY;
+          })
+        ).subscribe();
+      }
     });
   }
 
@@ -456,16 +535,28 @@ export class Contact implements OnInit {
       });
   }
 
-  /** Opens the Student dialog for create/edit/delete; reloads on a persisted change. */
+  /** Opens the Student dialog for create/edit/delete; reloads on a persisted change.
+   *  A mid-month package change closes with a student id — after reloading we open
+   *  Manage Schedule so the admin redefines the new package's slots, then recompute
+   *  this period's billing. */
   openStudentDialog(mode: StudentDialogMode, student?: Student): void {
     const ref = this.dialog.open(StudentDialog, {
       data: {mode, contactId: this.id, student, tutors: this.tutors},
       width: '480px',
     });
-    ref.afterClosed().subscribe((changed?: boolean) => {
-      if (changed) {
-        this.reloadStudents();
+    ref.afterClosed().subscribe((result?: StudentDialogResult) => {
+      if (!result) {
+        return;
       }
+      const openScheduleFor = typeof result === 'object' ? result.openScheduleForStudentId : undefined;
+      this.reloadStudents(() => {
+        if (openScheduleFor) {
+          const changed = this.students.find(s => s.id === openScheduleFor);
+          if (changed) {
+            this.openManageScheduleDialog(changed, true);
+          }
+        }
+      });
     });
   }
 

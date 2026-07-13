@@ -7,6 +7,8 @@ import { StudentService } from '../services/student.service';
 import { Student } from '../models/student.model';
 import { Status } from '../enums/status.enum';
 import { Package } from '../enums/package.enum';
+import { Weekday } from '../enums/weekday.enum';
+import { monthKey } from '../utils/billing-amount';
 
 describe('StudentDialog', () => {
   const dialogRef = { close: jest.fn() };
@@ -275,6 +277,66 @@ describe('StudentDialog', () => {
       expect(priv(c).submitting).toBe(false);
       expect(priv(c).hasError).toBe(true);
       expect(priv(c).errorMessage).toBe('Failed to delete the student. Please try again.');
+    });
+  });
+
+  describe('edit — mid-month package change', () => {
+    const enrolled = (over: Partial<Student> = {}): Student => ({
+      id: 's-1',
+      contact_id: 'c-1',
+      name: 'Pat',
+      status: Status.ACTIVE_STUDENT,
+      onboarding_complete: true,
+      package: Package.SUCCEED,
+      package_start_date: '2026-05-01T00:00:00',
+      schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
+      make_up_minutes: 0,
+      ...over,
+    });
+
+    it('stamps the student and routes to Manage Schedule when the package changes', () => {
+      const student = enrolled();
+      const c = build({ mode: 'edit', student });
+      form(c).get('package')?.setValue(Package.THRIVE);
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.save();
+
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      const now = new Date();
+      expect(payload.package).toBe(Package.THRIVE);
+      expect(payload.mid_month_change_period).toBe(monthKey(now.getFullYear(), now.getMonth()));
+      expect(payload.package_start_date).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00$/);
+      expect(typeof payload.mid_month_prior_charge).toBe('number');
+      expect(payload.mid_month_prior_charge).toBeGreaterThanOrEqual(0);
+      expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
+    });
+
+    it('closes normally when the package is unchanged', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.save();
+      expect(studentService.updateStudent.mock.calls[0][0].mid_month_change_period).toBeUndefined();
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('does not treat setting a first package as a mid-month change', () => {
+      const c = build({ mode: 'edit', student: enrolled({ package: undefined }) });
+      form(c).get('package')?.setValue(Package.SUCCEED);
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.save();
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('records a zero prior charge when the old package was unconfigured custom', () => {
+      // Old CUSTOM package with no custom values → not resolvable → $0 old portion.
+      const student = enrolled({ package: Package.CUSTOM });
+      const c = build({ mode: 'edit', student });
+      form(c).get('package')?.setValue(Package.SUCCEED);
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.save();
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      expect(payload.mid_month_prior_charge).toBe(0);
+      expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
     });
   });
 
