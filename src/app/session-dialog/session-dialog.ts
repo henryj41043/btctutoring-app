@@ -31,6 +31,7 @@ import {SessionType} from '../enums/session-type.enum';
 import {AuthService} from '../services/auth.service';
 import {ScheduleService} from '../services/schedule.service';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
+import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '../utils/makeup';
 
 @Component({
   selector: 'app-session-dialog',
@@ -196,7 +197,7 @@ export class SessionDialog implements OnInit {
     addMinutes: number,
     excludeIds: Set<string> = new Set(),
   ): string | null {
-    const balance = student.make_up_minutes ?? 0;
+    const balance = availableMakeupMinutes(student);
     const projected = this.pendingMakeupMinutesFor(student.id, excludeIds) + addMinutes;
     if (projected > balance) {
       return `Not enough make-up minutes. ${student.name} has ${balance} min `
@@ -499,7 +500,7 @@ export class SessionDialog implements OnInit {
           // Completing/no-showing a make-up session consumes banked make-up minutes.
           if (this.selectedType === SessionType.MAKE_UP
             && (newStatus === SessionStatus.COMPLETED || newStatus === SessionStatus.NO_CALL_NO_SHOW)) {
-            const balance = student.make_up_minutes ?? 0;
+            const balance = availableMakeupMinutes(student);
             if (balance < duration) {
               this.errorMessage = `Not enough make-up minutes. ${student.name} has ${balance} min but this session requires ${duration} min.`;
               this.hasError = true;
@@ -509,7 +510,9 @@ export class SessionDialog implements OnInit {
           // Only cancelled tutoring (banks minutes) and finalized make-up (deducts
           // minutes) mutate the student; completing a tutoring session does not.
           if (this.mutatesStudent(this.selectedType, newStatus)) {
-            this.pendingStudentUpdate = this.applyMinuteDeduction({ ...student }, duration, this.selectedType, newStatus);
+            this.pendingStudentUpdate = this.selectedType === SessionType.MAKE_UP
+              ? consumeMakeupMinutes({ ...student }, duration)
+              : bankMakeupMinutes({ ...student }, duration, session.start_datetime as string);
           }
         } else if (student && newStatus === SessionStatus.PENDING && this.selectedType === SessionType.MAKE_UP) {
           // Editing a still-pending make-up session (e.g. lengthening it): the
@@ -694,21 +697,9 @@ export class SessionDialog implements OnInit {
     return status === SessionStatus.CANCELLED;
   }
 
-  private applyMinuteDeduction(student: Student, minutes: number, type: SessionType, status: SessionStatus): Student {
-    if (type === SessionType.MAKE_UP) {
-      // Make-up sessions consume banked make-up minutes only.
-      if (status === SessionStatus.COMPLETED || status === SessionStatus.NO_CALL_NO_SHOW) {
-        student.make_up_minutes = (student.make_up_minutes ?? 0) - minutes;
-      }
-      return student;
-    }
-    // Regular tutoring: a cancelled session banks its minutes into the make-up
-    // bank. Completed/no-show tutoring no longer touches any balance (package
-    // sessions are pre-paid, not minute-metered).
-    if (status === SessionStatus.CANCELLED) {
-      student.make_up_minutes = (student.make_up_minutes ?? 0) + minutes;
-    }
-    return student;
+  /** The student's currently-available make-up minutes (expired batches excluded). */
+  protected availableMakeup(student: Student): number {
+    return availableMakeupMinutes(student);
   }
 
   private getTutors() {

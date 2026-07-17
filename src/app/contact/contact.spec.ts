@@ -469,6 +469,17 @@ describe('Contact', () => {
       expect(students(c)[0].name).toBe('Pat');
     });
 
+    it('availableMakeup returns the unexpired make-up balance', () => {
+      const c = build();
+      const s = {
+        make_up_batches: [
+          { minutes: 25, earned_date: new Date().toISOString() },
+          { minutes: 10, earned_date: '2020-01-01T00:00:00Z' }, // expired
+        ],
+      } as Student;
+      expect(c.availableMakeup(s)).toBe(25);
+    });
+
     it('hasMultipleEnrolledStudents is true with 2+ active packaged students', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([

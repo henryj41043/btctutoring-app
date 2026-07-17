@@ -56,7 +56,7 @@
       <p class="minutes-info">
         Package: <strong>{{selectedStudentObj.package || '—'}}</strong>
         &nbsp;|&nbsp;
-        Make-up: <strong>{{selectedStudentObj.make_up_minutes ?? 0}} min</strong>
+        Make-up: <strong>{{availableMakeup(selectedStudentObj)}} min</strong>
       </p>
     }
   }
