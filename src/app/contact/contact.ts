@@ -42,6 +42,7 @@ import {BillingService} from '../services/billing.service';
 import {BillingRecord} from '../models/billing-record.model';
 import {studentMonthlyCharge, studentSemiMonthlyCharge, siblingDiscountedTotal} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
+import {availableMakeupMinutes} from '../utils/makeup';
 import {ScheduleService} from '../services/schedule.service';
 import {Router} from '@angular/router';
 
@@ -444,6 +445,11 @@ export class Contact implements OnInit {
     this.contactForm.markAsPristine();
     this.contactForm.markAsUntouched();
     this.cdr.markForCheck();
+  }
+
+  /** A student's currently-available make-up minutes (expired batches excluded). */
+  availableMakeup(student: Student): number {
+    return availableMakeupMinutes(student);
   }
 
   /** True when the family has 2+ active, enrolled students — the sibling-discount condition. */

@@ -106,6 +106,17 @@ describe('SessionDialog', () => {
       expect(c.attendanceOptions).toContain(SessionStatus.CANCELLED);
     });
 
+    it('availableMakeup returns the unexpired make-up balance', () => {
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      const s = {
+        make_up_batches: [
+          { minutes: 40, earned_date: new Date().toISOString() },
+          { minutes: 15, earned_date: '2020-01-01T00:00:00Z' }, // expired
+        ],
+      } as Student;
+      expect((c as unknown as { availableMakeup(x: Student): number }).availableMakeup(s)).toBe(40);
+    });
+
     it('hasStudent is false only for admin sessions', () => {
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.selectedType = SessionType.ADMIN;

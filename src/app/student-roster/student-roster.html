@@ -30,7 +30,7 @@
         </ng-container>
         <ng-container matColumnDef="make_up_minutes">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Make Up Min</th>
-          <td mat-cell *matCellDef="let item">{{item.make_up_minutes}}</td>
+          <td mat-cell *matCellDef="let item">{{availableMakeup(item)}}</td>
         </ng-container>
         <ng-container matColumnDef="scholarship">
           <th mat-header-cell *matHeaderCellDef>Scholarship</th>

@@ -62,8 +62,36 @@ describe('StudentDialog', () => {
       expect(form(c).get('name')?.value).toBe('');
       expect(form(c).get('status')?.value).toBe(Status.ONBOARDING);
       expect(form(c).get('onboarding_complete')?.value).toBe(false);
-      expect(form(c).get('make_up_minutes')?.value).toBe(0);
+      expect(form(c).get('make_up_never_expire')?.value).toBe(false);
       expect(form(c).get('contact_id')?.value).toBe('c-1');
+      expect(c.makeupBalance).toBe(0); // no student in create mode
+    });
+
+    it('exposes the available make-up balance read-only in edit mode', () => {
+      const c = build({
+        mode: 'edit',
+        student: {
+          id: 's-1',
+          name: 'Pat',
+          status: Status.ACTIVE_STUDENT,
+          onboarding_complete: true,
+          make_up_batches: [{ minutes: 30, earned_date: new Date().toISOString() }],
+        } as Student,
+      });
+      expect(c.makeupBalance).toBe(30);
+    });
+
+    it('persists the never-expire flag via the update payload', () => {
+      const c = build({
+        mode: 'edit',
+        student: {
+          id: 's-1', name: 'Pat', status: Status.ACTIVE_STUDENT, onboarding_complete: true,
+        } as Student,
+      });
+      form(c).get('make_up_never_expire')?.setValue(true);
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.save();
+      expect(studentService.updateStudent.mock.calls[0][0].make_up_never_expire).toBe(true);
     });
 
     it('defaults tutors to an empty list when none are provided', () => {

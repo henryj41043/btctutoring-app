@@ -50,6 +50,17 @@ describe('StudentRoster', () => {
     ]);
   });
 
+  it('shows the available (unexpired) make-up balance', () => {
+    const component = build() as unknown as { availableMakeup(s: Student): number };
+    const s = {
+      make_up_batches: [
+        { minutes: 30, earned_date: new Date().toISOString() },
+        { minutes: 20, earned_date: '2020-01-01T00:00:00Z' }, // expired
+      ],
+    } as Student;
+    expect(component.availableMakeup(s)).toBe(30);
+  });
+
   it('loads only the tutor’s own students for a non-admin', () => {
     isAdmin = false;
     studentService.getStudentsByTutor.mockReturnValue(of([student]));

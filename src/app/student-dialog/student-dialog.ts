@@ -24,6 +24,7 @@ import {StudentService} from '../services/student.service';
 import {perSessionCost, resolvePackageDef, round2} from '../utils/package-config';
 import {countSlotsBeforeInMonth} from '../utils/proration';
 import {monthKey} from '../utils/billing-amount';
+import {availableMakeupMinutes} from '../utils/makeup';
 
 export type StudentDialogMode = 'create' | 'edit' | 'delete';
 
@@ -108,7 +109,7 @@ export class StudentDialog implements OnInit {
       assigned_tutor_id: [student.assigned_tutor_id ?? ''],
       package: [student.package ?? ''],
       scholarship: [student.scholarship ?? false],
-      make_up_minutes: [student.make_up_minutes ?? 0],
+      make_up_never_expire: [student.make_up_never_expire ?? false],
       custom_monthly_cost: [student.custom_monthly_cost ?? null],
       custom_sessions_per_week: [student.custom_sessions_per_week ?? null],
       custom_session_length_min: [student.custom_session_length_min ?? null],
@@ -117,6 +118,11 @@ export class StudentDialog implements OnInit {
       package_start_date: [student.package_start_date ?? null],
       auto_renew: [student.auto_renew ?? false],
     });
+  }
+
+  /** The student's currently-available make-up minutes (shown read-only). */
+  get makeupBalance(): number {
+    return this.data.student ? availableMakeupMinutes(this.data.student) : 0;
   }
 
   /** In edit mode, the post-onboarding fields stay locked until onboarding is complete. */

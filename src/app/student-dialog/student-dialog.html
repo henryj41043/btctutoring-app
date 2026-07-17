@@ -95,10 +95,11 @@
             <input matInput type="number" formControlName="custom_session_length_min">
           </mat-form-field>
         }
-        <mat-form-field>
-          <mat-label>Make Up Minutes</mat-label>
-          <input matInput type="number" formControlName="make_up_minutes">
-        </mat-form-field>
+        <p class="makeup-balance">
+          Make Up Minutes: <strong>{{ makeupBalance }}</strong>
+          <span class="makeup-hint">(from cancelled sessions; expire after 90 days)</span>
+        </p>
+        <mat-checkbox formControlName="make_up_never_expire">Makeup minutes never expire</mat-checkbox>
         <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
       }
     }
