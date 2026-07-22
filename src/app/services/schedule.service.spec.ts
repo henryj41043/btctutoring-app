@@ -72,11 +72,15 @@ describe('ScheduleService', () => {
       expect(service.addMinutesToTime('23:30', 60)).toBe('00:30');
     });
 
-    it('sets a date to a given time', () => {
+    it('pins a date+time to the Eastern wall clock (host-TZ independent)', () => {
+      // Jul 1 2026 13:45 EDT (UTC-4) = 17:45Z — the same instant whether this
+      // runs on a UTC CI runner or an Eastern dev machine.
       const d = service.atTime(new Date(2026, 6, 1), '13:45');
-      expect(d.getHours()).toBe(13);
-      expect(d.getMinutes()).toBe(45);
-      expect(d.getSeconds()).toBe(0);
+      expect(d.toISOString()).toBe('2026-07-01T17:45:00.000Z');
+      // EST (UTC-5) in January.
+      expect(service.atTime(new Date(2026, 0, 7), '13:45').toISOString()).toBe(
+        '2026-01-07T18:45:00.000Z',
+      );
     });
 
     it('formats a 12-hour label', () => {
@@ -161,8 +165,9 @@ describe('ScheduleService', () => {
       expect(first.tutor_name).toBe('Tess');
       expect(first.series_id).toBe('series-x');
       expect(first.notes).toBe('hi');
-      expect(new Date(first.start_datetime!).getHours()).toBe(10);
-      expect(new Date(first.end_datetime!).getHours()).toBe(11);
+      // 10:00-11:00 ET in July (EDT) = 14:00-15:00Z, independent of host TZ.
+      expect(first.start_datetime!.endsWith('T14:00:00.000Z')).toBe(true);
+      expect(first.end_datetime!.endsWith('T15:00:00.000Z')).toBe(true);
     });
   });
 

@@ -6,6 +6,7 @@ import {Student} from '../models/student.model';
 import {Session} from '../models/session.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
+import {easternSlotToUtc} from '../utils/eastern-time';
 import {Weekday, WEEKDAY_BY_JS_DAY, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
@@ -43,12 +44,12 @@ export class ScheduleService {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
-  /** A copy of `date` with its time set from a 'HH:mm' string. */
+  /** The instant at which `date`'s calendar day reads `time` on an EASTERN wall
+   *  clock. Slot times are Eastern by definition; pinning the zone keeps the
+   *  generated instants identical to the backend cron's regardless of the
+   *  admin's machine timezone (mirrors the service-side eastern-time util). */
   atTime(date: Date, time: string): Date {
-    const total = this.timeStringToMinutes(time);
-    const d = new Date(date);
-    d.setHours(Math.floor(total / 60), total % 60, 0, 0);
-    return d;
+    return easternSlotToUtc(date.getFullYear(), date.getMonth(), date.getDate(), time);
   }
 
   /** A human '10:00 AM' label for a 'HH:mm' string. */
