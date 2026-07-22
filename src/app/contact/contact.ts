@@ -183,7 +183,9 @@ export class Contact implements OnInit {
         return EMPTY;
       })
     ).subscribe(students => {
-      this.rosterDataSource.data = students;
+      // The tutor's roster is their CURRENT roster — previously-assigned
+      // students who are no longer active stay off it.
+      this.rosterDataSource.data = students.filter(s => s.status === Status.ACTIVE_STUDENT);
       this.cdr.markForCheck();
     });
   }

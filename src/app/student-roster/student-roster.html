@@ -1,6 +1,12 @@
 <div class="student-roster">
   <div class="btc-page-header">
     <h2>Student Roster</h2>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="roster-search">
+      <mat-label>Search</mat-label>
+      <input matInput #rosterSearch placeholder="Student, package"
+             (input)="applyFilter(rosterSearch.value)">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
   </div>
 
   <mat-card appearance="outlined">

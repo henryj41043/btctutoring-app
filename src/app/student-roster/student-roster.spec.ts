@@ -8,8 +8,9 @@ import { StudentService } from '../services/student.service';
 import { AuthService } from '../services/auth.service';
 import { StudentSessionsDialog } from '../student-sessions-dialog/student-sessions-dialog';
 import { Student } from '../models/student.model';
+import { Status } from '../enums/status.enum';
 
-const student = { id: 's-1', name: 'Pat' } as Student;
+const student = { id: 's-1', name: 'Pat', status: Status.ACTIVE_STUDENT } as Student;
 
 describe('StudentRoster', () => {
   let isAdmin: boolean;
@@ -48,6 +49,38 @@ describe('StudentRoster', () => {
     expect((component as unknown as { dataSource: { data: Student[] } }).dataSource.data).toEqual([
       student,
     ]);
+  });
+
+  it('shows only active students on the roster', () => {
+    studentService.getStudents.mockReturnValue(
+      of([
+        student,
+        { id: 's-2', name: 'Old', status: Status.PAST_STUDENT } as Student,
+        { id: 's-3', name: 'New', status: Status.ONBOARDING } as Student,
+      ]),
+    );
+    const component = build();
+    component.ngOnInit();
+    const data = (component as unknown as { dataSource: { data: Student[] } }).dataSource.data;
+    expect(data).toEqual([student]);
+  });
+
+  it('filters by student name or package case-insensitively', () => {
+    studentService.getStudents.mockReturnValue(
+      of([
+        student, // Pat, no package
+        { id: 's-2', name: 'Sam', status: Status.ACTIVE_STUDENT, package: 'Succeed' } as Student,
+      ]),
+    );
+    const component = build();
+    component.ngOnInit();
+    const ds = (component as unknown as { dataSource: { filteredData: Student[] } }).dataSource;
+    component.applyFilter('  PAT ');
+    expect(ds.filteredData.map(s => s.id)).toEqual(['s-1']);
+    component.applyFilter('succeed');
+    expect(ds.filteredData.map(s => s.id)).toEqual(['s-2']);
+    component.applyFilter('');
+    expect(ds.filteredData).toHaveLength(2);
   });
 
   it('shows the available (unexpired) make-up balance', () => {

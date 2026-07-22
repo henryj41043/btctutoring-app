@@ -135,7 +135,12 @@ describe('Contact', () => {
     studentService.getStudentsByContact.mockReturnValue(
       of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT }]),
     );
-    studentService.getStudentsByTutor.mockReturnValue(of([{ id: 's-9' }]));
+    studentService.getStudentsByTutor.mockReturnValue(
+      of([
+        { id: 's-9', status: Status.ACTIVE_STUDENT },
+        { id: 's-10', status: Status.PAST_STUDENT }, // off the current roster
+      ]),
+    );
     noteService.getNotesByRecipient.mockReturnValue(
       of([
         { id: 'n-1', date_time: '2026-01-01T00:00:00Z' },

@@ -315,9 +315,17 @@ describe('EventCalendar', () => {
       expect(colorFor({ type: SessionType.TUTORING, status: undefined })).toBe('#e3bc08');
     });
 
-    it('colors admin sessions purple and make-up sessions orange', () => {
+    it('colors admin sessions purple and scheduled make-up sessions orange', () => {
       expect(colorFor({ type: SessionType.ADMIN })).toBe('#7b2fbe');
       expect(colorFor({ type: SessionType.MAKE_UP })).toBe('#e07b00');
+      expect(colorFor({ type: SessionType.MAKE_UP, status: SessionStatus.PENDING })).toBe('#e07b00');
+    });
+
+    it('colors finalized make-up sessions by outcome (regression: stayed orange)', () => {
+      // A held make-up turns green so it's distinguishable from a scheduled one.
+      expect(colorFor({ type: SessionType.MAKE_UP, status: SessionStatus.COMPLETED })).toBe('#18c100');
+      // No-call-no-shows still consume minutes — red, matching tutoring.
+      expect(colorFor({ type: SessionType.MAKE_UP, status: SessionStatus.NO_CALL_NO_SHOW })).toBe('#ad2121');
     });
   });
 });
