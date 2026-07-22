@@ -467,6 +467,69 @@ describe('SessionDialog', () => {
       expect(c.showScheduleWarning).toBe(false);
       expect(sessionsService.updateSession).toHaveBeenCalled();
     });
+
+    /** An edit dialog whose pickers hold exactly the stored session values, the
+     *  way ngOnInit seeds them — i.e. the admin hasn't moved the session. */
+    const unchangedEdit = (over: Partial<Session> = {}): SessionDialog => {
+      const start = '2026-06-01T14:00:00.000Z';
+      const end = '2026-06-01T15:00:00.000Z';
+      const c = build({
+        type: 'edit',
+        session: {
+          id: 'sess-1',
+          status: SessionStatus.PENDING,
+          start_datetime: start,
+          end_datetime: end,
+          tutor_id: 't-1',
+          student_id: 's-1',
+          ...over,
+        } as Session,
+        existingSessions: [],
+      } as SessionDialogData);
+      c.tutors = [tutor()];
+      c.students = [scheduled()];
+      c.selectedTutor = 't-1';
+      c.selectedStudent = 's-1';
+      c.selectedType = SessionType.TUTORING;
+      c.date = new Date(start);
+      c.startTime = new Date(start);
+      c.endTime = new Date(end);
+      c.selectedAttendance = SessionStatus.PENDING;
+      return c;
+    };
+
+    it('does not warn when only taking attendance on an unchanged session (regression)', () => {
+      const c = unchangedEdit();
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      c.updateSession();
+      expect(c.showScheduleWarning).toBe(false);
+      // Proceeds straight to the finalize-attendance confirm.
+      expect(c.showStatusConfirm).toBe(true);
+    });
+
+    it('does not warn when only the notes change on an unchanged session', () => {
+      const c = unchangedEdit();
+      c.notes = 'updated note';
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.updateSession();
+      expect(c.showScheduleWarning).toBe(false);
+      expect(sessionsService.updateSession).toHaveBeenCalled();
+    });
+
+    it('still warns when the time is moved on a non-series session', () => {
+      const c = unchangedEdit();
+      c.startTime = new Date(2026, 5, 1, 9, 0);
+      c.endTime = new Date(2026, 5, 1, 10, 0);
+      c.updateSession();
+      expect(c.showScheduleWarning).toBe(true);
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+    });
+
+    it('still warns when the student is switched on an otherwise unchanged session', () => {
+      const c = unchangedEdit({ student_id: 's-other' });
+      c.updateSession();
+      expect(c.showScheduleWarning).toBe(true);
+    });
   });
 
   describe('submit spinner / spam-guard', () => {

@@ -266,6 +266,12 @@ export class SessionDialog implements OnInit {
     if (this.dialogData.type !== 'create' && this.dialogData.session.series_id) {
       return true;
     }
+    // Taking attendance (or editing notes) on an existing session isn't a new
+    // "extra" session either — only warn when the scheduling-relevant fields
+    // (date/time/tutor/student) actually changed from the original.
+    if (this.dialogData.type !== 'create' && this.scheduleFieldsUnchanged()) {
+      return true;
+    }
     const student = this.selectedStudentObj;
     const schedule = student?.schedule;
     if (!student || !schedule || schedule.length === 0) {
@@ -280,6 +286,31 @@ export class SessionDialog implements OnInit {
     this.pendingAction = () => { this.scheduleWarningOverridden = true; proceed(); };
     this.showScheduleWarning = true;
     return false;
+  }
+
+  /**
+   * True when the schedule-relevant fields (date/time/tutor/student) would save
+   * exactly what the original session already holds — e.g. the admin is only
+   * taking attendance or editing notes. Rebuilds the datetimes the same way
+   * updateSession does so the comparison mirrors what would be persisted.
+   */
+  private scheduleFieldsUnchanged(): boolean {
+    const original = this.dialogData.session;
+    if (!this.date || !this.startTime || !this.endTime) {
+      return false;
+    }
+    const start = new Date(this.date);
+    start.setHours(this.startTime.getHours());
+    start.setMinutes(this.startTime.getMinutes());
+    const end = new Date(this.date);
+    end.setHours(this.endTime.getHours());
+    end.setMinutes(this.endTime.getMinutes());
+    return (
+      start.toISOString() === original.start_datetime
+      && end.toISOString() === original.end_datetime
+      && this.selectedTutor === original.tutor_id
+      && this.selectedStudent === original.student_id
+    );
   }
 
   /** True if the tutor has no availability set (skip) or the session fits within a block. */
