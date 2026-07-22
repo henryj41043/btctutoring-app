@@ -5,12 +5,15 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {StudentService} from '../services/student.service';
 import {AuthService} from '../services/auth.service';
 import {Student} from '../models/student.model';
 import {UserGroup} from '../enums/user-group.enum';
+import {Status} from '../enums/status.enum';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 import {availableMakeupMinutes} from '../utils/makeup';
 
@@ -23,6 +26,8 @@ import {availableMakeupMinutes} from '../utils/makeup';
     MatSortModule,
     MatPaginatorModule,
     MatProgressSpinnerModule,
+    MatFormFieldModule,
+    MatInputModule,
   ],
   templateUrl: './student-roster.html',
   styleUrl: './student-roster.scss',
@@ -49,6 +54,14 @@ export class StudentRoster implements OnInit {
   protected loading: boolean = true;
 
   ngOnInit(): void {
+    // Case-insensitive search across the visible columns (mirrors the contacts table).
+    this.dataSource.filterPredicate = (student, filter) => {
+      const haystack = [student.name, student.status, student.package]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(filter);
+    };
+
     const isAdmin = this.authService.isAdmin();
     const source$ = isAdmin
       ? this.studentService.getStudents()
@@ -62,10 +75,16 @@ export class StudentRoster implements OnInit {
         return EMPTY;
       })
     ).subscribe(students => {
-      this.dataSource.data = students;
+      // The roster is the ACTIVE roster; other statuses live on the contact page.
+      this.dataSource.data = students.filter(s => s.status === Status.ACTIVE_STUDENT);
       this.loading = false;
       this.cdr.markForCheck();
     });
+  }
+
+  applyFilter(value: string): void {
+    this.dataSource.filter = value.trim().toLowerCase();
+    this.dataSource.paginator?.firstPage();
   }
 
   openSessionsDialog(student: Student): void {

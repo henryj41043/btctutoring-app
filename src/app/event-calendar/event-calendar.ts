@@ -245,6 +245,14 @@ export class EventCalendar implements OnInit {
       return colors['purple'];
     }
     if (type === SessionType.MAKE_UP) {
+      // Orange marks a SCHEDULED make-up; once finalized it takes the outcome
+      // color so a glance distinguishes held make-ups from upcoming ones.
+      if (status === SessionStatus.COMPLETED) {
+        return colors['green'];
+      }
+      if (status === SessionStatus.NO_CALL_NO_SHOW) {
+        return colors['red'];
+      }
       return colors['orange'];
     }
     switch (status) {
