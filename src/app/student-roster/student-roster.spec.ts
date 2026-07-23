@@ -41,14 +41,28 @@ describe('StudentRoster', () => {
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
   });
 
-  it('loads all students for an admin on init', () => {
+  it('loads all students (with parent names) for an admin on init', () => {
     studentService.getStudents.mockReturnValue(of([student]));
     const component = build();
     component.ngOnInit();
-    expect(studentService.getStudents).toHaveBeenCalled();
+    expect(studentService.getStudents).toHaveBeenCalledWith(true); // include=contact_name
     expect((component as unknown as { dataSource: { data: Student[] } }).dataSource.data).toEqual([
       student,
     ]);
+  });
+
+  it('lists students by parent name (ascending) by default', () => {
+    studentService.getStudents.mockReturnValue(
+      of([
+        { id: 's-1', name: 'Pat', status: Status.ACTIVE_STUDENT, contact_name: 'Zoe Young' } as Student,
+        { id: 's-2', name: 'Sam', status: Status.ACTIVE_STUDENT, contact_name: 'Ann Lee' } as Student,
+        { id: 's-3', name: 'Kim', status: Status.ACTIVE_STUDENT } as Student, // no parent → first
+      ]),
+    );
+    const component = build();
+    component.ngOnInit();
+    const data = (component as unknown as { dataSource: { data: Student[] } }).dataSource.data;
+    expect(data.map(s => s.id)).toEqual(['s-3', 's-2', 's-1']);
   });
 
   it('shows only active students on the roster', () => {
@@ -65,11 +79,11 @@ describe('StudentRoster', () => {
     expect(data).toEqual([student]);
   });
 
-  it('filters by student name or package case-insensitively', () => {
+  it('filters by parent, student name or package case-insensitively', () => {
     studentService.getStudents.mockReturnValue(
       of([
         student, // Pat, no package
-        { id: 's-2', name: 'Sam', status: Status.ACTIVE_STUDENT, package: 'Succeed' } as Student,
+        { id: 's-2', name: 'Sam', status: Status.ACTIVE_STUDENT, package: 'Succeed', contact_name: 'Ann Lee' } as Student,
       ]),
     );
     const component = build();
@@ -78,6 +92,8 @@ describe('StudentRoster', () => {
     component.applyFilter('  PAT ');
     expect(ds.filteredData.map(s => s.id)).toEqual(['s-1']);
     component.applyFilter('succeed');
+    expect(ds.filteredData.map(s => s.id)).toEqual(['s-2']);
+    component.applyFilter('ann lee'); // the client's ask: quickly find a parent
     expect(ds.filteredData.map(s => s.id)).toEqual(['s-2']);
     component.applyFilter('');
     expect(ds.filteredData).toHaveLength(2);
@@ -99,7 +115,7 @@ describe('StudentRoster', () => {
     studentService.getStudentsByTutor.mockReturnValue(of([student]));
     const component = build();
     component.ngOnInit();
-    expect(studentService.getStudentsByTutor).toHaveBeenCalledWith('contact-1');
+    expect(studentService.getStudentsByTutor).toHaveBeenCalledWith('contact-1', true);
   });
 
   it('swallows load errors and leaves the table empty', () => {
@@ -152,7 +168,7 @@ describe('StudentRoster', () => {
     studentService.getStudents.mockReturnValue(of([]));
     const component = build();
     expect((component as unknown as { rosterColumns: string[] }).rosterColumns).toEqual([
-      'name', 'status', 'package', 'make_up_minutes', 'scholarship',
+      'contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship',
     ]);
   });
 

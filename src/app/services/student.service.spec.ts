@@ -43,9 +43,21 @@ describe('StudentService', () => {
     httpMock.expectOne(`${base}/students?tutor=tutor@example.com`).flush([]);
   });
 
+  it('getStudentsByTutor adds include=contact_name when requested', () => {
+    service.getStudentsByTutor('tutor@example.com', true).subscribe();
+    httpMock
+      .expectOne(`${base}/students?tutor=tutor@example.com&include=contact_name`)
+      .flush([]);
+  });
+
   it('getStudents GETs /students', () => {
     service.getStudents().subscribe();
     httpMock.expectOne(`${base}/students`).flush([]);
+  });
+
+  it('getStudents adds include=contact_name when requested', () => {
+    service.getStudents(true).subscribe();
+    httpMock.expectOne(`${base}/students?include=contact_name`).flush([]);
   });
 
   it('getOnboardingStudents GETs /students/onboarding', () => {

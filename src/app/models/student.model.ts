@@ -40,4 +40,6 @@ export class Student {
   mid_month_change_period?: string;
   /** @deprecated Replaced by package-driven scheduling; no longer read or written. */
   available_minutes?: number;
+  /** Family display name — present only on `?include=contact_name` listings (read-only). */
+  contact_name?: string;
 }
