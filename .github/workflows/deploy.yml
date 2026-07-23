@@ -59,9 +59,19 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_DEFAULT_REGION }}
 
+      # Cache strategy: hashed js/css are immutable (filenames change per build);
+      # unhashed assets get a short TTL; index.html must ALWAYS revalidate or
+      # browsers heuristically cache it and serve a stale bundle on next visit.
       - name: Deploy to S3
         run: |
-          aws s3 sync dist/btctutoring-app/browser s3://btchub.bitshiftstudio.io --delete
+          aws s3 sync dist/btctutoring-app/browser s3://btchub.bitshiftstudio.io --delete \
+            --exclude "index.html" --exclude "*.js" --exclude "*.css" \
+            --cache-control "public,max-age=3600"
+          aws s3 sync dist/btctutoring-app/browser s3://btchub.bitshiftstudio.io \
+            --exclude "*" --include "*.js" --include "*.css" \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp dist/btctutoring-app/browser/index.html s3://btchub.bitshiftstudio.io/index.html \
+            --cache-control "no-cache" --content-type "text/html"
 
       - name: Invalidate CloudFront cache
         run: |
