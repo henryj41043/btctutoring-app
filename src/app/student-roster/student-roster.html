@@ -3,7 +3,7 @@
     <h2>Student Roster</h2>
     <mat-form-field subscriptSizing="dynamic" appearance="outline" class="roster-search">
       <mat-label>Search</mat-label>
-      <input matInput #rosterSearch placeholder="Student, package"
+      <input matInput #rosterSearch placeholder="Parent, student, package"
              (input)="applyFilter(rosterSearch.value)">
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
@@ -19,8 +19,12 @@
       } @else {
       <div class="table-scroll">
       <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
+        <ng-container matColumnDef="contact_name">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Parent</th>
+          <td mat-cell *matCellDef="let item">{{item.contact_name || '—'}}</td>
+        </ng-container>
         <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Student</th>
           <td mat-cell *matCellDef="let item">{{item.name}}</td>
         </ng-container>
         <ng-container matColumnDef="status">

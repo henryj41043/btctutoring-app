@@ -49,14 +49,14 @@ export class StudentRoster implements OnInit {
     if (paginator) { this.dataSource.paginator = paginator; }
   }
 
-  protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
+  protected rosterColumns: string[] = ['contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship'];
   protected dataSource = new MatTableDataSource<Student>([]);
   protected loading: boolean = true;
 
   ngOnInit(): void {
     // Case-insensitive search across the visible columns (mirrors the contacts table).
     this.dataSource.filterPredicate = (student, filter) => {
-      const haystack = [student.name, student.status, student.package]
+      const haystack = [student.contact_name, student.name, student.status, student.package]
         .join(' ')
         .toLowerCase();
       return haystack.includes(filter);
@@ -64,8 +64,8 @@ export class StudentRoster implements OnInit {
 
     const isAdmin = this.authService.isAdmin();
     const source$ = isAdmin
-      ? this.studentService.getStudents()
-      : this.studentService.getStudentsByTutor(this.authService.contact().id!);
+      ? this.studentService.getStudents(true)
+      : this.studentService.getStudentsByTutor(this.authService.contact().id!, true);
 
     source$.pipe(
       catchError(error => {
@@ -75,8 +75,11 @@ export class StudentRoster implements OnInit {
         return EMPTY;
       })
     ).subscribe(students => {
-      // The roster is the ACTIVE roster; other statuses live on the contact page.
-      this.dataSource.data = students.filter(s => s.status === Status.ACTIVE_STUDENT);
+      // The roster is the ACTIVE roster (other statuses live on the contact
+      // page), listed by parent name per the client's request.
+      this.dataSource.data = students
+        .filter(s => s.status === Status.ACTIVE_STUDENT)
+        .sort((a, b) => (a.contact_name ?? '').localeCompare(b.contact_name ?? ''));
       this.loading = false;
       this.cdr.markForCheck();
     });

@@ -23,13 +23,20 @@ export class StudentService {
     return this.httpClient.get<Student[]>(`${this.baseUrl}/students`, { params: params });
   }
 
-  getStudentsByTutor(tutorId: string): Observable<Student[]> {
+  getStudentsByTutor(tutorId: string, includeContactName: boolean = false): Observable<Student[]> {
     let params: HttpParams = new HttpParams().set('tutor', tutorId);
+    if (includeContactName) {
+      params = params.set('include', 'contact_name');
+    }
     return this.httpClient.get<Student[]>(`${this.baseUrl}/students`, { params: params });
   }
 
-  getStudents(): Observable<Student[]> {
-    return this.httpClient.get<Student[]>(`${this.baseUrl}/students`);
+  getStudents(includeContactName: boolean = false): Observable<Student[]> {
+    let params: HttpParams = new HttpParams();
+    if (includeContactName) {
+      params = params.set('include', 'contact_name');
+    }
+    return this.httpClient.get<Student[]>(`${this.baseUrl}/students`, { params: params });
   }
 
   /** Denormalized rows for the admin Onboarding page (students in Onboarding status). */
