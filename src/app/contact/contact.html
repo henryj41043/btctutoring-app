@@ -89,7 +89,7 @@
     @if (notesHaveManualOrder) {
       <button matButton type="button" (click)="sortNotesByDate()">Sort by date</button>
     }
-    <div formArrayName="notes" cdkDropList (cdkDropListDropped)="dropNote($event)">
+    <div class="notes-list" formArrayName="notes" cdkDropList (cdkDropListDropped)="dropNote($event)">
       @for (noteControl of notes.controls; track noteControl; let i = $index) {
         <mat-card class="note-card" appearance="outlined" [formGroupName]="i"
                   cdkDrag [cdkDragDisabled]="notesEditIndex === i">
@@ -102,9 +102,7 @@
             <mat-card-subtitle>{{noteControl.get('date_time')?.value | date:'short'}}</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
-            <p [hidden]="notesEditIndex === i">
-              {{noteControl.get('message')?.value}}
-            </p>
+            <p class="note-body" [hidden]="notesEditIndex === i">{{noteControl.get('message')?.value}}</p>
             <div [hidden]="notesEditIndex !== i">
               <mat-form-field class="notes-form-field">
                 <mat-label>Message</mat-label>

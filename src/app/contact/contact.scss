@@ -8,6 +8,31 @@
 .contact-notes {
   grid-column: 2;
   grid-row: span 4;
+  // Size containment: the Notes section contributes NOTHING to the shared row
+  // tracks, so its height is imposed by the left column's sections instead of
+  // a long notes list inflating them (the "blank space on the left" bug). The
+  // list itself scrolls inside the section.
+  contain: size;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.contact-notes .notes-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  // Breathing room so cards don't sit under the scrollbar.
+  padding-right: 4px;
+}
+
+/* Read-view note body: respect the author's line breaks/tabs, wrap long
+   tokens, and cap very long notes at ~8 lines with internal scroll. */
+.note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 12em;
+  overflow-y: auto;
 }
 
 /* Each form group becomes a clean, branded card */
@@ -148,6 +173,15 @@
   .contact-notes {
     grid-column: 1;
     grid-row: auto;
+    // Single-column flow: nothing imposes a height, so containment would
+    // collapse the section — let it size naturally and scroll the page.
+    contain: none;
+    display: block;
+    overflow: visible;
+  }
+  .contact-notes .notes-list {
+    overflow-y: visible;
+    padding-right: 0;
   }
   .billing-grid {
     grid-template-columns: repeat(2, 1fr);
