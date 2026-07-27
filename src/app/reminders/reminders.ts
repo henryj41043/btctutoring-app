@@ -11,6 +11,7 @@ import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatDialog} from '@angular/material/dialog';
+import {Router} from '@angular/router';
 import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {ReminderService} from '../services/reminder.service';
 import {ContactService} from '../services/contact.service';
@@ -48,6 +49,7 @@ export class Reminders implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private dialog: MatDialog = inject(MatDialog);
+  private router: Router = inject(Router);
 
   @ViewChild(MatSort) set matSort(sort: MatSort) {
     if (sort) { this.dataSource.sort = sort; }
@@ -56,18 +58,20 @@ export class Reminders implements OnInit {
     if (paginator) { this.dataSource.paginator = paginator; }
   }
 
-  protected columns: string[] = ['date', 'title', 'message', 'recipients', 'sent', 'actions'];
+  protected columns: string[] = ['date', 'title', 'message', 'recipients', 'contact', 'sent', 'actions'];
   protected dataSource = new MatTableDataSource<Reminder>([]);
   protected loading: boolean = true;
   protected showPast: boolean = false;
   protected admins: Contact[] = [];
+  private contacts: Contact[] = [];
   private allReminders: Reminder[] = [];
   private adminNamesById = new Map<string, string>();
+  private contactNamesById = new Map<string, string>();
   private filterText: string = '';
 
   ngOnInit(): void {
     this.dataSource.filterPredicate = (reminder, filter) => {
-      const haystack = [reminder.title, reminder.message, this.recipientNames(reminder)]
+      const haystack = [reminder.title, reminder.message, this.recipientNames(reminder), this.contactName(reminder)]
         .join(' ')
         .toLowerCase();
       return haystack.includes(filter);
@@ -84,10 +88,14 @@ export class Reminders implements OnInit {
       contacts: this.contactService.getContacts()
         .pipe(catchError(error => { console.log(error); return of([] as Contact[]); })),
     }).subscribe(({reminders, contacts}) => {
+      this.contacts = contacts;
       this.admins = contacts.filter(c => c.user_group === UserGroup.ADMINS);
       this.adminNamesById = new Map(this.admins
         .filter(a => !!a.id)
         .map(a => [a.id!, `${a.first_name ?? ''} ${a.last_name ?? ''}`.trim()]));
+      this.contactNamesById = new Map(contacts
+        .filter(c => !!c.id)
+        .map(c => [c.id!, `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim()]));
       this.allReminders = reminders;
       this.applyView();
       this.loading = false;
@@ -138,6 +146,21 @@ export class Reminders implements OnInit {
     return names.join(', ') || '—';
   }
 
+  /** The linked contact's display name, or empty when unlinked/unknown. */
+  contactName(reminder: Reminder): string {
+    if (!reminder.contact_id) {
+      return '';
+    }
+    return this.contactNamesById.get(reminder.contact_id) ?? '';
+  }
+
+  openLinkedContact(reminder: Reminder, event: Event): void {
+    event.stopPropagation();
+    if (reminder.contact_id) {
+      void this.router.navigate(['/contacts', reminder.contact_id]);
+    }
+  }
+
   openCreateDialog(): void {
     this.openDialog('create');
   }
@@ -153,7 +176,7 @@ export class Reminders implements OnInit {
 
   private openDialog(mode: ReminderDialogMode, reminder?: Reminder): void {
     const ref = this.dialog.open(ReminderDialog, {
-      data: {mode, reminder, admins: this.admins},
+      data: {mode, reminder, admins: this.admins, contacts: this.contacts},
       width: '440px',
     });
     ref.afterClosed().subscribe(result => {

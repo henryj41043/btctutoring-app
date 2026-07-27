@@ -151,6 +151,29 @@ describe('ReminderDialog', () => {
     });
   });
 
+  it('carries the linked contact through create', () => {
+    reminderService.createReminder.mockReturnValue(of({ id: 'rem-9', message: 'ok' }));
+    const c = build({ mode: 'create' });
+    form(c).get('title').setValue('Linked');
+    form(c).get('date').setValue(new Date(2026, 7, 15));
+    form(c).get('contact_id').setValue('c-9');
+    c.save();
+    expect(reminderService.createReminder).toHaveBeenCalledWith(
+      expect.objectContaining({ contact_id: 'c-9' }),
+    );
+  });
+
+  it('prefills the linked contact on edit and clears it via None', () => {
+    reminderService.updateReminder.mockReturnValue(of(existing));
+    const c = build({ mode: 'edit', reminder: { ...existing, contact_id: 'c-9' } });
+    expect(form(c).get('contact_id').value).toBe('c-9');
+    form(c).get('contact_id').setValue(null);
+    c.save();
+    expect(reminderService.updateReminder).toHaveBeenCalledWith(
+      expect.objectContaining({ contact_id: undefined }),
+    );
+  });
+
   it('ignores a second delete while one is in flight', () => {
     const pending = new Subject<never>();
     reminderService.deleteReminder.mockReturnValue(pending);

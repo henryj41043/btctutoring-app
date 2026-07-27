@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { MatSort } from '@angular/material/sort';
 import { MatPaginator } from '@angular/material/paginator';
 import { Reminders } from './reminders';
@@ -30,6 +31,7 @@ describe('Reminders', () => {
   const reminderService = { getReminders: jest.fn() };
   const contactService = { getContacts: jest.fn() };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
+  const router = { navigate: jest.fn() };
 
   const build = (): Reminders => {
     TestBed.configureTestingModule({
@@ -38,6 +40,7 @@ describe('Reminders', () => {
         { provide: ReminderService, useValue: reminderService },
         { provide: ContactService, useValue: contactService },
         { provide: MatDialog, useValue: dialog },
+        { provide: Router, useValue: router },
       ],
     });
     return TestBed.createComponent(Reminders).componentInstance;
@@ -48,6 +51,8 @@ describe('Reminders', () => {
 
   beforeEach(() => {
     afterClosed = undefined;
+    router.navigate.mockClear();
+    dialog.open.mockClear();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     reminderService.getReminders.mockReturnValue(of([reminder()]));
     contactService.getContacts.mockReturnValue(of([adminContact, tutorContact]));
@@ -161,6 +166,31 @@ describe('Reminders', () => {
     c.onShowPastChange(true);
     expect(data(c)).toHaveLength(1);
     expect(c.recipientNames(data(c)[0])).toBe('—');
+  });
+
+  it('resolves and navigates the linked contact', () => {
+    const c = build();
+    c.ngOnInit();
+    // Any contact (not just admins) can be linked.
+    expect(c.contactName(reminder({ contact_id: 't-1' }))).toBe('Tess Coach');
+    expect(c.contactName(reminder())).toBe('');
+    expect(c.contactName(reminder({ contact_id: 'unknown' }))).toBe('');
+    const event = { stopPropagation: jest.fn() } as unknown as Event;
+    c.openLinkedContact(reminder({ contact_id: 't-1' }), event);
+    expect(router.navigate).toHaveBeenCalledWith(['/contacts', 't-1']);
+    router.navigate.mockClear();
+    c.openLinkedContact(reminder(), event);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('passes the full contact list to the dialog', () => {
+    afterClosed = undefined;
+    const c = build();
+    c.ngOnInit();
+    c.openCreateDialog();
+    expect(dialog.open).toHaveBeenCalledWith(ReminderDialog, expect.objectContaining({
+      data: expect.objectContaining({ contacts: [adminContact, tutorContact] }),
+    }));
   });
 
   it('wires sort and paginator through the view-child setters', () => {

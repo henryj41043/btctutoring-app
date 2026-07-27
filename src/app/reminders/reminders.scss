@@ -21,6 +21,12 @@
     text-overflow: ellipsis;
   }
 
+  .contact-link {
+    color: var(--btc-teal-deep, #0b6e79);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
   .icon-yes {
     color: #1c7a45;
   }

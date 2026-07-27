@@ -40,6 +40,15 @@
           </mat-select>
         </mat-form-field>
       }
+      <mat-form-field>
+        <mat-label>Linked contact (optional)</mat-label>
+        <mat-select formControlName="contact_id">
+          <mat-option [value]="null">None</mat-option>
+          @for (contact of data.contacts ?? []; track contact.id) {
+            <mat-option [value]="contact.id">{{ contact.first_name }} {{ contact.last_name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
       <p class="reminder-hint">Recipients get an email the morning of the reminder's date (~9am ET).</p>
     </form>
   }
