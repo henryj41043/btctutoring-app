@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, Input, OnInit, ViewChild} from '@angular/core';
 import {ContactService} from '../services/contact.service';
-import {catchError, EMPTY, of, switchMap} from 'rxjs';
+import {catchError, EMPTY, of, retry, switchMap} from 'rxjs';
 import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
 import {AvailabilityBlock} from '../models/availability-block.model';
@@ -98,6 +98,13 @@ export class Contact implements OnInit {
   protected billingCycleOptions: string[] = Object.values(BillingCycle);
   protected groupOptions: string[] = Object.values(UserGroup);
   protected tutors: _Contact[] = [];
+  // Name lookup for ALL staff (unfiltered) — `tutors` is the assignment
+  // dropdown and excludes tutors not currently accepting students, which must
+  // not hide their names on students already assigned to them.
+  private staffById = new Map<string, _Contact>();
+  private staffLoaded = false;
+  // IDs already fetched individually (former staff) — guards refetch loops.
+  private individuallyFetchedTutorIds = new Set<string>();
   protected contactLoading: boolean = true;
   protected studentsLoading: boolean = true;
   protected notesLoading: boolean = true;
@@ -193,16 +200,51 @@ export class Contact implements OnInit {
   private getTutors() {
     this.contactService.getStaff()
       .pipe(
+        retry(2),
         catchError(error => {
           console.log(error);
           return EMPTY;
         })
       )
       .subscribe(contacts => {
+        contacts.forEach(c => {
+          if (c.id) this.staffById.set(c.id, c);
+        });
         this.tutors = [...contacts.filter(contact => {
           return contact.status === Status.STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
         })];
+        this.staffLoaded = true;
+        this.resolveMissingTutorNames();
+        this.cdr.markForCheck();
       });
+  }
+
+  /**
+   * getStaff() only returns current staff — a tutor who has since left won't
+   * be in it, so fetch any still-unresolved assigned tutors by id. Runs after
+   * both the staff list and the students have loaded (call sites cover both
+   * orderings).
+   */
+  private resolveMissingTutorNames() {
+    if (!this.staffLoaded) return;
+    const missing = new Set(this.students
+      .map(s => s.assigned_tutor_id)
+      .filter((id): id is string =>
+        !!id && !this.staffById.has(id) && !this.individuallyFetchedTutorIds.has(id)));
+    missing.forEach(id => {
+      this.individuallyFetchedTutorIds.add(id);
+      this.contactService.getContact(id).pipe(
+        catchError(error => {
+          console.log(error);
+          return EMPTY;
+        })
+      ).subscribe(contacts => {
+        if (contacts[0]) {
+          this.staffById.set(id, contacts[0]);
+          this.cdr.markForCheck();
+        }
+      });
+    });
   }
 
   get notes(): FormArray {
@@ -332,6 +374,7 @@ export class Contact implements OnInit {
     ).subscribe(students => {
       this.students = students;
       this.studentsLoading = false;
+      this.resolveMissingTutorNames();
       this.cdr.markForCheck();
     });
   }
@@ -345,6 +388,7 @@ export class Contact implements OnInit {
       })
     ).subscribe(students => {
       this.students = students;
+      this.resolveMissingTutorNames();
       this.cdr.markForCheck();
       then?.();
     });
@@ -841,8 +885,10 @@ export class Contact implements OnInit {
 
   getTutorName(id?: string): string {
     if (!id) return '—';
-    const tutor = this.tutors.find(t => t.id === id);
-    return tutor ? `${tutor.first_name} ${tutor.last_name}`.trim() : id;
+    const tutor = this.staffById.get(id);
+    // Never fall back to the raw id — an unresolved name renders as a dash
+    // until the staff list (or the per-id fetch) supplies it.
+    return tutor ? `${tutor.first_name} ${tutor.last_name}`.trim() : '—';
   }
 
 }

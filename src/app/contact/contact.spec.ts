@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { defer, of, throwError } from 'rxjs';
 import { FormArray, FormGroup } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -945,14 +945,89 @@ describe('Contact', () => {
       });
     });
 
-    it('resolves tutor names', () => {
+    it('resolves tutor names and never falls back to the raw id', () => {
+      contactService.getStaff.mockReturnValue(
+        of([
+          {
+            id: 't-1', first_name: 'Tess', last_name: 'Coach',
+            status: Status.STAFF, currently_accepting_students: true, service: Service.HIRING,
+          },
+        ]),
+      );
       const c = build();
-      (c as unknown as { tutors: unknown[] }).tutors = [
-        { id: 't-1', first_name: 'Tess', last_name: 'Coach' },
-      ];
+      c.ngOnInit();
       expect(c.getTutorName('')).toBe('—');
       expect(c.getTutorName('t-1')).toBe('Tess Coach');
-      expect(c.getTutorName('unknown')).toBe('unknown');
+      expect(c.getTutorName('unknown')).toBe('—'); // the bug: this used to render the id
+    });
+
+    it('resolves the name of a tutor no longer accepting students (excluded from the dropdown)', () => {
+      contactService.getStaff.mockReturnValue(
+        of([
+          {
+            id: 't-full', first_name: 'Full', last_name: 'Roster',
+            status: Status.STAFF, currently_accepting_students: false, service: Service.HIRING,
+          },
+        ]),
+      );
+      const c = build();
+      c.ngOnInit();
+      // Not offered for new assignments…
+      expect((c as unknown as { tutors: unknown[] }).tutors).toHaveLength(0);
+      // …but existing assignments still display the name.
+      expect(c.getTutorName('t-full')).toBe('Full Roster');
+    });
+
+    it('retries a transient staff load failure', () => {
+      let calls = 0;
+      contactService.getStaff.mockReturnValue(
+        defer(() => {
+          calls += 1;
+          return calls < 3
+            ? throwError(() => new Error('flaky'))
+            : of([
+                {
+                  id: 't-1', first_name: 'Tess', last_name: 'Coach',
+                  status: Status.STAFF, currently_accepting_students: true, service: Service.HIRING,
+                },
+              ]);
+        }),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(calls).toBe(3);
+      expect(c.getTutorName('t-1')).toBe('Tess Coach');
+    });
+
+    it('fetches a former-staff assigned tutor by id when missing from the staff list', () => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT, assigned_tutor_id: 'former-1' }]),
+      );
+      contactService.getContact.mockImplementation((id: string) =>
+        id === 'former-1'
+          ? of([{ id: 'former-1', first_name: 'Old', last_name: 'Tutor' }])
+          : of([fullContact()]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(contactService.getContact).toHaveBeenCalledWith('former-1');
+      expect(c.getTutorName('former-1')).toBe('Old Tutor');
+      // Re-running the resolution never refetches an already-fetched id.
+      contactService.getContact.mockClear();
+      (c as unknown as { resolveMissingTutorNames(): void }).resolveMissingTutorNames();
+      expect(contactService.getContact).not.toHaveBeenCalledWith('former-1');
+    });
+
+    it('shows a dash (not the id) when a former-staff tutor fetch fails', () => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT, assigned_tutor_id: 'gone-1' }]),
+      );
+      contactService.getContact.mockImplementation((id: string) =>
+        id === 'gone-1' ? throwError(() => new Error('404')) : of([fullContact()]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.getTutorName('gone-1')).toBe('—');
     });
 
     it('wires the roster sort and paginator via the view-child setters', () => {
