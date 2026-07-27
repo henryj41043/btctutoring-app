@@ -21,6 +21,8 @@ export interface ReminderDialogData {
   reminder?: Reminder;
   /** Admin contacts offered as individual recipients. */
   admins: Contact[];
+  /** All contacts offered for the optional "about this contact" link. */
+  contacts?: Contact[];
 }
 
 @Component({
@@ -64,6 +66,7 @@ export class ReminderDialog implements OnInit {
       date: [this.toDate(reminder.date), Validators.required],
       all_admins: [reminder.all_admins ?? true],
       recipient_ids: [reminder.recipient_ids ?? []],
+      contact_id: [reminder.contact_id ?? null],
     });
   }
 
@@ -90,6 +93,7 @@ export class ReminderDialog implements OnInit {
       date: this.toDateString(raw.date),
       all_admins: raw.all_admins,
       recipient_ids: raw.all_admins ? [] : raw.recipient_ids,
+      contact_id: raw.contact_id ?? undefined,
     };
     if (!reminder.all_admins && (reminder.recipient_ids ?? []).length === 0) {
       this.fail('Pick at least one admin, or select All admins.');

@@ -124,6 +124,8 @@ export class EventCalendar implements OnInit {
   private reminders: Reminder[] = [];
   // Admin contacts for the reminder dialog's recipient picker.
   private admins: Contact[] = [];
+  // All contacts for the dialog's optional linked-contact picker.
+  private contacts: Contact[] = [];
   actions: CalendarEventAction[] = [
     {
       label: '<i class="fas fa-fw fa-pencil-alt"></i>',
@@ -293,6 +295,7 @@ export class EventCalendar implements OnInit {
         return new Observable<never>();
       })
     ).subscribe(contacts => {
+      this.contacts = contacts as Contact[];
       this.admins = (contacts as Contact[]).filter(c => c.user_group === UserGroup.ADMINS);
       this.cdr.markForCheck();
     });
@@ -304,7 +307,7 @@ export class EventCalendar implements OnInit {
 
   openReminderDialog(mode: ReminderDialogMode, reminder?: Reminder): void {
     const ref = this.sessionDialog.open(ReminderDialog, {
-      data: {mode, reminder, admins: this.admins},
+      data: {mode, reminder, admins: this.admins, contacts: this.contacts},
       width: '440px',
     });
     ref.afterClosed().subscribe(result => {

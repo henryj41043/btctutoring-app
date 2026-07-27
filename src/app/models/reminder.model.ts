@@ -8,6 +8,8 @@ export class Reminder {
   all_admins?: boolean;
   /** Individual admin recipients (contact ids) when all_admins is false. */
   recipient_ids?: string[];
+  /** Optional linked contact the reminder is about (jump-off in the UI). */
+  contact_id?: string;
   /** Set by the backend cron once the morning-of email has fired. */
   sent_at?: string;
   created_by?: string;
