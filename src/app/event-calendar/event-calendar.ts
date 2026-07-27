@@ -26,6 +26,8 @@ import {
 } from 'angular-calendar';
 import {adapterFactory} from 'angular-calendar/date-adapters/date-fns';
 import {MatCardModule} from '@angular/material/card';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
 import {MatTableModule} from '@angular/material/table';
 import {SessionDialog} from '../session-dialog/session-dialog';
 import {Session} from '../models/session.model';
@@ -82,6 +84,8 @@ const colors: Record<string, EventColor> = {
     CalendarDatePipe,
     MatButtonModule,
     MatCardModule,
+    MatFormFieldModule,
+    MatInputModule,
     MatTableModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -127,6 +131,9 @@ export class EventCalendar implements OnInit {
   ];
   refresh = new Subject<void>();
   activeDayIsOpen: boolean = false;
+  // Display-only tutor/student filter (case-insensitive contains). The
+  // fetched-month cache is untouched; clearing the box shows everything.
+  protected filterText: string = '';
 
   constructor(
     private renderer: Renderer2,
@@ -220,8 +227,23 @@ export class EventCalendar implements OnInit {
     });
   }
 
+  /** Filters the visible events by tutor or student name and re-renders. */
+  applyFilter(value: string): void {
+    this.filterText = value.trim().toLowerCase();
+    // The open-day list would otherwise keep showing filtered-out events.
+    this.activeDayIsOpen = false;
+    this.events = this.buildCalendarEvents(this.allSessions);
+    this.cdr.markForCheck();
+  }
+
+  private matchesFilter(session: Session): boolean {
+    if (!this.filterText) return true;
+    const haystack = `${session.tutor_name ?? ''} ${session.student_name ?? ''}`.toLowerCase();
+    return haystack.includes(this.filterText);
+  }
+
   private buildCalendarEvents(sessions: Session[]): CalendarEvent<Session>[] {
-    return sessions.map((session: Session) => {
+    return sessions.filter(session => this.matchesFilter(session)).map((session: Session) => {
       const isAdmin = session.type === SessionType.ADMIN;
       const isMakeUp = session.type === SessionType.MAKE_UP;
       const timeRange = `${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`;

@@ -17,6 +17,12 @@
   </span>
 
   <div class="cal-actions">
+    <mat-form-field appearance="outline" class="cal-search" subscriptSizing="dynamic">
+      <mat-label>Search</mat-label>
+      <input matInput #calSearch placeholder="Tutor or student"
+             (input)="applyFilter(calSearch.value)">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
     @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
       <button mat-raised-button color="primary" (click)="openCreateSessionDialog()" class="cal-add-btn">
         <mat-icon>add</mat-icon>
