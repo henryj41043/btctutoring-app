@@ -59,4 +59,8 @@ export class ToolBar {
   billingNav(): void {
     void this.router.navigate(['/billing']);
   }
+
+  remindersNav(): void {
+    void this.router.navigate(['/reminders']);
+  }
 }

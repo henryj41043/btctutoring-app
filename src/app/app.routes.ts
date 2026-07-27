@@ -11,6 +11,7 @@ import {Payroll} from './payroll/payroll';
 import {Billing} from './billing/billing';
 import {StudentRoster} from './student-roster/student-roster';
 import {Onboarding} from './onboarding/onboarding';
+import {Reminders} from './reminders/reminders';
 
 export const routes: Routes = [
   {
@@ -50,6 +51,11 @@ export const routes: Routes = [
   {
     path: 'onboarding',
     component: Onboarding,
+    canActivate: [AuthGuard, AdminGuard],
+  },
+  {
+    path: 'reminders',
+    component: Reminders,
     canActivate: [AuthGuard, AdminGuard],
   },
   {
