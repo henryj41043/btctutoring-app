@@ -3,6 +3,7 @@ import {DatePipe} from '@angular/common';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
+import {MatButtonModule} from '@angular/material/button';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
@@ -12,7 +13,7 @@ import {catchError, EMPTY} from 'rxjs';
 import {StudentService} from '../services/student.service';
 import {OnboardingRow} from '../models/onboarding-row.model';
 import {Student} from '../models/student.model';
-import {Status} from '../enums/status.enum';
+import {StudentStatus} from '../enums/student-status.enum';
 import {studentDisplayName} from '../utils/student-name';
 
 /**
@@ -28,6 +29,7 @@ import {studentDisplayName} from '../utils/student-name';
     MatCardModule,
     MatTableModule,
     MatIconModule,
+    MatButtonModule,
     MatCheckboxModule,
     MatSortModule,
     MatPaginatorModule,
@@ -57,6 +59,7 @@ export class Onboarding implements OnInit {
     'name', 'contact_name', 'onboarding_complete', 'inquiry_received',
     'inquiry_note_from_parent', 'consult_date', 'trial_date', 'registration_sent',
     'registration_received', 'scholarship_name', 'scholarship_student', 'twenty_five_received',
+    'actions',
   ];
   protected dataSource = new MatTableDataSource<OnboardingRow>([]);
   protected loading: boolean = true;
@@ -83,6 +86,39 @@ export class Onboarding implements OnInit {
     void this.router.navigate(['/contacts', row.contact_id]);
   }
 
+  /**
+   * A family that stopped responding: flips the student to MIA, which drops
+   * the row from this page (it lists status=Onboarding only). Recoverable
+   * from the student dialog on the contact page.
+   */
+  markMia(row: OnboardingRow, event: Event): void {
+    event.stopPropagation();
+    const id = row.id;
+    if (!id || this.savingIds.has(id)) {
+      return;
+    }
+    this.savingIds.add(id);
+    this.cdr.markForCheck();
+    const student: Student = {
+      id,
+      contact_id: row.contact_id,
+      name: row.name,
+      status: StudentStatus.MIA,
+    } as Student;
+    this.studentService.updateStudent(student).pipe(
+      catchError(error => {
+        console.log(error);
+        this.savingIds.delete(id);
+        this.cdr.markForCheck();
+        return EMPTY;
+      })
+    ).subscribe(() => {
+      this.savingIds.delete(id);
+      this.dataSource.data = this.dataSource.data.filter(r => r.id !== id);
+      this.cdr.markForCheck();
+    });
+  }
+
   isSaving(row: OnboardingRow): boolean {
     return !!row.id && this.savingIds.has(row.id);
   }
@@ -98,7 +134,7 @@ export class Onboarding implements OnInit {
       id: row.id,
       contact_id: row.contact_id,
       name: row.name,
-      status: Status.ACTIVE_STUDENT,
+      status: StudentStatus.ACTIVE_STUDENT,
       onboarding_complete: true,
     };
     this.studentService.updateStudent(student).pipe(

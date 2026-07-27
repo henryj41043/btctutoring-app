@@ -22,7 +22,8 @@ import {Response} from '../models/response.model';
 import {catchError, EMPTY, forkJoin, Observable, of} from 'rxjs';
 import {ContactService} from '../services/contact.service';
 import {StudentService} from '../services/student.service';
-import {Status} from '../enums/status.enum';
+import {StudentStatus} from '../enums/student-status.enum';
+import {ContactStatus} from '../enums/contact-status.enum';
 import {Service} from '../enums/service.enum';
 import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
@@ -739,7 +740,7 @@ export class SessionDialog implements OnInit {
     this.contactService.getStaff()
       .pipe(catchError(error => { console.log(error); return EMPTY; }))
       .subscribe(contacts => {
-        this.tutors = contacts.filter(c => c.status === Status.STAFF && c.currently_accepting_students && c.service === Service.HIRING);
+        this.tutors = contacts.filter(c => c.status === ContactStatus.STAFF && c.currently_accepting_students && c.service === Service.HIRING);
       });
   }
 
@@ -753,7 +754,7 @@ export class SessionDialog implements OnInit {
     this.studentService.getStudents().pipe(
       catchError(error => { console.log(error); return EMPTY; })
     ).subscribe(students => {
-      this.students = students.filter(s => s.status === Status.ACTIVE_STUDENT);
+      this.students = students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT);
       // Pre-filter for edit mode where tutor is already selected when students load
       if (this.selectedTutor) {
         this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === this.selectedTutor);

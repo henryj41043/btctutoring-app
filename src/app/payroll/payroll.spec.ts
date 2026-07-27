@@ -11,7 +11,8 @@ import { Contact } from '../models/contact.model';
 import { Session } from '../models/session.model';
 import { PayrollEntry } from '../models/payroll-entry.model';
 import { Service } from '../enums/service.enum';
-import { Status } from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
+import { ContactStatus } from '../enums/contact-status.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { SessionType } from '../enums/session-type.enum';
 
@@ -36,7 +37,7 @@ const staffContact = (over: Partial<Contact> = {}): Contact =>
     first_name: 'Tess',
     hourly_rate: 40,
     service: Service.HIRING,
-    status: Status.STAFF,
+    status: ContactStatus.STAFF,
     ...over,
   }) as Contact;
 
@@ -284,7 +285,7 @@ describe('Payroll', () => {
 
     it('shows nothing when there are no staff tutors', () => {
       contactService.getStaff.mockReturnValue(
-        of([staffContact({ status: Status.ACTIVE_STUDENT })]),
+        of([staffContact({ status: StudentStatus.ACTIVE_STUDENT })]),
       );
       const p = build();
       p.onDateChange(new Date(2026, 5, 10));

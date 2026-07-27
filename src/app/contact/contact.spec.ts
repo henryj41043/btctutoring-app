@@ -17,7 +17,8 @@ import { ManageScheduleDialog } from '../manage-schedule-dialog/manage-schedule-
 import { BillingService } from '../services/billing.service';
 import { BillingCycle } from '../enums/billing-cycle.enum';
 import { Service } from '../enums/service.enum';
-import { Status } from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
+import { ContactStatus } from '../enums/contact-status.enum';
 import { Package } from '../enums/package.enum';
 import { ScheduleService } from '../services/schedule.service';
 
@@ -29,7 +30,7 @@ const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
     email: 'ada@example.com',
     phone_number: '1234567890',
     service: Service.TUTORING,
-    status: Status.ACTIVE_STUDENT,
+    status: StudentStatus.ACTIVE_STUDENT,
     user_group: '',
     user_profile_created: false,
     availability: [{ days: ['MONDAY'], start_time: '09:00', end_time: '10:00' }],
@@ -125,20 +126,20 @@ describe('Contact', () => {
           id: 't-1',
           first_name: 'Tess',
           last_name: 'Coach',
-          status: Status.STAFF,
+          status: ContactStatus.STAFF,
           currently_accepting_students: true,
           service: Service.HIRING,
         },
-        { id: 't-2', status: Status.ACTIVE_STUDENT }, // filtered out
+        { id: 't-2', status: StudentStatus.ACTIVE_STUDENT }, // filtered out
       ]),
     );
     studentService.getStudentsByContact.mockReturnValue(
-      of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT }]),
+      of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT }]),
     );
     studentService.getStudentsByTutor.mockReturnValue(
       of([
-        { id: 's-9', status: Status.ACTIVE_STUDENT },
-        { id: 's-10', status: Status.PAST_STUDENT }, // off the current roster
+        { id: 's-9', status: StudentStatus.ACTIVE_STUDENT },
+        { id: 's-10', status: StudentStatus.PAST_STUDENT }, // off the current roster
       ]),
     );
     noteService.getNotesByRecipient.mockReturnValue(
@@ -159,6 +160,12 @@ describe('Contact', () => {
     expect(
       (c as unknown as { rosterDataSource: { data: unknown[] } }).rosterDataSource.data,
     ).toHaveLength(1);
+  });
+
+  it('offers only contact statuses in the status dropdown (no student values)', () => {
+    const c = build();
+    const options = (c as unknown as { statusOptions: string[] }).statusOptions;
+    expect(options).toEqual(['Staff', 'Former Staff', 'MIA']);
   });
 
   it('disables restricted fields for a non-admin', () => {
@@ -233,7 +240,7 @@ describe('Contact', () => {
   it('populates every form field from a loaded contact', () => {
     const rich = fullContact({
       first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x.com', phone_number: '1234567890',
-      service: Service.HIRING, status: Status.STAFF, billing_cycle: 'monthly',
+      service: Service.HIRING, status: ContactStatus.STAFF, billing_cycle: 'monthly',
       cc_authorization_received: true, twenty_five_deducted: true, special_circumstance: 'note',
       scholarship_state: 'TX', invoice_Month: 'July', invoice_number: 'INV-1',
       inquiry_note_from_parent: 'hello', scholarship_name: 'Sch', title: 'Mr',
@@ -462,7 +469,7 @@ describe('Contact', () => {
   describe('students', () => {
     const seedStudent = (c: Contact) => {
       studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT }]),
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT }]),
       );
       c.ngOnInit();
     };
@@ -488,8 +495,8 @@ describe('Contact', () => {
     it('hasMultipleEnrolledStudents is true with 2+ active packaged students', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([
-          { id: 's-1', status: Status.ACTIVE_STUDENT, package: Package.SUCCEED },
-          { id: 's-2', status: Status.ACTIVE_STUDENT, package: Package.THRIVE },
+          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
+          { id: 's-2', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
         ]),
       );
       const c = build();
@@ -500,9 +507,9 @@ describe('Contact', () => {
     it('hasMultipleEnrolledStudents ignores onboarding and package-less students', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([
-          { id: 's-1', status: Status.ACTIVE_STUDENT, package: Package.SUCCEED },
-          { id: 's-2', status: Status.ONBOARDING, package: Package.THRIVE },
-          { id: 's-3', status: Status.ACTIVE_STUDENT }, // no package
+          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
+          { id: 's-2', status: StudentStatus.ONBOARDING, package: Package.THRIVE },
+          { id: 's-3', status: StudentStatus.ACTIVE_STUDENT }, // no package
         ]),
       );
       const c = build();
@@ -573,7 +580,7 @@ describe('Contact', () => {
     it('opens Manage Schedule after a mid-month package change', () => {
       afterClosed = { openScheduleForStudentId: 's-1' };
       studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT, assigned_tutor_id: 't-1' }]),
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 't-1' }]),
       );
       contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
       const c = build();
@@ -592,7 +599,7 @@ describe('Contact', () => {
       return `${now.getFullYear()}-${m}-${day.toString().padStart(2, '0')}`;
     };
     const enrolled = (over = {}) => ({
-      id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT,
+      id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT,
       package: Package.SUCCEED, package_start_date: '2020-01-01T00:00:00',
       schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '10:30' }], ...over,
     });
@@ -678,7 +685,7 @@ describe('Contact', () => {
   describe('cancel, discard, auto-renew', () => {
     const seedStudent = (c: Contact) => {
       studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT,
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT,
               schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' }] }]),
       );
       c.ngOnInit();
@@ -950,7 +957,7 @@ describe('Contact', () => {
         of([
           {
             id: 't-1', first_name: 'Tess', last_name: 'Coach',
-            status: Status.STAFF, currently_accepting_students: true, service: Service.HIRING,
+            status: ContactStatus.STAFF, currently_accepting_students: true, service: Service.HIRING,
           },
         ]),
       );
@@ -966,7 +973,7 @@ describe('Contact', () => {
         of([
           {
             id: 't-full', first_name: 'Full', last_name: 'Roster',
-            status: Status.STAFF, currently_accepting_students: false, service: Service.HIRING,
+            status: ContactStatus.STAFF, currently_accepting_students: false, service: Service.HIRING,
           },
         ]),
       );
@@ -988,7 +995,7 @@ describe('Contact', () => {
             : of([
                 {
                   id: 't-1', first_name: 'Tess', last_name: 'Coach',
-                  status: Status.STAFF, currently_accepting_students: true, service: Service.HIRING,
+                  status: ContactStatus.STAFF, currently_accepting_students: true, service: Service.HIRING,
                 },
               ]);
         }),
@@ -1001,7 +1008,7 @@ describe('Contact', () => {
 
     it('fetches a former-staff assigned tutor by id when missing from the staff list', () => {
       studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT, assigned_tutor_id: 'former-1' }]),
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 'former-1' }]),
       );
       contactService.getContact.mockImplementation((id: string) =>
         id === 'former-1'
@@ -1020,7 +1027,7 @@ describe('Contact', () => {
 
     it('shows a dash (not the id) when a former-staff tutor fetch fails', () => {
       studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: Status.ACTIVE_STUDENT, assigned_tutor_id: 'gone-1' }]),
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 'gone-1' }]),
       );
       contactService.getContact.mockImplementation((id: string) =>
         id === 'gone-1' ? throwError(() => new Error('404')) : of([fullContact()]),

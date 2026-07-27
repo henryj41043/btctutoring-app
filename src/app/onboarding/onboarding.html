@@ -81,6 +81,20 @@
                 }
               </td>
             </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let row">
+                @if (isSaving(row)) {
+                  <mat-spinner [diameter]="20"></mat-spinner>
+                } @else {
+                  <button matIconButton aria-label="Mark MIA (family stopped responding)"
+                          title="Mark MIA — family stopped responding"
+                          (click)="markMia(row, $event)">
+                    <mat-icon>person_off</mat-icon>
+                  </button>
+                }
+              </td>
+            </ng-container>
             <tr mat-header-row *matHeaderRowDef="columns"></tr>
             <tr mat-row *matRowDef="let row; columns: columns;" (click)="openContact(row)"></tr>
           </table>

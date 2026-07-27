@@ -1,6 +1,6 @@
 import {Service} from '../enums/service.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
-import {Status} from '../enums/status.enum';
+import {ContactStatus} from '../enums/contact-status.enum';
 import {UserGroup} from '../enums/user-group.enum';
 import {AvailabilityBlock} from './availability-block.model';
 
@@ -11,7 +11,7 @@ export class Contact {
   email?: string;
   phone_number?: string;
   service?: Service;
-  status?: Status;
+  status?: ContactStatus;
   billing_cycle?: BillingCycle;
   /** Percent (0–100) off the family's recurring billing when 2+ students are enrolled. */
   sibling_discount?: number;

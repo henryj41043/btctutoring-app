@@ -18,7 +18,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
-import {Status} from '../enums/status.enum';
+import {StudentStatus} from '../enums/student-status.enum';
 import {Package} from '../enums/package.enum';
 import {StudentService} from '../services/student.service';
 import {perSessionCost, resolvePackageDef, round2} from '../utils/package-config';
@@ -80,7 +80,7 @@ export class StudentDialog implements OnInit {
   private studentService: StudentService = inject(StudentService);
 
   protected readonly Package = Package;
-  protected statusOptions: string[] = Object.values(Status);
+  protected statusOptions: string[] = Object.values(StudentStatus);
   protected packageOptions: string[] = Object.values(Package);
   protected mode: StudentDialogMode = 'create';
   protected tutors: Contact[] = [];
@@ -100,14 +100,14 @@ export class StudentDialog implements OnInit {
     this.tutors = this.data.tutors ?? [];
     const student: Student = this.data.student ?? {};
     this.startedInOnboarding =
-      (student.status ?? Status.ONBOARDING) === Status.ONBOARDING;
+      (student.status ?? StudentStatus.ONBOARDING) === StudentStatus.ONBOARDING;
     this.studentForm = this.formBuilder.group({
       id: [student.id ?? null],
       contact_id: [student.contact_id ?? this.data.contactId],
       // Optional: intake often starts before the family shares a name.
       name: [student.name ?? ''],
       birthday: [this.toDate(student.birthday)],
-      status: [student.status ?? Status.ONBOARDING],
+      status: [student.status ?? StudentStatus.ONBOARDING],
       onboarding_complete: [student.onboarding_complete ?? false],
       assigned_tutor_id: [student.assigned_tutor_id ?? ''],
       package: [student.package ?? ''],
@@ -144,8 +144,8 @@ export class StudentDialog implements OnInit {
 
   /** Completing onboarding auto-advances the student from Onboarding to Active. */
   onOnboardingCompleteChange(complete: boolean): void {
-    if (complete && this.studentForm.get('status')?.value === Status.ONBOARDING) {
-      this.studentForm.get('status')?.setValue(Status.ACTIVE_STUDENT);
+    if (complete && this.studentForm.get('status')?.value === StudentStatus.ONBOARDING) {
+      this.studentForm.get('status')?.setValue(StudentStatus.ACTIVE_STUDENT);
     }
   }
 
@@ -176,7 +176,7 @@ export class StudentDialog implements OnInit {
     const student: Student = {
       contact_id: this.data.contactId,
       name: (this.studentForm.get('name')!.value ?? '').trim(),
-      status: Status.ONBOARDING,
+      status: StudentStatus.ONBOARDING,
       onboarding_complete: false,
       make_up_minutes: 0,
     };

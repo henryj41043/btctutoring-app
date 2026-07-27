@@ -25,7 +25,7 @@ import {BillingRecord} from '../models/billing-record.model';
 import {BillingEntry} from '../models/billing-entry.model';
 import {CurrencyPipe, DatePipe} from '@angular/common';
 import {catchError, EMPTY, forkJoin, of} from 'rxjs';
-import {Status} from '../enums/status.enum';
+import {StudentStatus} from '../enums/student-status.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
@@ -153,7 +153,7 @@ export class Billing implements OnInit {
     // Group billable students (active, with a package) by their parent contact.
     const byContact = new Map<string, Student[]>();
     for (const s of students) {
-      if (s.status !== Status.ACTIVE_STUDENT || !s.package || !s.contact_id) continue;
+      if (s.status !== StudentStatus.ACTIVE_STUDENT || !s.package || !s.contact_id) continue;
       const list = byContact.get(s.contact_id) ?? [];
       list.push(s);
       byContact.set(s.contact_id, list);

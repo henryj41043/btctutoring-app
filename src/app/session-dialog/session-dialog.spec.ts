@@ -10,7 +10,8 @@ import { SessionDialogData } from '../interfaces/session-dialog-data.interface';
 import { Contact } from '../models/contact.model';
 import { Student } from '../models/student.model';
 import { Session } from '../models/session.model';
-import { Status } from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
+import { ContactStatus } from '../enums/contact-status.enum';
 import { Service } from '../enums/service.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { SessionType } from '../enums/session-type.enum';
@@ -21,7 +22,7 @@ const tutor = (over: Partial<Contact> = {}): Contact =>
   ({
     id: 't-1',
     first_name: 'Tess',
-    status: Status.STAFF,
+    status: ContactStatus.STAFF,
     currently_accepting_students: true,
     service: Service.HIRING,
     availability: [
@@ -34,7 +35,7 @@ const student = (over: Partial<Student> = {}): Student =>
   ({
     id: 's-1',
     name: 'Pat',
-    status: Status.ACTIVE_STUDENT,
+    status: StudentStatus.ACTIVE_STUDENT,
     assigned_tutor_id: 't-1',
     package: Package.DETERMINATION, // 2 sessions/week, 60 min
     make_up_minutes: 120,
@@ -209,10 +210,10 @@ describe('SessionDialog', () => {
   describe('tutor/student loading', () => {
     it('getTutors keeps only accepting staff hires; getStudents keeps active students', () => {
       contactService.getStaff.mockReturnValue(
-        of([tutor(), { id: 't-x', status: Status.ACTIVE_STUDENT } as Contact]),
+        of([tutor(), { id: 't-x', status: StudentStatus.ACTIVE_STUDENT } as Contact]),
       );
       studentService.getStudents.mockReturnValue(
-        of([student(), { id: 's-x', status: Status.PAST_STUDENT } as Student]),
+        of([student(), { id: 's-x', status: StudentStatus.PAST_STUDENT } as Student]),
       );
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.ngOnInit();

@@ -24,7 +24,7 @@ import {Student} from '../models/student.model';
 import {CurrencyPipe, DatePipe} from '@angular/common';
 import {catchError, forkJoin, map, Observable, of} from 'rxjs';
 import {Service} from '../enums/service.enum';
-import {Status} from '../enums/status.enum';
+import {ContactStatus} from '../enums/contact-status.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 
@@ -189,7 +189,7 @@ export class Payroll implements OnInit {
           .pipe(catchError(error => { console.log(error); return of([] as Student[]); })),
       }).subscribe(({contacts, students}) => {
         const staff = contacts.filter(contact =>
-          contact.service === Service.HIRING && contact.status === Status.STAFF);
+          contact.service === Service.HIRING && contact.status === ContactStatus.STAFF);
         if (staff.length === 0) {
           this.finishLoading([]);
           return;

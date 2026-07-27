@@ -13,10 +13,11 @@ import {StudentService} from '../services/student.service';
 import {AuthService} from '../services/auth.service';
 import {Student} from '../models/student.model';
 import {UserGroup} from '../enums/user-group.enum';
-import {Status} from '../enums/status.enum';
+import {StudentStatus} from '../enums/student-status.enum';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {studentStatusChipClass} from '../utils/status-chip';
 
 @Component({
   selector: 'app-student-roster',
@@ -53,6 +54,7 @@ export class StudentRoster implements OnInit {
   protected rosterColumns: string[] = ['contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship'];
   protected dataSource = new MatTableDataSource<Student>([]);
   protected readonly studentDisplayName = studentDisplayName;
+  protected readonly statusChipClass = studentStatusChipClass;
   protected loading: boolean = true;
 
   ngOnInit(): void {
@@ -80,7 +82,7 @@ export class StudentRoster implements OnInit {
       // The roster is the ACTIVE roster (other statuses live on the contact
       // page), listed by parent name per the client's request.
       this.dataSource.data = students
-        .filter(s => s.status === Status.ACTIVE_STUDENT)
+        .filter(s => s.status === StudentStatus.ACTIVE_STUDENT)
         .sort((a, b) => (a.contact_name ?? '').localeCompare(b.contact_name ?? ''));
       this.loading = false;
       this.cdr.markForCheck();

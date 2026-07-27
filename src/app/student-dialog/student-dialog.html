@@ -48,10 +48,21 @@
         </mat-checkbox>
         @if (locked) {
           <p class="onboarding-hint">
-            Mark onboarding complete to set status, package, and schedule.
+            Mark onboarding complete to set the package and schedule.
           </p>
         }
       }
+
+      <!-- Status is the lifecycle control (incl. marking a ghosted family MIA),
+           so it is never locked behind onboarding completion. -->
+      <mat-form-field>
+        <mat-label>Status</mat-label>
+        <mat-select formControlName="status">
+          @for (statusOption of statusOptions; track statusOption) {
+            <mat-option [value]="statusOption">{{ statusOption }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
 
       <!-- Tutors join during onboarding (trials), so assignment is never locked. -->
       <mat-form-field>
@@ -64,14 +75,6 @@
       </mat-form-field>
 
       @if (!locked) {
-        <mat-form-field>
-          <mat-label>Status</mat-label>
-          <mat-select formControlName="status">
-            @for (statusOption of statusOptions; track statusOption) {
-              <mat-option [value]="statusOption">{{ statusOption }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
         <mat-form-field>
           <mat-label>Package</mat-label>
           <mat-select formControlName="package">
