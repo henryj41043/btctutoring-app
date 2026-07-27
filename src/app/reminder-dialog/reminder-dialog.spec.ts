@@ -151,6 +151,31 @@ describe('ReminderDialog', () => {
     });
   });
 
+  it('ignores a second delete while one is in flight', () => {
+    const pending = new Subject<never>();
+    reminderService.deleteReminder.mockReturnValue(pending);
+    const c = build({ mode: 'delete', reminder: existing });
+    c.confirmDelete();
+    c.confirmDelete();
+    expect(reminderService.deleteReminder).toHaveBeenCalledTimes(1);
+  });
+
+  it('parses non-plain-date strings via the Date fallback', () => {
+    const c = build({
+      mode: 'edit',
+      reminder: { ...existing, date: '2026-08-01T00:00:00' },
+    });
+    const value = form(c).get('date').value as Date;
+    expect(value.getFullYear()).toBe(2026);
+  });
+
+  it('toDateString returns undefined for a missing date', () => {
+    const c = build({ mode: 'create' });
+    const toDateString = (c as unknown as { toDateString(v?: Date | null): string | undefined })
+      .toDateString.bind(c);
+    expect(toDateString(null)).toBeUndefined();
+  });
+
   it('cancel closes with no result; blocked while submitting', () => {
     const pending = new Subject<never>();
     reminderService.createReminder.mockReturnValue(pending);

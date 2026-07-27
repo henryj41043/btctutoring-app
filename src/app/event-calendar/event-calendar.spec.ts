@@ -352,6 +352,42 @@ describe('EventCalendar', () => {
       expect(c.events.some(e => c.isReminderEvent(e))).toBe(false);
     });
 
+    it('reminder action buttons open edit and delete dialogs', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      afterClosed = undefined;
+      const c = build();
+      c.ngOnInit();
+      const entry = c.events.find(e => c.isReminderEvent(e))!;
+      c.reminderActions[0].onClick({ event: entry } as never);
+      expect(dialog.open).toHaveBeenLastCalledWith(ReminderDialog, expect.objectContaining({
+        data: expect.objectContaining({ mode: 'edit' }),
+      }));
+      c.reminderActions[1].onClick({ event: entry } as never);
+      expect(dialog.open).toHaveBeenLastCalledWith(ReminderDialog, expect.objectContaining({
+        data: expect.objectContaining({ mode: 'delete' }),
+      }));
+    });
+
+    it('swallows reminder and contact load errors', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(throwError(() => new Error('boom')));
+      contactService.getContacts.mockReturnValue(throwError(() => new Error('boom')));
+      const c = build();
+      expect(() => c.ngOnInit()).not.toThrow();
+      expect(c.events.some(e => c.isReminderEvent(e))).toBe(false);
+    });
+
+    it('tolerates a malformed reminder date', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(
+        of([{ ...reminder, date: 'not-a-date' } as Reminder]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.events.filter(e => c.isReminderEvent(e))).toHaveLength(1);
+    });
+
     it('a closed reminder dialog with a result refetches reminders', () => {
       sessionsService.getAllSessions.mockReturnValue(of([]));
       reminderService.getReminders.mockReturnValue(of([reminder]));

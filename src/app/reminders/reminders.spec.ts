@@ -146,6 +146,23 @@ describe('Reminders', () => {
     }));
   });
 
+  it('handles contacts without ids and reminders without dates or recipients', () => {
+    contactService.getContacts.mockReturnValue(
+      of([adminContact, { first_name: 'NoId', user_group: 'Admins' }]),
+    );
+    reminderService.getReminders.mockReturnValue(
+      of([reminder({ id: 'rem-2', date: undefined, all_admins: false, recipient_ids: undefined })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    // Date-less reminders are treated as past (dropped from upcoming)…
+    expect(data(c)).toEqual([]);
+    // …but visible with the toggle, and their recipients render as a dash.
+    c.onShowPastChange(true);
+    expect(data(c)).toHaveLength(1);
+    expect(c.recipientNames(data(c)[0])).toBe('—');
+  });
+
   it('wires sort and paginator through the view-child setters', () => {
     const c = build();
     const ds = (c as unknown as { dataSource: { sort: unknown; paginator: unknown } }).dataSource;
