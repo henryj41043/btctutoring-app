@@ -18,7 +18,8 @@ import {StudentService} from '../services/student.service';
 import {NoteService} from '../services/note.service';
 import {Student} from '../models/student.model';
 import {Note} from '../models/note.model';
-import {Status} from '../enums/status.enum';
+import {StudentStatus} from '../enums/student-status.enum';
+import {ContactStatus} from '../enums/contact-status.enum';
 import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {BillingCycle} from '../enums/billing-cycle.enum';
@@ -44,6 +45,7 @@ import {studentMonthlyCharge, studentSemiMonthlyCharge, siblingDiscountedTotal} 
 import {round2} from '../utils/package-config';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {studentStatusChipClass} from '../utils/status-chip';
 import {ScheduleService} from '../services/schedule.service';
 import {Router} from '@angular/router';
 
@@ -94,12 +96,13 @@ export class Contact implements OnInit {
     if (paginator) { this.rosterDataSource.paginator = paginator; }
   }
   protected serviceOptions: string[] = Object.values(Service);
-  protected statusOptions: string[] = Object.values(Status);
+  protected statusOptions: string[] = Object.values(ContactStatus);
   protected packageOptions: string[] = Object.values(Package);
   protected billingCycleOptions: string[] = Object.values(BillingCycle);
   protected groupOptions: string[] = Object.values(UserGroup);
   protected tutors: _Contact[] = [];
   protected readonly studentDisplayName = studentDisplayName;
+  protected readonly statusChipClass = studentStatusChipClass;
   // Name lookup for ALL staff (unfiltered) — `tutors` is the assignment
   // dropdown and excludes tutors not currently accepting students, which must
   // not hide their names on students already assigned to them.
@@ -168,7 +171,7 @@ export class Contact implements OnInit {
   private loadedContact?: _Contact;
   protected readonly Service = Service;
   protected readonly Package = Package;
-  protected readonly Status = Status;
+  protected readonly StudentStatus = StudentStatus;
   protected updatedSuccessfully: boolean = false;
   protected updateError: boolean = false;
   // The contact's students (parent/family view). Edited via the Student dialog,
@@ -194,7 +197,7 @@ export class Contact implements OnInit {
     ).subscribe(students => {
       // The tutor's roster is their CURRENT roster — previously-assigned
       // students who are no longer active stay off it.
-      this.rosterDataSource.data = students.filter(s => s.status === Status.ACTIVE_STUDENT);
+      this.rosterDataSource.data = students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT);
       this.cdr.markForCheck();
     });
   }
@@ -213,7 +216,7 @@ export class Contact implements OnInit {
           if (c.id) this.staffById.set(c.id, c);
         });
         this.tutors = [...contacts.filter(contact => {
-          return contact.status === Status.STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
+          return contact.status === ContactStatus.STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
         })];
         this.staffLoaded = true;
         this.resolveMissingTutorNames();
@@ -502,7 +505,7 @@ export class Contact implements OnInit {
 
   /** True when the family has 2+ active, enrolled students — the sibling-discount condition. */
   get hasMultipleEnrolledStudents(): boolean {
-    return this.students.filter(s => s.status === Status.ACTIVE_STUDENT && !!s.package).length >= 2;
+    return this.students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT && !!s.package).length >= 2;
   }
 
   /** True once a student has both an assigned tutor and a package — required to schedule. */
@@ -549,7 +552,7 @@ export class Contact implements OnInit {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-    const enrolled = this.students.filter(s => s.status === Status.ACTIVE_STUDENT && !!s.package);
+    const enrolled = this.students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT && !!s.package);
     if (enrolled.length === 0) {
       return;
     }

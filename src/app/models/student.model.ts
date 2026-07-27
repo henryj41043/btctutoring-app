@@ -1,5 +1,5 @@
 import {Package} from '../enums/package.enum';
-import {Status} from '../enums/status.enum';
+import {StudentStatus} from '../enums/student-status.enum';
 import {ScheduleSlot} from '../utils/proration';
 
 /** A dated lot of remaining make-up minutes; expires 90 days after earned_date. */
@@ -13,7 +13,7 @@ export class Student {
   contact_id?: string;
   name?: string;
   birthday?: string;
-  status?: Status;
+  status?: StudentStatus;
   /** True once the student has finished onboarding; gates status/package/tutor/schedule edits. */
   onboarding_complete?: boolean;
   assigned_tutor_id?: string;

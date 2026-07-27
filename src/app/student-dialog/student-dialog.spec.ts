@@ -5,7 +5,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { StudentDialog, StudentDialogData } from './student-dialog';
 import { StudentService } from '../services/student.service';
 import { Student } from '../models/student.model';
-import { Status } from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
 import { Package } from '../enums/package.enum';
 import { Weekday } from '../enums/weekday.enum';
 import { monthKey } from '../utils/billing-amount';
@@ -60,7 +60,7 @@ describe('StudentDialog', () => {
       const c = build({ mode: 'create' });
       expect(priv(c).showOnboardingToggle).toBe(false);
       expect(form(c).get('name')?.value).toBe('');
-      expect(form(c).get('status')?.value).toBe(Status.ONBOARDING);
+      expect(form(c).get('status')?.value).toBe(StudentStatus.ONBOARDING);
       expect(form(c).get('onboarding_complete')?.value).toBe(false);
       expect(form(c).get('make_up_never_expire')?.value).toBe(false);
       expect(form(c).get('contact_id')?.value).toBe('c-1');
@@ -73,7 +73,7 @@ describe('StudentDialog', () => {
         student: {
           id: 's-1',
           name: 'Pat',
-          status: Status.ACTIVE_STUDENT,
+          status: StudentStatus.ACTIVE_STUDENT,
           onboarding_complete: true,
           make_up_batches: [{ minutes: 30, earned_date: new Date().toISOString() }],
         } as Student,
@@ -85,7 +85,7 @@ describe('StudentDialog', () => {
       const c = build({
         mode: 'edit',
         student: {
-          id: 's-1', name: 'Pat', status: Status.ACTIVE_STUDENT, onboarding_complete: true,
+          id: 's-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, onboarding_complete: true,
         } as Student,
       });
       form(c).get('make_up_never_expire')?.setValue(true);
@@ -104,7 +104,7 @@ describe('StudentDialog', () => {
       const c = build({ mode: 'create' });
       c.save();
       expect(studentService.createStudent).toHaveBeenCalledWith(
-        expect.objectContaining({ name: '', status: Status.ONBOARDING }),
+        expect.objectContaining({ name: '', status: StudentStatus.ONBOARDING }),
       );
       expect(dialogRef.close).toHaveBeenCalledWith(true);
     });
@@ -127,7 +127,7 @@ describe('StudentDialog', () => {
       expect(studentService.createStudent).toHaveBeenCalledWith({
         contact_id: 'c-1',
         name: 'Pat',
-        status: Status.ONBOARDING,
+        status: StudentStatus.ONBOARDING,
         onboarding_complete: false,
         make_up_minutes: 0,
       });
@@ -166,7 +166,7 @@ describe('StudentDialog', () => {
       id: 's-1',
       contact_id: 'c-1',
       name: 'Pat',
-      status: Status.ONBOARDING,
+      status: StudentStatus.ONBOARDING,
       onboarding_complete: false,
       make_up_minutes: 0,
       ...over,
@@ -183,20 +183,20 @@ describe('StudentDialog', () => {
       const c = build({ mode: 'edit', student: onboardingStudent() });
       form(c).get('onboarding_complete')?.setValue(true);
       c.onOnboardingCompleteChange(true);
-      expect(form(c).get('status')?.value).toBe(Status.ACTIVE_STUDENT);
+      expect(form(c).get('status')?.value).toBe(StudentStatus.ACTIVE_STUDENT);
       expect(priv(c).locked).toBe(false);
     });
 
     it('unchecking complete does not change the status', () => {
       const c = build({ mode: 'edit', student: onboardingStudent() });
       c.onOnboardingCompleteChange(false);
-      expect(form(c).get('status')?.value).toBe(Status.ONBOARDING);
+      expect(form(c).get('status')?.value).toBe(StudentStatus.ONBOARDING);
     });
 
     it('an already-active student is unlocked with no onboarding toggle', () => {
       const c = build({
         mode: 'edit',
-        student: onboardingStudent({ status: Status.ACTIVE_STUDENT, onboarding_complete: true }),
+        student: onboardingStudent({ status: StudentStatus.ACTIVE_STUDENT, onboarding_complete: true }),
       });
       expect(priv(c).startedInOnboarding).toBe(false);
       expect(priv(c).showOnboardingToggle).toBe(false);
@@ -206,10 +206,10 @@ describe('StudentDialog', () => {
     it('completing onboarding on an already-active student leaves the status alone', () => {
       const c = build({
         mode: 'edit',
-        student: onboardingStudent({ status: Status.ACTIVE_STUDENT, onboarding_complete: true }),
+        student: onboardingStudent({ status: StudentStatus.ACTIVE_STUDENT, onboarding_complete: true }),
       });
       c.onOnboardingCompleteChange(true);
-      expect(form(c).get('status')?.value).toBe(Status.ACTIVE_STUDENT);
+      expect(form(c).get('status')?.value).toBe(StudentStatus.ACTIVE_STUDENT);
     });
   });
 
@@ -219,7 +219,7 @@ describe('StudentDialog', () => {
       contact_id: 'c-1',
       name: 'Pat',
       birthday: '2015-05-05',
-      status: Status.ACTIVE_STUDENT,
+      status: StudentStatus.ACTIVE_STUDENT,
       onboarding_complete: true,
       assigned_tutor_id: 't-1',
       package: Package.DETERMINATION,
@@ -266,11 +266,31 @@ describe('StudentDialog', () => {
       expect(payload.birthday).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
+    it('offers only student statuses in the dropdown (no Staff)', () => {
+      const c = build({ mode: 'edit', student: richStudent() });
+      const options = (c as unknown as { statusOptions: string[] }).statusOptions;
+      expect(options).toEqual(['Onboarding', 'Active Student', 'Past Student', 'MIA']);
+    });
+
+    it('persists a status change while still onboarding (the MIA escape)', () => {
+      studentService.updateStudent.mockReturnValue(of(richStudent()));
+      const c = build({
+        mode: 'edit',
+        student: richStudent({ status: StudentStatus.ONBOARDING, onboarding_complete: false }),
+      });
+      expect((c as unknown as { locked: boolean }).locked).toBe(true);
+      form(c).get('status')?.setValue(StudentStatus.MIA);
+      c.save();
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ status: StudentStatus.MIA }),
+      );
+    });
+
     it('persists a tutor assigned while still onboarding (locked)', () => {
       studentService.updateStudent.mockReturnValue(of(richStudent()));
       const c = build({
         mode: 'edit',
-        student: richStudent({ status: Status.ONBOARDING, onboarding_complete: false }),
+        student: richStudent({ status: StudentStatus.ONBOARDING, onboarding_complete: false }),
       });
       expect((c as unknown as { locked: boolean }).locked).toBe(true);
       form(c).get('assigned_tutor_id')?.setValue('t-9');
@@ -342,7 +362,7 @@ describe('StudentDialog', () => {
       id: 's-1',
       contact_id: 'c-1',
       name: 'Pat',
-      status: Status.ACTIVE_STUDENT,
+      status: StudentStatus.ACTIVE_STUDENT,
       onboarding_complete: true,
       package: Package.SUCCEED,
       package_start_date: '2026-05-01T00:00:00',

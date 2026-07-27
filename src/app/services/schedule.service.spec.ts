@@ -11,13 +11,14 @@ import {Weekday} from '../enums/weekday.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {Package} from '../enums/package.enum';
-import {Status} from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
+import { ContactStatus } from '../enums/contact-status.enum';
 
 const tutor = (over: Partial<Contact> = {}): Contact =>
   ({
     id: 't-1',
     first_name: 'Tess',
-    status: Status.STAFF,
+    status: ContactStatus.STAFF,
     availability: [{days: Object.values(Weekday), start_time: '09:00', end_time: '17:00'}],
     ...over,
   }) as Contact;
@@ -26,7 +27,7 @@ const student = (over: Partial<Student> = {}): Student =>
   ({
     id: 's-1',
     name: 'Pat',
-    status: Status.ACTIVE_STUDENT,
+    status: StudentStatus.ACTIVE_STUDENT,
     assigned_tutor_id: 't-1',
     package: Package.DETERMINATION, // 2/week, 60 min
     make_up_minutes: 0,

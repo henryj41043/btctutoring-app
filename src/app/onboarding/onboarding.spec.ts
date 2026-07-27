@@ -6,7 +6,7 @@ import { Onboarding } from './onboarding';
 import { StudentService } from '../services/student.service';
 import { OnboardingRow } from '../models/onboarding-row.model';
 import { Student } from '../models/student.model';
-import { Status } from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
 
 describe('Onboarding', () => {
   const studentService = {
@@ -91,7 +91,7 @@ describe('Onboarding', () => {
       id: 's-1',
       contact_id: 'c-1',
       name: 'Pat',
-      status: Status.ACTIVE_STUDENT,
+      status: StudentStatus.ACTIVE_STUDENT,
       onboarding_complete: true,
     });
     expect(data(c).map(r => r.id)).toEqual(['s-2']);
@@ -116,6 +116,51 @@ describe('Onboarding', () => {
     c.completeOnboarding(row(), false);
     c.completeOnboarding(row({ id: undefined }), true);
     expect(studentService.updateStudent).not.toHaveBeenCalled();
+  });
+
+  describe('markMia', () => {
+    const clickEvent = () => ({ stopPropagation: jest.fn() }) as unknown as Event;
+
+    it('flips the student to MIA and drops the row', () => {
+      studentService.getOnboardingStudents.mockReturnValue(of([row(), row({ id: 's-2' })]));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      const c = build();
+      const event = clickEvent();
+      c.markMia(row(), event);
+      expect((event as unknown as { stopPropagation: jest.Mock }).stopPropagation).toHaveBeenCalled();
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 's-1', contact_id: 'c-1', status: StudentStatus.MIA }),
+      );
+      expect(data(c).map(r => r.id)).toEqual(['s-2']);
+      expect(c.isSaving(row())).toBe(false);
+    });
+
+    it('blocks a re-click while the MIA update is in flight', () => {
+      studentService.getOnboardingStudents.mockReturnValue(of([row()]));
+      const inflight = new Subject<Student>();
+      studentService.updateStudent.mockReturnValue(inflight);
+      const c = build();
+      c.markMia(row(), clickEvent());
+      expect(c.isSaving(row())).toBe(true);
+      c.markMia(row(), clickEvent());
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the row and clears saving when the MIA update fails', () => {
+      studentService.getOnboardingStudents.mockReturnValue(of([row()]));
+      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      c.markMia(row(), clickEvent());
+      expect(data(c).map(r => r.id)).toEqual(['s-1']);
+      expect(c.isSaving(row())).toBe(false);
+    });
+
+    it('ignores rows without an id', () => {
+      studentService.getOnboardingStudents.mockReturnValue(of([row()]));
+      const c = build();
+      c.markMia(row({ id: undefined }), clickEvent());
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
   });
 
   it('keeps the row and clears saving when completion fails', () => {

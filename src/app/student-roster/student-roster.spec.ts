@@ -8,9 +8,9 @@ import { StudentService } from '../services/student.service';
 import { AuthService } from '../services/auth.service';
 import { StudentSessionsDialog } from '../student-sessions-dialog/student-sessions-dialog';
 import { Student } from '../models/student.model';
-import { Status } from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
 
-const student = { id: 's-1', name: 'Pat', status: Status.ACTIVE_STUDENT } as Student;
+const student = { id: 's-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT } as Student;
 
 describe('StudentRoster', () => {
   let isAdmin: boolean;
@@ -54,9 +54,9 @@ describe('StudentRoster', () => {
   it('lists students by parent name (ascending) by default', () => {
     studentService.getStudents.mockReturnValue(
       of([
-        { id: 's-1', name: 'Pat', status: Status.ACTIVE_STUDENT, contact_name: 'Zoe Young' } as Student,
-        { id: 's-2', name: 'Sam', status: Status.ACTIVE_STUDENT, contact_name: 'Ann Lee' } as Student,
-        { id: 's-3', name: 'Kim', status: Status.ACTIVE_STUDENT } as Student, // no parent → first
+        { id: 's-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, contact_name: 'Zoe Young' } as Student,
+        { id: 's-2', name: 'Sam', status: StudentStatus.ACTIVE_STUDENT, contact_name: 'Ann Lee' } as Student,
+        { id: 's-3', name: 'Kim', status: StudentStatus.ACTIVE_STUDENT } as Student, // no parent → first
       ]),
     );
     const component = build();
@@ -69,8 +69,8 @@ describe('StudentRoster', () => {
     studentService.getStudents.mockReturnValue(
       of([
         student,
-        { id: 's-2', name: 'Old', status: Status.PAST_STUDENT } as Student,
-        { id: 's-3', name: 'New', status: Status.ONBOARDING } as Student,
+        { id: 's-2', name: 'Old', status: StudentStatus.PAST_STUDENT } as Student,
+        { id: 's-3', name: 'New', status: StudentStatus.ONBOARDING } as Student,
       ]),
     );
     const component = build();
@@ -83,7 +83,7 @@ describe('StudentRoster', () => {
     studentService.getStudents.mockReturnValue(
       of([
         student, // Pat, no package
-        { id: 's-2', name: 'Sam', status: Status.ACTIVE_STUDENT, package: 'Succeed', contact_name: 'Ann Lee' } as Student,
+        { id: 's-2', name: 'Sam', status: StudentStatus.ACTIVE_STUDENT, package: 'Succeed', contact_name: 'Ann Lee' } as Student,
       ]),
     );
     const component = build();

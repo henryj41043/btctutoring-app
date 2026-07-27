@@ -11,7 +11,7 @@ import { Contact } from '../models/contact.model';
 import { Student } from '../models/student.model';
 import { BillingRecord } from '../models/billing-record.model';
 import { BillingEntry } from '../models/billing-entry.model';
-import { Status } from '../enums/status.enum';
+import { StudentStatus } from '../enums/student-status.enum';
 import { Package } from '../enums/package.enum';
 import { BillingCycle } from '../enums/billing-cycle.enum';
 import { Weekday } from '../enums/weekday.enum';
@@ -37,7 +37,7 @@ const student = (over: Partial<Student> = {}): Student =>
     id: 's-1',
     contact_id: 'c-1',
     name: 'Pat',
-    status: Status.ACTIVE_STUDENT,
+    status: StudentStatus.ACTIVE_STUDENT,
     package: Package.SUCCEED, // $362/mo
     package_start_date: '2026-05-01T00:00:00', // before the billing month → full month
     schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
@@ -221,7 +221,7 @@ describe('Billing', () => {
   });
 
   it('excludes inactive students and contacts with no billable students', () => {
-    studentService.getStudents.mockReturnValue(of([student({ status: Status.PAST_STUDENT })]));
+    studentService.getStudents.mockReturnValue(of([student({ status: StudentStatus.PAST_STUDENT })]));
     const c = build();
     c.ngOnInit();
     expect((c as any).dataSource.data).toHaveLength(0);
