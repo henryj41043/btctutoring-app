@@ -6,6 +6,7 @@ import { Payroll } from './payroll';
 import { AuthService } from '../services/auth.service';
 import { SessionsService } from '../services/sessions.service';
 import { ContactService } from '../services/contact.service';
+import { StudentService } from '../services/student.service';
 import { Contact } from '../models/contact.model';
 import { Session } from '../models/session.model';
 import { PayrollEntry } from '../models/payroll-entry.model';
@@ -48,6 +49,7 @@ describe('Payroll', () => {
   };
   const sessionsService = { getSessionsByTutor: jest.fn() };
   const contactService = { getContacts: jest.fn(), getStaff: jest.fn() };
+  const studentService = { getStudents: jest.fn(), getStudentsByTutor: jest.fn() };
 
   const build = (): Payroll => {
     TestBed.configureTestingModule({
@@ -56,6 +58,7 @@ describe('Payroll', () => {
         { provide: AuthService, useValue: authService },
         { provide: SessionsService, useValue: sessionsService },
         { provide: ContactService, useValue: contactService },
+        { provide: StudentService, useValue: studentService },
       ],
     });
     return TestBed.createComponent(Payroll).componentInstance;
@@ -70,6 +73,8 @@ describe('Payroll', () => {
     isAdmin = false;
     self = staffContact();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    studentService.getStudents.mockReturnValue(of([]));
+    studentService.getStudentsByTutor.mockReturnValue(of([]));
   });
 
   it('computes a tutor payroll entry from completed and admin sessions', () => {
@@ -113,6 +118,101 @@ describe('Payroll', () => {
     expect(entry.tutoring_compensation).toBe(120);
     expect(entry.total_compensation).toBeCloseTo(124.95, 2);
     expect(priv(p).loading).toBe(false);
+  });
+
+  it('credits extra planning minutes per counted session for tagged students', () => {
+    studentService.getStudentsByTutor.mockReturnValue(
+      of([
+        { id: 's-1', name: 'Pat', extra_planning_minutes: 20 },
+        { id: 's-2', name: 'Sam' }, // untagged
+      ]),
+    );
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-06-06T09:00:00',
+          end_datetime: '2026-06-06T11:00:00',
+        },
+        {
+          type: SessionType.TUTORING,
+          status: SessionStatus.NO_CALL_NO_SHOW,
+          student_id: 's-1',
+          start_datetime: '2026-06-07T09:00:00',
+          end_datetime: '2026-06-07T10:00:00',
+        },
+        {
+          // Pending sessions never earn the credit.
+          type: SessionType.TUTORING,
+          status: SessionStatus.PENDING,
+          student_id: 's-1',
+          start_datetime: '2026-06-08T09:00:00',
+          end_datetime: '2026-06-08T10:00:00',
+        },
+        {
+          // Outside the pay period -> no hours, no credit.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-05-01T09:00:00',
+          end_datetime: '2026-05-01T10:00:00',
+        },
+        {
+          // Untagged student -> hours count, no credit.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-2',
+          start_datetime: '2026-06-09T09:00:00',
+          end_datetime: '2026-06-09T10:00:00',
+        },
+      ] as Session[]),
+    );
+
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+
+    const entry = data(p)[0];
+    expect(entry.tutoring_hours).toBe(4);
+    // 2 counted sessions with the tagged student x 20 min = 40 min = 0.67 h.
+    expect(entry.extra_planning_time).toBeCloseTo(0.67, 2);
+    expect(entry.planning_time).toBeCloseTo(0.67, 2); // 4h / 6
+    // (0.67 + 0.67) x $15
+    expect(entry.planning_compensation).toBeCloseTo(20.1, 2);
+    expect(entry.total_compensation).toBeCloseTo(160 + 20.1, 2);
+  });
+
+  it('degrades to zero extra credit when the student fetch fails', () => {
+    studentService.getStudentsByTutor.mockReturnValue(
+      throwError(() => new Error('boom')),
+    );
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-06-06T09:00:00',
+          end_datetime: '2026-06-06T11:00:00',
+        },
+      ] as Session[]),
+    );
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+    const entry = data(p)[0];
+    expect(entry.tutoring_hours).toBe(2);
+    expect(entry.extra_planning_time).toBe(0);
+    // 2h x $40 + (2/6 h) x $15 — no extra credit applied.
+    expect(entry.total_compensation).toBeCloseTo(84.95, 2);
+  });
+
+  it('formats the planning cell with the +extra suffix only when credited', () => {
+    const p = build() as unknown as { formatPlanningTime(e: PayrollEntry): string };
+    expect(p.formatPlanningTime({ planning_time: 2.33, extra_planning_time: 0.5 })).toBe('2.33 +0.5');
+    expect(p.formatPlanningTime({ planning_time: 2.33 })).toBe('2.33');
+    expect(p.formatPlanningTime({ planning_time: 2.33, extra_planning_time: 0 })).toBe('2.33');
+    expect(p.formatPlanningTime({})).toBe('0');
   });
 
   it('returns a zeroed entry when fetching a tutor’s sessions fails', () => {
@@ -218,6 +318,7 @@ describe('Payroll', () => {
           pay_rate: 40,
           tutoring_compensation: 120,
           planning_time: 0.33,
+          extra_planning_time: 0.5,
           planning_rate: 15,
           planning_compensation: 4.95,
           total_compensation: 124.95,
@@ -232,6 +333,10 @@ describe('Payroll', () => {
       const doc = (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
       expect(doc.save).toHaveBeenCalled();
       expect(doc.setPage).toHaveBeenCalledTimes(2);
+      const tableArgs = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1] as {
+        body: unknown[][];
+      };
+      expect(tableArgs.body[0]).toContain('0.33 +0.5');
     });
 
     it('tolerates an unset date range', () => {

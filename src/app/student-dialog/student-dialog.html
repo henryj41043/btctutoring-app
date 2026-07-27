@@ -95,6 +95,10 @@
             <input matInput type="number" formControlName="custom_session_length_min">
           </mat-form-field>
         }
+        <mat-form-field>
+          <mat-label>Extra Planning (min/session)</mat-label>
+          <input matInput type="number" min="0" formControlName="extra_planning_minutes">
+        </mat-form-field>
         <p class="makeup-balance">
           Make Up Minutes: <strong>{{ makeupBalance }}</strong>
           <span class="makeup-hint">(from cancelled sessions; expire after 90 days)</span>
