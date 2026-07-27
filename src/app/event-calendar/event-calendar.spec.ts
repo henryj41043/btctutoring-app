@@ -189,6 +189,80 @@ describe('EventCalendar', () => {
     expect(types).toContain('delete');
   });
 
+  describe('tutor/student filter', () => {
+    const sessions = [
+      {
+        id: 'sess-1',
+        type: SessionType.TUTORING,
+        status: SessionStatus.PENDING,
+        tutor_name: 'Tess Coach',
+        student_name: 'Pat Young',
+        start_datetime: '2026-06-01T09:00:00',
+        end_datetime: '2026-06-01T10:00:00',
+      },
+      {
+        id: 'sess-2',
+        type: SessionType.TUTORING,
+        status: SessionStatus.PENDING,
+        tutor_name: 'Mia Mentor',
+        student_name: 'Sam Lee',
+        start_datetime: '2026-06-02T09:00:00',
+        end_datetime: '2026-06-02T10:00:00',
+      },
+      {
+        id: 'sess-3',
+        type: SessionType.ADMIN,
+        status: SessionStatus.PENDING,
+        tutor_name: 'Tess Coach',
+        start_datetime: '2026-06-03T09:00:00', // admin time: no student_name
+        end_datetime: '2026-06-03T10:00:00',
+      },
+    ] as Session[];
+
+    const filtered = (): EventCalendar => {
+      sessionsService.getAllSessions.mockReturnValue(of(sessions));
+      const c = build();
+      c.ngOnInit();
+      return c;
+    };
+
+    it('filters by tutor name case-insensitively', () => {
+      const c = filtered();
+      c.applyFilter('  TESS ');
+      expect(c.events).toHaveLength(2); // her session and her admin time
+      expect(c.events.every(e => e.meta?.tutor_name === 'Tess Coach')).toBe(true);
+    });
+
+    it('filters by student name', () => {
+      const c = filtered();
+      c.applyFilter('sam');
+      expect(c.events).toHaveLength(1);
+      expect(c.events[0].meta?.student_name).toBe('Sam Lee');
+    });
+
+    it('clearing the box shows everything again', () => {
+      const c = filtered();
+      c.applyFilter('sam');
+      c.applyFilter('');
+      expect(c.events).toHaveLength(3);
+    });
+
+    it('collapses the open day when the filter changes', () => {
+      const c = filtered();
+      c.activeDayIsOpen = true;
+      c.applyFilter('tess');
+      expect(c.activeDayIsOpen).toBe(false);
+    });
+
+    it('keeps the filter applied across month navigation (cached months)', () => {
+      const c = filtered();
+      c.applyFilter('sam');
+      c.onViewDateChange(); // months already cached — rebuild only
+      expect(c.events).toHaveLength(1);
+      expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('setView changes the active view', () => {
     const c = build();
     c.setView(CalendarView.Week);
