@@ -1,0 +1,65 @@
+<h2 mat-dialog-title>
+  @switch (mode) {
+    @case ('create') { Add Reminder }
+    @case ('edit') { Edit Reminder }
+    @case ('delete') { Delete Reminder }
+  }
+</h2>
+
+<mat-dialog-content class="reminder-dialog-content">
+  @if (mode === 'delete') {
+    <p>
+      Delete the reminder <strong>{{ data.reminder?.title }}</strong>
+      @if (data.reminder?.date) { for {{ data.reminder?.date }} }?
+      This cannot be undone.
+    </p>
+  } @else {
+    <form [formGroup]="reminderForm">
+      <mat-form-field>
+        <mat-label>Title</mat-label>
+        <input matInput formControlName="title">
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Message</mat-label>
+        <textarea matInput rows="3" formControlName="message"></textarea>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Date</mat-label>
+        <input matInput [matDatepicker]="reminderDatePicker" formControlName="date">
+        <mat-datepicker-toggle matIconSuffix [for]="reminderDatePicker"></mat-datepicker-toggle>
+        <mat-datepicker #reminderDatePicker></mat-datepicker>
+      </mat-form-field>
+      <mat-checkbox formControlName="all_admins">Send to all admins</mat-checkbox>
+      @if (!reminderForm.get('all_admins')?.value) {
+        <mat-form-field>
+          <mat-label>Recipients</mat-label>
+          <mat-select formControlName="recipient_ids" multiple>
+            @for (admin of data.admins; track admin.id) {
+              <mat-option [value]="admin.id">{{ admin.first_name }} {{ admin.last_name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+      <p class="reminder-hint">Recipients get an email the morning of the reminder's date (~9am ET).</p>
+    </form>
+  }
+
+  @if (hasError) {
+    <mat-error class="dialog-error">{{ errorMessage }}</mat-error>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (submitting) {
+    <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+  } @else {
+    <button matButton (click)="cancel()">Cancel</button>
+    @if (mode === 'delete') {
+      <button mat-raised-button color="warn" (click)="confirmDelete()">Delete</button>
+    } @else {
+      <button mat-raised-button color="primary" (click)="save()">
+        {{ mode === 'create' ? 'Create' : 'Save' }}
+      </button>
+    }
+  }
+</mat-dialog-actions>

@@ -1,0 +1,28 @@
+.reminder-dialog-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 340px;
+  padding-top: 8px;
+}
+
+.reminder-dialog-content mat-form-field {
+  width: 100%;
+}
+
+.reminder-dialog-content mat-checkbox {
+  margin: 4px 0 12px;
+}
+
+.reminder-hint {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.dialog-error {
+  margin-top: 4px;
+}
+
+.dialog-saving-spinner {
+  margin: 4px 8px;
+}

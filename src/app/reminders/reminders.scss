@@ -1,0 +1,59 @@
+.reminders {
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    width: 100%;
+    min-width: 760px;
+  }
+
+  .mat-mdc-row {
+    cursor: pointer;
+  }
+
+  .message-cell {
+    max-width: 320px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .icon-yes {
+    color: #1c7a45;
+  }
+
+  .icon-pending {
+    opacity: .55;
+  }
+}
+
+.reminders-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.reminders-search {
+  width: 240px;
+
+  .mat-mdc-text-field-wrapper {
+    height: 44px;
+  }
+  .mat-mdc-form-field-infix {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    min-height: unset;
+  }
+}
+
+.table-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 0;
+}

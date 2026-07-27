@@ -33,6 +33,11 @@ import {SessionDialog} from '../session-dialog/session-dialog';
 import {Session} from '../models/session.model';
 import {MatDialog} from '@angular/material/dialog';
 import {SessionRange, SessionsService} from '../services/sessions.service';
+import {ReminderService} from '../services/reminder.service';
+import {Reminder} from '../models/reminder.model';
+import {ReminderDialog, ReminderDialogMode} from '../reminder-dialog/reminder-dialog';
+import {ContactService} from '../services/contact.service';
+import {Contact} from '../models/contact.model';
 import {AuthService} from '../services/auth.service';
 import {catchError, Observable, Subject} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
@@ -106,13 +111,19 @@ export class EventCalendar implements OnInit {
   readonly CalendarView: typeof CalendarView = CalendarView;
   readonly sessionDialog: MatDialog = inject(MatDialog);
   sessionsService: SessionsService = inject(SessionsService);
+  reminderService: ReminderService = inject(ReminderService);
+  contactService: ContactService = inject(ContactService);
   authService: AuthService = inject(AuthService);
   view: CalendarView = CalendarView.Month;
   viewDate: Date = new Date();
-  events: CalendarEvent<Session>[] = [];
+  events: CalendarEvent<Session | Reminder>[] = [];
   /** True while a month window is being fetched (inline header spinner). */
   loading: boolean = false;
   private allSessions: Session[] = [];
+  // Admin-only reminder entries rendered alongside sessions (all-day, blue).
+  private reminders: Reminder[] = [];
+  // Admin contacts for the reminder dialog's recipient picker.
+  private admins: Contact[] = [];
   actions: CalendarEventAction[] = [
     {
       label: '<i class="fas fa-fw fa-pencil-alt"></i>',
@@ -126,6 +137,22 @@ export class EventCalendar implements OnInit {
       a11yLabel: 'Delete',
       onClick: ({ event }: { event: CalendarEvent }): void => {
         this.handleEvent('Deleted', event);
+      },
+    },
+  ];
+  reminderActions: CalendarEventAction[] = [
+    {
+      label: '<i class="fas fa-fw fa-pencil-alt"></i>',
+      a11yLabel: 'Edit',
+      onClick: ({ event }: { event: CalendarEvent }): void => {
+        this.openReminderDialog('edit', event.meta as Reminder);
+      },
+    },
+    {
+      label: '<i class="fas fa-fw fa-trash-alt"></i>',
+      a11yLabel: 'Delete',
+      onClick: ({ event }: { event: CalendarEvent }): void => {
+        this.openReminderDialog('delete', event.meta as Reminder);
       },
     },
   ];
@@ -146,6 +173,7 @@ export class EventCalendar implements OnInit {
     this.renderer.addClass(this.document.body, 'light-theme');
     this.renderer.removeClass(this.document.body, 'dark-theme');
     this.updateSessionsData();
+    this.loadReminders();
   }
 
   // Months ('YYYY-MM') whose sessions are already loaded. Sessions are fetched
@@ -189,7 +217,7 @@ export class EventCalendar implements OnInit {
       anchor => !this.fetchedMonths.has(this.monthKey(anchor)),
     );
     if (missing.length === 0) {
-      this.events = this.buildCalendarEvents(this.allSessions);
+      this.rebuildEvents();
       this.cdr.markForCheck();
       return;
     }
@@ -222,7 +250,7 @@ export class EventCalendar implements OnInit {
       const byId = new Map(this.allSessions.map(s => [s.id, s]));
       sessions.forEach(s => byId.set(s.id, s));
       this.allSessions = [...byId.values()];
-      this.events = this.buildCalendarEvents(this.allSessions);
+      this.rebuildEvents();
       this.cdr.markForCheck();
     });
   }
@@ -232,8 +260,85 @@ export class EventCalendar implements OnInit {
     this.filterText = value.trim().toLowerCase();
     // The open-day list would otherwise keep showing filtered-out events.
     this.activeDayIsOpen = false;
-    this.events = this.buildCalendarEvents(this.allSessions);
+    this.rebuildEvents();
     this.cdr.markForCheck();
+  }
+
+  /** Sessions + (for admins) reminders, with the display filter applied. */
+  private rebuildEvents(): void {
+    this.events = [
+      ...this.buildCalendarEvents(this.allSessions),
+      ...this.buildReminderEvents(this.reminders),
+    ];
+  }
+
+  /** Admin-only: reminders and the admin contacts for the dialog's recipients. */
+  private loadReminders(): void {
+    if (!this.authService.isAdmin()) {
+      return;
+    }
+    this.reminderService.getReminders().pipe(
+      catchError(error => {
+        console.log(error);
+        return new Observable<never>();
+      })
+    ).subscribe(reminders => {
+      this.reminders = reminders as Reminder[];
+      this.rebuildEvents();
+      this.cdr.markForCheck();
+    });
+    this.contactService.getContacts().pipe(
+      catchError(error => {
+        console.log(error);
+        return new Observable<never>();
+      })
+    ).subscribe(contacts => {
+      this.admins = (contacts as Contact[]).filter(c => c.user_group === UserGroup.ADMINS);
+      this.cdr.markForCheck();
+    });
+  }
+
+  isReminderEvent(event: CalendarEvent<Session | Reminder>): boolean {
+    return (event.meta as Reminder | undefined)?.entry_type === 'reminder';
+  }
+
+  openReminderDialog(mode: ReminderDialogMode, reminder?: Reminder): void {
+    const ref = this.sessionDialog.open(ReminderDialog, {
+      data: {mode, reminder, admins: this.admins},
+      width: '440px',
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result) {
+        this.loadReminders();
+      }
+    });
+  }
+
+  /** Reminders render as all-day, non-interactive-drag entries in blue. */
+  private buildReminderEvents(reminders: Reminder[]): CalendarEvent<Reminder>[] {
+    return reminders
+      .filter(reminder => this.reminderMatchesFilter(reminder))
+      .map((reminder: Reminder) => {
+        const [y, m, d] = (reminder.date ?? '').split('-').map(Number);
+        const day = y && m && d ? new Date(y, m - 1, d) : new Date(reminder.date as string);
+        return {
+          title: `[Reminder] ${reminder.title}`,
+          start: day,
+          end: day,
+          allDay: true,
+          meta: {...reminder, entry_type: 'reminder' as const},
+          actions: this.reminderActions,
+          color: colors['blue'],
+          resizable: { beforeStart: false, afterEnd: false },
+          draggable: false,
+        };
+      });
+  }
+
+  private reminderMatchesFilter(reminder: Reminder): boolean {
+    if (!this.filterText) return true;
+    const haystack = `${reminder.title ?? ''} ${reminder.message ?? ''}`.toLowerCase();
+    return haystack.includes(this.filterText);
   }
 
   private matchesFilter(session: Session): boolean {
@@ -310,6 +415,9 @@ export class EventCalendar implements OnInit {
   }
 
   eventTimesChanged({event, newStart, newEnd,}: CalendarEventTimesChangedEvent): void {
+    if (this.isReminderEvent(event)) {
+      return; // reminders are not draggable/resizable
+    }
     this.events = this.events.map((iEvent) => {
       if (iEvent === event) {
         event.meta.start = newStart.toISOString();
@@ -326,6 +434,15 @@ export class EventCalendar implements OnInit {
   }
 
   handleEvent(action: string, event: CalendarEvent): void {
+    if (this.isReminderEvent(event)) {
+      // Reminders route to their own dialog; they are never drag/resized.
+      if (action === 'Deleted') {
+        this.openReminderDialog('delete', event.meta as Reminder);
+      } else {
+        this.openReminderDialog('edit', event.meta as Reminder);
+      }
+      return;
+    }
     switch (action) {
       case 'Edited':
         this.openEditSessionDialog(event.meta);

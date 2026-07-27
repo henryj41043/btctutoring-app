@@ -4,6 +4,10 @@ import { MatDialog } from '@angular/material/dialog';
 import { CalendarEvent, CalendarView } from 'angular-calendar';
 import { EventCalendar } from './event-calendar';
 import { SessionsService } from '../services/sessions.service';
+import { ReminderService } from '../services/reminder.service';
+import { ContactService } from '../services/contact.service';
+import { Reminder } from '../models/reminder.model';
+import { ReminderDialog } from '../reminder-dialog/reminder-dialog';
 import { AuthService } from '../services/auth.service';
 import { SessionDialog } from '../session-dialog/session-dialog';
 import { Session } from '../models/session.model';
@@ -18,6 +22,8 @@ describe('EventCalendar', () => {
     getAllSessions: jest.fn(),
     getSessionsByTutor: jest.fn(),
   };
+  const reminderService = { getReminders: jest.fn() };
+  const contactService = { getContacts: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
     user: () => ({ groups }),
@@ -33,6 +39,8 @@ describe('EventCalendar', () => {
       imports: [EventCalendar],
       providers: [
         { provide: SessionsService, useValue: sessionsService },
+        { provide: ReminderService, useValue: reminderService },
+        { provide: ContactService, useValue: contactService },
         { provide: AuthService, useValue: authService },
         { provide: MatDialog, useValue: dialog },
       ],
@@ -45,6 +53,8 @@ describe('EventCalendar', () => {
     groups = ['Admins'];
     afterClosed = {} as Session;
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    reminderService.getReminders.mockReturnValue(of([]));
+    contactService.getContacts.mockReturnValue(of([]));
   });
 
   it('themes the body and loads admin sessions on init', () => {
@@ -260,6 +270,133 @@ describe('EventCalendar', () => {
       c.onViewDateChange(); // months already cached — rebuild only
       expect(c.events).toHaveLength(1);
       expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('admin reminders on the calendar', () => {
+    const reminder = {
+      id: 'rem-1',
+      title: 'Call John',
+      message: 'Cancels July 31',
+      date: '2026-06-05',
+      all_admins: true,
+    } as Reminder;
+
+    it('renders reminders as all-day, non-draggable blue entries for admins', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      const c = build();
+      c.ngOnInit();
+      const entry = c.events.find(e => c.isReminderEvent(e))!;
+      expect(entry).toBeDefined();
+      expect(entry.title).toBe('[Reminder] Call John');
+      expect(entry.allDay).toBe(true);
+      expect(entry.draggable).toBe(false);
+      expect(entry.start).toEqual(new Date(2026, 5, 5));
+    });
+
+    it('does not fetch reminders for non-admin tutors', () => {
+      isAdmin = false;
+      groups = ['Tutors'];
+      sessionsService.getSessionsByTutor.mockReturnValue(of([]));
+      const c = build();
+      c.ngOnInit();
+      expect(reminderService.getReminders).not.toHaveBeenCalled();
+    });
+
+    it('clicking a reminder opens the reminder dialog, not the session dialog', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      afterClosed = undefined;
+      const c = build();
+      c.ngOnInit();
+      const entry = c.events.find(e => c.isReminderEvent(e))!;
+      c.handleEvent('Clicked', entry);
+      expect(dialog.open).toHaveBeenCalledWith(ReminderDialog, expect.objectContaining({
+        data: expect.objectContaining({ mode: 'edit' }),
+      }));
+    });
+
+    it('reminder delete action routes to the delete dialog', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      afterClosed = undefined;
+      const c = build();
+      c.ngOnInit();
+      const entry = c.events.find(e => c.isReminderEvent(e))!;
+      c.handleEvent('Deleted', entry);
+      expect(dialog.open).toHaveBeenCalledWith(ReminderDialog, expect.objectContaining({
+        data: expect.objectContaining({ mode: 'delete' }),
+      }));
+    });
+
+    it('drag/resize is a no-op for reminders', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      const c = build();
+      c.ngOnInit();
+      const entry = c.events.find(e => c.isReminderEvent(e))!;
+      dialog.open.mockClear();
+      c.eventTimesChanged({ event: entry, newStart: new Date(), newEnd: new Date() } as never);
+      expect(dialog.open).not.toHaveBeenCalled();
+    });
+
+    it('the search box filters reminders by title', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      const c = build();
+      c.ngOnInit();
+      c.applyFilter('call john');
+      expect(c.events.some(e => c.isReminderEvent(e))).toBe(true);
+      c.applyFilter('nobody');
+      expect(c.events.some(e => c.isReminderEvent(e))).toBe(false);
+    });
+
+    it('reminder action buttons open edit and delete dialogs', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      afterClosed = undefined;
+      const c = build();
+      c.ngOnInit();
+      const entry = c.events.find(e => c.isReminderEvent(e))!;
+      c.reminderActions[0].onClick({ event: entry } as never);
+      expect(dialog.open).toHaveBeenLastCalledWith(ReminderDialog, expect.objectContaining({
+        data: expect.objectContaining({ mode: 'edit' }),
+      }));
+      c.reminderActions[1].onClick({ event: entry } as never);
+      expect(dialog.open).toHaveBeenLastCalledWith(ReminderDialog, expect.objectContaining({
+        data: expect.objectContaining({ mode: 'delete' }),
+      }));
+    });
+
+    it('swallows reminder and contact load errors', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(throwError(() => new Error('boom')));
+      contactService.getContacts.mockReturnValue(throwError(() => new Error('boom')));
+      const c = build();
+      expect(() => c.ngOnInit()).not.toThrow();
+      expect(c.events.some(e => c.isReminderEvent(e))).toBe(false);
+    });
+
+    it('tolerates a malformed reminder date', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(
+        of([{ ...reminder, date: 'not-a-date' } as Reminder]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.events.filter(e => c.isReminderEvent(e))).toHaveLength(1);
+    });
+
+    it('a closed reminder dialog with a result refetches reminders', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      reminderService.getReminders.mockReturnValue(of([reminder]));
+      afterClosed = true;
+      const c = build();
+      c.ngOnInit();
+      reminderService.getReminders.mockClear();
+      c.openReminderDialog('edit', reminder);
+      expect(reminderService.getReminders).toHaveBeenCalled();
     });
   });
 
