@@ -18,6 +18,7 @@ import {AuthService} from '../services/auth.service';
 import {Session} from '../models/session.model';
 import {Student} from '../models/student.model';
 import {UserGroup} from '../enums/user-group.enum';
+import {studentDisplayName} from '../utils/student-name';
 
 @Component({
   selector: 'app-student-sessions-dialog',
@@ -43,6 +44,7 @@ export class StudentSessionsDialog implements OnInit {
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   readonly student = inject<Student>(MAT_DIALOG_DATA);
+  protected readonly studentDisplayName = studentDisplayName;
 
   @ViewChild(MatSort) set sort(sort: MatSort) {
     if (sort) {

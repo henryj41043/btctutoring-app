@@ -11,6 +11,7 @@ import {Weekday, WEEKDAY_BY_JS_DAY, WEEKDAY_LABELS} from '../enums/weekday.enum'
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
+import {studentDisplayName} from '../utils/student-name';
 
 /** One generated occurrence of a weekly slot on a concrete calendar date. */
 export interface ScheduleOccurrence {
@@ -154,7 +155,7 @@ export class ScheduleService {
       s.tutor_id = tutor.id;
       s.tutor_name = tutor.first_name;
       s.student_id = student.id;
-      s.student_name = student.name;
+      s.student_name = studentDisplayName(student);
       s.start_datetime = this.atTime(date, slot.start_time).toISOString();
       s.end_datetime = this.atTime(date, slot.end_time).toISOString();
       s.status = SessionStatus.PENDING;

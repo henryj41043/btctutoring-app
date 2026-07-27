@@ -32,6 +32,7 @@ import {AuthService} from '../services/auth.service';
 import {ScheduleService} from '../services/schedule.service';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
 import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '../utils/makeup';
+import {studentDisplayName} from '../utils/student-name';
 
 @Component({
   selector: 'app-session-dialog',
@@ -54,6 +55,7 @@ import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '.
   styleUrl: './session-dialog.scss'
 })
 export class SessionDialog implements OnInit {
+  protected readonly studentDisplayName = studentDisplayName;
   startTime: Date | undefined;
   endTime: Date | undefined;
   date: Date | undefined;
@@ -439,7 +441,7 @@ export class SessionDialog implements OnInit {
       session.tutor_id = tutor.id;
       if (this.hasStudent) {
         let student: Student = this.students.find(s => s.id === this.selectedStudent)!;
-        session.student_name = student.name;
+        session.student_name = studentDisplayName(student);
         session.student_id = student.id;
       }
       session.start_datetime = submitStartDate.toISOString();
@@ -523,7 +525,7 @@ export class SessionDialog implements OnInit {
 
       if (this.hasStudent) {
         let student: Student = this.students.find(s => s.id === this.selectedStudent)!;
-        session.student_name = student?.name;
+        session.student_name = studentDisplayName(student);
         session.student_id = student?.id;
 
         if (isStatusChange && student) {

@@ -43,6 +43,7 @@ import {BillingRecord} from '../models/billing-record.model';
 import {studentMonthlyCharge, studentSemiMonthlyCharge, siblingDiscountedTotal} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
 import {availableMakeupMinutes} from '../utils/makeup';
+import {studentDisplayName} from '../utils/student-name';
 import {ScheduleService} from '../services/schedule.service';
 import {Router} from '@angular/router';
 
@@ -98,6 +99,7 @@ export class Contact implements OnInit {
   protected billingCycleOptions: string[] = Object.values(BillingCycle);
   protected groupOptions: string[] = Object.values(UserGroup);
   protected tutors: _Contact[] = [];
+  protected readonly studentDisplayName = studentDisplayName;
   // Name lookup for ALL staff (unfiltered) — `tutors` is the assignment
   // dropdown and excludes tutors not currently accepting students, which must
   // not hide their names on students already assigned to them.

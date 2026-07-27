@@ -7,7 +7,7 @@ import {
   MatDialogTitle,
 } from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
-import {FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
+import {FormBuilder, FormGroup, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatSelectModule} from '@angular/material/select';
@@ -25,6 +25,7 @@ import {perSessionCost, resolvePackageDef, round2} from '../utils/package-config
 import {countSlotsBeforeInMonth} from '../utils/proration';
 import {monthKey} from '../utils/billing-amount';
 import {availableMakeupMinutes} from '../utils/makeup';
+import {studentDisplayName} from '../utils/student-name';
 
 export type StudentDialogMode = 'create' | 'edit' | 'delete';
 
@@ -88,6 +89,7 @@ export class StudentDialog implements OnInit {
   // True while a backend request is in flight — swaps the button for a spinner
   // and blocks double-submit.
   protected submitting: boolean = false;
+  protected readonly studentDisplayName = studentDisplayName;
   protected hasError: boolean = false;
   protected errorMessage: string = '';
 
@@ -102,7 +104,8 @@ export class StudentDialog implements OnInit {
     this.studentForm = this.formBuilder.group({
       id: [student.id ?? null],
       contact_id: [student.contact_id ?? this.data.contactId],
-      name: [student.name ?? '', Validators.required],
+      // Optional: intake often starts before the family shares a name.
+      name: [student.name ?? ''],
       birthday: [this.toDate(student.birthday)],
       status: [student.status ?? Status.ONBOARDING],
       onboarding_complete: [student.onboarding_complete ?? false],
@@ -165,18 +168,14 @@ export class StudentDialog implements OnInit {
   }
 
   private create(): void {
-    const nameControl = this.studentForm.get('name')!;
-    if (nameControl.invalid) {
-      nameControl.markAsTouched();
-      return;
-    }
     this.submitting = true;
     this.hasError = false;
-    // A new student needs only a name; status/onboarding_complete are set here
-    // (and defaulted again server-side) so onboarding always starts clean.
+    // The name is optional at intake (families often haven't shared it yet);
+    // status/onboarding_complete are set here (and defaulted again
+    // server-side) so onboarding always starts clean.
     const student: Student = {
       contact_id: this.data.contactId,
-      name: nameControl.value,
+      name: (this.studentForm.get('name')!.value ?? '').trim(),
       status: Status.ONBOARDING,
       onboarding_complete: false,
       make_up_minutes: 0,
@@ -194,16 +193,12 @@ export class StudentDialog implements OnInit {
   }
 
   private update(): void {
-    const nameControl = this.studentForm.get('name')!;
-    if (nameControl.invalid) {
-      nameControl.markAsTouched();
-      return;
-    }
     this.submitting = true;
     this.hasError = false;
     const raw = this.studentForm.getRawValue();
     const student: Student = {
       ...raw,
+      name: (raw.name ?? '').trim(),
       birthday: this.toDateString(raw.birthday),
     };
     const packageChanged = this.applyMidMonthPackageChange(student);
