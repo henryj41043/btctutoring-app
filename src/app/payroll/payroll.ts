@@ -16,11 +16,13 @@ import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
 import {SessionsService} from '../services/sessions.service';
 import {ContactService} from '../services/contact.service';
+import {StudentService} from '../services/student.service';
 import {PayrollEntry} from '../models/payroll-entry.model';
 import {Contact} from '../models/contact.model';
 import {Session} from '../models/session.model';
+import {Student} from '../models/student.model';
 import {CurrencyPipe, DatePipe} from '@angular/common';
-import {catchError, EMPTY, forkJoin, map, Observable, of} from 'rxjs';
+import {catchError, forkJoin, map, Observable, of} from 'rxjs';
 import {Service} from '../enums/service.enum';
 import {Status} from '../enums/status.enum';
 import {SessionStatus} from '../enums/session-status.enum';
@@ -52,6 +54,7 @@ export class Payroll implements OnInit {
   private authService: AuthService = inject(AuthService);
   private sessionsService: SessionsService = inject(SessionsService);
   private contactService: ContactService = inject(ContactService);
+  private studentService: StudentService = inject(StudentService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
 
   // Setter-based ViewChilds: the table renders inside an @if, so these don't
@@ -124,7 +127,7 @@ export class Payroll implements OnInit {
         entry.hours_subtotal ?? 0,
         `${this.formatMoney(entry.pay_rate)}/hr`,
         this.formatMoney(entry.tutoring_compensation),
-        entry.planning_time ?? 0,
+        this.formatPlanningTime(entry),
         `${this.formatMoney(entry.planning_rate)}/hr`,
         this.formatMoney(entry.planning_compensation),
         this.formatMoney(entry.total_compensation),
@@ -146,6 +149,12 @@ export class Payroll implements OnInit {
     }
 
     doc.save(`payroll-${startStr}-${endStr}.pdf`);
+  }
+
+  /** Planning cell text: base hours plus any extra-planning credit, e.g. "2.33 +0.5". */
+  protected formatPlanningTime(entry: PayrollEntry): string {
+    const base = `${entry.planning_time ?? 0}`;
+    return entry.extra_planning_time ? `${base} +${entry.extra_planning_time}` : base;
   }
 
   /** Formats a numeric amount as USD with dollars and cents, e.g. $40.20 / $1,250.00. */
@@ -171,32 +180,46 @@ export class Payroll implements OnInit {
 
     if (this.authService.isAdmin()) {
       // Admins see payroll for every staff tutor (server-side staff filter).
-      this.contactService.getStaff()
-        .pipe(catchError(error => {
-          console.log(error);
+      // Students are fetched alongside for their extra-planning credits; a
+      // failed student fetch degrades to no extra credits, not a blank page.
+      forkJoin({
+        contacts: this.contactService.getStaff()
+          .pipe(catchError(error => { console.log(error); return of([] as Contact[]); })),
+        students: this.studentService.getStudents()
+          .pipe(catchError(error => { console.log(error); return of([] as Student[]); })),
+      }).subscribe(({contacts, students}) => {
+        const staff = contacts.filter(contact =>
+          contact.service === Service.HIRING && contact.status === Status.STAFF);
+        if (staff.length === 0) {
           this.finishLoading([]);
-          return EMPTY;
-        }))
-        .subscribe(contacts => {
-          const staff = contacts.filter(contact =>
-            contact.service === Service.HIRING && contact.status === Status.STAFF);
-          if (staff.length === 0) {
-            this.finishLoading([]);
-            return;
-          }
-          forkJoin(staff.map(contact => this.buildPayrollEntry$(contact)))
-            .subscribe(entries => this.finishLoading(entries));
-        });
+          return;
+        }
+        const extraByStudent = this.extraMinutesByStudent(students);
+        forkJoin(staff.map(contact => this.buildPayrollEntry$(contact, extraByStudent)))
+          .subscribe(entries => this.finishLoading(entries));
+      });
     } else {
       // Tutors only ever see their own payroll. Use the already-loaded contact
       // record (the backend blocks non-admins from listing all contacts).
       const self = this.authService.contact();
       if (self?.id) {
-        this.buildPayrollEntry$(self).subscribe(entry => this.finishLoading([entry]));
+        this.studentService.getStudentsByTutor(self.id)
+          .pipe(catchError(error => { console.log(error); return of([] as Student[]); }))
+          .subscribe(students => {
+            this.buildPayrollEntry$(self, this.extraMinutesByStudent(students))
+              .subscribe(entry => this.finishLoading([entry]));
+          });
       } else {
         this.finishLoading([]);
       }
     }
+  }
+
+  /** student id → extra planning minutes credited per counted session. */
+  private extraMinutesByStudent(students: Student[]): Map<string, number> {
+    return new Map(students
+      .filter(s => !!s.id && (s.extra_planning_minutes ?? 0) > 0)
+      .map(s => [s.id!, s.extra_planning_minutes!]));
   }
 
   private finishLoading(entries: PayrollEntry[]): void {
@@ -205,7 +228,7 @@ export class Payroll implements OnInit {
     this.cdr.markForCheck();
   }
 
-  private buildPayrollEntry$(contact: Contact): Observable<PayrollEntry> {
+  private buildPayrollEntry$(contact: Contact, extraByStudent: Map<string, number>): Observable<PayrollEntry> {
     // Only fetch the selected pay period (the calculateTime window) instead of
     // the tutor's entire session history.
     const range = {
@@ -223,16 +246,24 @@ export class Payroll implements OnInit {
         payrollEntry.planning_rate = 15;
         payrollEntry.administrative_time = 0;
         payrollEntry.tutoring_hours = 0;
+        let extraPlanningMinutes = 0;
         sessions.forEach(session => {
           if (session.type === SessionType.ADMIN) {
             payrollEntry.administrative_time = payrollEntry.administrative_time! + this.calculateTime(session.start_datetime!, session.end_datetime!);
           } else if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) {
-            payrollEntry.tutoring_hours = payrollEntry.tutoring_hours! + this.calculateTime(session.start_datetime!, session.end_datetime!);
+            const counted = this.calculateTime(session.start_datetime!, session.end_datetime!);
+            payrollEntry.tutoring_hours = payrollEntry.tutoring_hours! + counted;
+            // Per-session extra planning credit for tagged students — only for
+            // sessions inside the pay period (calculateTime returns 0 outside).
+            if (counted > 0 && session.student_id) {
+              extraPlanningMinutes += extraByStudent.get(session.student_id) ?? 0;
+            }
           }
         });
         payrollEntry.planning_time = Math.round((payrollEntry.tutoring_hours / 6) * 100) / 100;
+        payrollEntry.extra_planning_time = Math.round((extraPlanningMinutes / 60) * 100) / 100;
         payrollEntry.hours_subtotal = payrollEntry.tutoring_hours + payrollEntry.administrative_time;
-        payrollEntry.planning_compensation = Math.round((payrollEntry.planning_time * payrollEntry.planning_rate) * 100) / 100;
+        payrollEntry.planning_compensation = Math.round(((payrollEntry.planning_time + payrollEntry.extra_planning_time) * payrollEntry.planning_rate) * 100) / 100;
         payrollEntry.tutoring_compensation = Math.round((payrollEntry.hours_subtotal * payrollEntry.pay_rate!) * 100) / 100;
         payrollEntry.total_compensation = payrollEntry.planning_compensation + payrollEntry.tutoring_compensation;
         return payrollEntry;

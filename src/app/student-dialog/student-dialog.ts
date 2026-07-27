@@ -110,6 +110,7 @@ export class StudentDialog implements OnInit {
       package: [student.package ?? ''],
       scholarship: [student.scholarship ?? false],
       make_up_never_expire: [student.make_up_never_expire ?? false],
+      extra_planning_minutes: [student.extra_planning_minutes ?? null],
       custom_monthly_cost: [student.custom_monthly_cost ?? null],
       custom_sessions_per_week: [student.custom_sessions_per_week ?? null],
       custom_session_length_min: [student.custom_session_length_min ?? null],

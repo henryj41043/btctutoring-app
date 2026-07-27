@@ -3,6 +3,8 @@ export class PayrollEntry {
   tutoring_hours?: number;
   administrative_time?: number;
   planning_time?: number;
+  /** Extra planning hours from per-student extra_planning_minutes credits. */
+  extra_planning_time?: number;
   hours_subtotal?: number;
   pay_rate?: number;
   planning_rate?: number;
