@@ -13,6 +13,7 @@ import {StudentService} from '../services/student.service';
 import {OnboardingRow} from '../models/onboarding-row.model';
 import {Student} from '../models/student.model';
 import {Status} from '../enums/status.enum';
+import {studentDisplayName} from '../utils/student-name';
 
 /**
  * Admin-only Onboarding page: every student in Onboarding status, joined to
@@ -38,6 +39,7 @@ import {Status} from '../enums/status.enum';
   standalone: true,
 })
 export class Onboarding implements OnInit {
+  protected readonly studentDisplayName = studentDisplayName;
   private studentService: StudentService = inject(StudentService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private router: Router = inject(Router);

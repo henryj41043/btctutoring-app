@@ -16,6 +16,7 @@ import {UserGroup} from '../enums/user-group.enum';
 import {Status} from '../enums/status.enum';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 import {availableMakeupMinutes} from '../utils/makeup';
+import {studentDisplayName} from '../utils/student-name';
 
 @Component({
   selector: 'app-student-roster',
@@ -51,6 +52,7 @@ export class StudentRoster implements OnInit {
 
   protected rosterColumns: string[] = ['contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship'];
   protected dataSource = new MatTableDataSource<Student>([]);
+  protected readonly studentDisplayName = studentDisplayName;
   protected loading: boolean = true;
 
   ngOnInit(): void {

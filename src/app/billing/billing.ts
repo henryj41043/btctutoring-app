@@ -29,6 +29,7 @@ import {Status} from '../enums/status.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
+import {studentDisplayName} from '../utils/student-name';
 
 @Component({
   selector: 'app-billing',
@@ -206,7 +207,7 @@ export class Billing implements OnInit {
       const entry: BillingEntry = {
         contact_id: contactId,
         name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
-        packages: contactStudents.map(s => `${s.name}: ${s.package}`).join('; '),
+        packages: contactStudents.map(s => `${studentDisplayName(s)}: ${s.package}`).join('; '),
         cycle,
         due_first: dueFirst,
         due_fifteenth: dueFifteenth,

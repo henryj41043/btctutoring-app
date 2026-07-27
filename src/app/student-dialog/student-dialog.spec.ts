@@ -99,12 +99,24 @@ describe('StudentDialog', () => {
       expect((c as unknown as { tutors: unknown[] }).tutors).toEqual([]);
     });
 
-    it('does nothing when the name is empty', () => {
+    it('creates a nameless student (intake before the name is known)', () => {
+      studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
       const c = build({ mode: 'create' });
       c.save();
-      expect(studentService.createStudent).not.toHaveBeenCalled();
-      expect(dialogRef.close).not.toHaveBeenCalled();
-      expect(form(c).get('name')?.touched).toBe(true);
+      expect(studentService.createStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ name: '', status: Status.ONBOARDING }),
+      );
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('trims a whitespace-only name to empty on create', () => {
+      studentService.createStudent.mockReturnValue(of({ id: 's-new' }));
+      const c = build({ mode: 'create' });
+      form(c).get('name')?.setValue('   ');
+      c.save();
+      expect(studentService.createStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ name: '' }),
+      );
     });
 
     it('posts a name-only onboarding student and closes', () => {
@@ -254,11 +266,28 @@ describe('StudentDialog', () => {
       expect(payload.birthday).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
-    it('does nothing when the name is cleared', () => {
+    it('persists a tutor assigned while still onboarding (locked)', () => {
+      studentService.updateStudent.mockReturnValue(of(richStudent()));
+      const c = build({
+        mode: 'edit',
+        student: richStudent({ status: Status.ONBOARDING, onboarding_complete: false }),
+      });
+      expect((c as unknown as { locked: boolean }).locked).toBe(true);
+      form(c).get('assigned_tutor_id')?.setValue('t-9');
+      c.save();
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ assigned_tutor_id: 't-9' }),
+      );
+    });
+
+    it('saves a cleared name as empty (fallback renders in the UI)', () => {
+      studentService.updateStudent.mockReturnValue(of(richStudent()));
       const c = build({ mode: 'edit', student: richStudent() });
       form(c).get('name')?.setValue('');
       c.save();
-      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ name: '' }),
+      );
     });
 
     it('clears submitting and surfaces an error on failure', () => {

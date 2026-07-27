@@ -11,7 +11,7 @@
 @if (mode === 'delete') {
   <mat-dialog-content>
     <p>
-      Delete <strong>{{ data.student?.name || 'this student' }}</strong>? This
+      Delete <strong>{{ studentDisplayName(data.student) }}</strong>? This
       permanently removes the student and cannot be undone.
     </p>
     @if (hasError) {
@@ -29,11 +29,8 @@
 } @else {
   <mat-dialog-content class="student-dialog-content" [formGroup]="studentForm">
     <mat-form-field>
-      <mat-label>Name</mat-label>
+      <mat-label>Name (optional — add when known)</mat-label>
       <input matInput formControlName="name">
-      @if (studentForm.get('name')?.touched && studentForm.get('name')?.hasError('required')) {
-        <mat-error>Name is required</mat-error>
-      }
     </mat-form-field>
 
     @if (mode === 'edit') {
@@ -51,10 +48,20 @@
         </mat-checkbox>
         @if (locked) {
           <p class="onboarding-hint">
-            Mark onboarding complete to set status, package, assigned tutor, and schedule.
+            Mark onboarding complete to set status, package, and schedule.
           </p>
         }
       }
+
+      <!-- Tutors join during onboarding (trials), so assignment is never locked. -->
+      <mat-form-field>
+        <mat-label>Assign Tutor</mat-label>
+        <mat-select formControlName="assigned_tutor_id">
+          @for (tutorOption of tutors; track tutorOption) {
+            <mat-option [value]="tutorOption.id">{{ tutorOption.first_name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
 
       @if (!locked) {
         <mat-form-field>
@@ -62,14 +69,6 @@
           <mat-select formControlName="status">
             @for (statusOption of statusOptions; track statusOption) {
               <mat-option [value]="statusOption">{{ statusOption }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Assign Tutor</mat-label>
-          <mat-select formControlName="assigned_tutor_id">
-            @for (tutorOption of tutors; track tutorOption) {
-              <mat-option [value]="tutorOption.id">{{ tutorOption.first_name }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
