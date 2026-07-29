@@ -1,4 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, inject, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
@@ -17,7 +18,7 @@ import {AuthService} from '../services/auth.service';
 import {Session} from '../models/session.model';
 import {SessionType} from '../enums/session-type.enum';
 import {UserGroup} from '../enums/user-group.enum';
-import {catchError, Observable} from 'rxjs';
+import {catchError, EMPTY} from 'rxjs';
 import {SessionDialog} from '../session-dialog/session-dialog';
 import {Response} from '../models/response.model';
 import {DatePipe} from '@angular/common';
@@ -48,6 +49,8 @@ export class SessionsTable implements OnInit {
   readonly sessionDialog: MatDialog = inject(MatDialog);
   sessionsService: SessionsService = inject(SessionsService);
   authService: AuthService = inject(AuthService);
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
   // once loading finishes.
@@ -122,8 +125,10 @@ export class SessionsTable implements OnInit {
         console.log(error);
         this.loading = false;
         this.cdr.markForCheck();
-        return new Observable();
-      })
+        // EMPTY completes (a bare Observable never would).
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(response => {
       this.dataSource.data = (response as Session[]).filter(s => s.type !== SessionType.ADMIN);
       this.loading = false;

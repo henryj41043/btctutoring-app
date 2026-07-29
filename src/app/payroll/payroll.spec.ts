@@ -48,7 +48,7 @@ describe('Payroll', () => {
     isAdmin: () => isAdmin,
     contact: () => self,
   };
-  const sessionsService = { getSessionsByTutor: jest.fn() };
+  const sessionsService = { getSessionsByTutor: jest.fn(), getAllSessions: jest.fn() };
   const contactService = { getContacts: jest.fn(), getStaff: jest.fn() };
   const studentService = { getStudents: jest.fn(), getStudentsByTutor: jest.fn() };
 
@@ -76,6 +76,7 @@ describe('Payroll', () => {
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     studentService.getStudents.mockReturnValue(of([]));
     studentService.getStudentsByTutor.mockReturnValue(of([]));
+    sessionsService.getAllSessions.mockReturnValue(of([]));
   });
 
   it('computes a tutor payroll entry from completed and admin sessions', () => {
@@ -276,11 +277,47 @@ describe('Payroll', () => {
           staffContact({ id: 'c-2', service: Service.TUTORING }), // not staff
         ]),
       );
-      sessionsService.getSessionsByTutor.mockReturnValue(of([]));
-
       const p = build();
       p.onDateChange(new Date(2026, 5, 10));
       expect(data(p)).toHaveLength(1);
+      // One range-scoped fetch for the whole staff - never per tutor.
+      expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+      expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
+    });
+
+    it('groups the single sessions fetch per tutor', () => {
+      contactService.getStaff.mockReturnValue(
+        of([staffContact({ id: 'c-1' }), staffContact({ id: 'c-2' })]),
+      );
+      sessionsService.getAllSessions.mockReturnValue(
+        of([
+          {
+            tutor_id: 'c-1',
+            type: SessionType.TUTORING,
+            status: SessionStatus.COMPLETED,
+            start_datetime: '2026-06-06T09:00:00',
+            end_datetime: '2026-06-06T11:00:00',
+          },
+          {
+            tutor_id: 'c-2',
+            type: SessionType.TUTORING,
+            status: SessionStatus.COMPLETED,
+            start_datetime: '2026-06-06T09:00:00',
+            end_datetime: '2026-06-06T10:00:00',
+          },
+          {
+            // No tutor id -> attributed to nobody.
+            type: SessionType.TUTORING,
+            status: SessionStatus.COMPLETED,
+            start_datetime: '2026-06-06T09:00:00',
+            end_datetime: '2026-06-06T10:00:00',
+          },
+        ] as Session[]),
+      );
+
+      const p = build();
+      p.onDateChange(new Date(2026, 5, 10));
+      expect(data(p).map(e => e.tutoring_hours)).toEqual([2, 1]);
     });
 
     it('shows nothing when there are no staff tutors', () => {

@@ -1,4 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DatePipe} from '@angular/common';
 import {MatButtonModule} from '@angular/material/button';
 import {
@@ -43,6 +44,8 @@ export class StudentSessionsDialog implements OnInit {
   private sessionsService: SessionsService = inject(SessionsService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
   readonly student = inject<Student>(MAT_DIALOG_DATA);
   protected readonly studentDisplayName = studentDisplayName;
 
@@ -80,6 +83,7 @@ export class StudentSessionsDialog implements OnInit {
       : this.sessionsService.getSessions(this.authService.contact().id!, this.student.id!);
 
     source$.pipe(
+      takeUntilDestroyed(this.destroyRef),
       catchError(error => {
         console.log(error);
         this.loading = false;

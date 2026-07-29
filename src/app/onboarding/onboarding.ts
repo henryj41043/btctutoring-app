@@ -1,4 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DatePipe} from '@angular/common';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
@@ -44,6 +45,8 @@ export class Onboarding implements OnInit {
   protected readonly studentDisplayName = studentDisplayName;
   private studentService: StudentService = inject(StudentService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
   private router: Router = inject(Router);
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
@@ -68,6 +71,7 @@ export class Onboarding implements OnInit {
 
   ngOnInit(): void {
     this.studentService.getOnboardingStudents().pipe(
+      takeUntilDestroyed(this.destroyRef),
       catchError(error => {
         console.log(error);
         this.loading = false;

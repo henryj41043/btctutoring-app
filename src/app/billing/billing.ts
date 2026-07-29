@@ -1,4 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {MatButtonModule} from '@angular/material/button';
@@ -61,6 +62,8 @@ export class Billing implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private billingService: BillingService = inject(BillingService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
 
   @ViewChild(MatSort) set matSort(sort: MatSort) {
     if (sort) { this.dataSource.sort = sort; }
@@ -130,7 +133,7 @@ export class Billing implements OnInit {
       records: this.billingService
         .getBillingRecordsByMonth(this.monthKeyOf(date))
         .pipe(catchError(() => of([] as BillingRecord[]))),
-    }).subscribe(({contacts, students, records}) => {
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({contacts, students, records}) => {
       this.finishLoading(this.buildEntries(date, contacts, students, records));
     });
   }

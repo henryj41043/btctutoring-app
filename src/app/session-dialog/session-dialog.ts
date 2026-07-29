@@ -1,4 +1,5 @@
-import {Component, inject, OnInit} from '@angular/core';
+import {DestroyRef, Component, inject, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {
@@ -105,6 +106,8 @@ export class SessionDialog implements OnInit {
   studentService: StudentService = inject(StudentService);
   authService: AuthService = inject(AuthService);
   scheduleService: ScheduleService = inject(ScheduleService);
+  // Cancels the dropdown loads if the dialog closes before they land.
+  private destroyRef: DestroyRef = inject(DestroyRef);
 
   get selectedStudentObj(): Student | undefined {
     return this.students.find(s => s.id === this.selectedStudent);
@@ -371,7 +374,7 @@ export class SessionDialog implements OnInit {
           this.errorMessage = 'Update session failed';
           this.hasError = true;
           this.submitting = false;
-          return new Observable();
+          return EMPTY;
         })
       ).subscribe(response => {
         this.hasError = false;
@@ -385,7 +388,7 @@ export class SessionDialog implements OnInit {
           this.errorMessage = 'Failed to update student minutes';
           this.hasError = true;
           this.submitting = false;
-          return new Observable();
+          return EMPTY;
         })
       ).subscribe(() => doUpdate());
     } else {
@@ -455,7 +458,7 @@ export class SessionDialog implements OnInit {
           this.errorMessage = 'Create session failed';
           this.hasError = true;
           this.submitting = false;
-          return new Observable();
+          return EMPTY;
         })
       ).subscribe(response => {
         this.hasError = false;
@@ -571,7 +574,7 @@ export class SessionDialog implements OnInit {
             this.errorMessage = 'Update session failed';
             this.hasError = true;
             this.submitting = false;
-            return new Observable();
+            return EMPTY;
           })
         ).subscribe(response => {
           this.hasError = false;
@@ -603,7 +606,7 @@ export class SessionDialog implements OnInit {
         this.errorMessage = 'Delete session failed';
         this.hasError = true;
         this.submitting = false;
-        return new Observable();
+        return EMPTY;
       })
     ).subscribe(response => {
       this.hasError = false;
@@ -670,7 +673,7 @@ export class SessionDialog implements OnInit {
       });
       this.submitting = true;
       forkJoin(updates.map(u => this.sessionsService.updateSession(u))).pipe(
-        catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; this.submitting = false; return new Observable(); })
+        catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; this.submitting = false; return EMPTY; })
       ).subscribe(() => {
         this.hasError = false;
         this.dialogRef.close({ updated: updates.length });
@@ -698,7 +701,7 @@ export class SessionDialog implements OnInit {
         return;
       }
       forkJoin(targets.map(s => this.sessionsService.deleteSession(s.id!))).pipe(
-        catchError(err => { this.errorMessage = 'Delete session series failed'; this.hasError = true; this.submitting = false; return new Observable(); })
+        catchError(err => { this.errorMessage = 'Delete session series failed'; this.hasError = true; this.submitting = false; return EMPTY; })
       ).subscribe(() => {
         this.hasError = false;
         this.dialogRef.close({ deleted: targets.length });
@@ -738,7 +741,10 @@ export class SessionDialog implements OnInit {
 
   private getTutors() {
     this.contactService.getStaff()
-      .pipe(catchError(error => { console.log(error); return EMPTY; }))
+      .pipe(
+        catchError(error => { console.log(error); return EMPTY; }),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe(contacts => {
         this.tutors = contacts.filter(c => c.status === ContactStatus.STAFF && c.currently_accepting_students && c.service === Service.HIRING);
       });
@@ -752,7 +758,8 @@ export class SessionDialog implements OnInit {
 
   private getStudents() {
     this.studentService.getStudents().pipe(
-      catchError(error => { console.log(error); return EMPTY; })
+      catchError(error => { console.log(error); return EMPTY; }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(students => {
       this.students = students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT);
       // Pre-filter for edit mode where tutor is already selected when students load

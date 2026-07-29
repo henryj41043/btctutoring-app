@@ -1,4 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -44,6 +45,8 @@ export class ContactsTable implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
   private router: Router = inject(Router);
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
@@ -86,6 +89,7 @@ export class ContactsTable implements OnInit {
     // arrives synchronously so revisits skip the spinner; the fresh response
     // follows and updates the rows in place.
     this.contactService.getContactsSummary().pipe(
+      takeUntilDestroyed(this.destroyRef),
       catchError(error => {
         console.log(error);
         this.loading = false;
