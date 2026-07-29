@@ -14,9 +14,11 @@ export function AuthInterceptor(
 
   if (accessToken) {
     const updatedRequest = request.clone({
+      // set (not append): a retried/re-cloned request must not accumulate
+      // duplicate auth headers.
       headers: request.headers
-        .append('Authorization', 'Bearer ' + accessToken)
-        .append('X-ID-Token', idToken? idToken : '')
+        .set('Authorization', 'Bearer ' + accessToken)
+        .set('X-ID-Token', idToken? idToken : '')
     });
     return next(updatedRequest);
   } else {

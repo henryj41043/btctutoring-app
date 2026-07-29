@@ -1,4 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DatePipe} from '@angular/common';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
@@ -48,6 +49,8 @@ export class Reminders implements OnInit {
   private reminderService: ReminderService = inject(ReminderService);
   private contactService: ContactService = inject(ContactService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
   private router: Router = inject(Router);
 
@@ -85,9 +88,10 @@ export class Reminders implements OnInit {
     forkJoin({
       reminders: this.reminderService.getReminders()
         .pipe(catchError(error => { console.log(error); return of([] as Reminder[]); })),
-      contacts: this.contactService.getContacts()
+      // Lean cached summary - recipient/contact names never need full records.
+      contacts: this.contactService.getContactsSummary()
         .pipe(catchError(error => { console.log(error); return of([] as Contact[]); })),
-    }).subscribe(({reminders, contacts}) => {
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({reminders, contacts}) => {
       this.contacts = contacts;
       this.admins = contacts.filter(c => c.user_group === UserGroup.ADMINS);
       this.adminNamesById = new Map(this.admins

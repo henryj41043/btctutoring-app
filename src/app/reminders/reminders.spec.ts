@@ -29,7 +29,7 @@ const tutorContact = { id: 't-1', first_name: 'Tess', last_name: 'Coach', user_g
 describe('Reminders', () => {
   let afterClosed: unknown;
   const reminderService = { getReminders: jest.fn() };
-  const contactService = { getContacts: jest.fn() };
+  const contactService = { getContactsSummary: jest.fn() };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
   const router = { navigate: jest.fn() };
 
@@ -55,7 +55,7 @@ describe('Reminders', () => {
     dialog.open.mockClear();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     reminderService.getReminders.mockReturnValue(of([reminder()]));
-    contactService.getContacts.mockReturnValue(of([adminContact, tutorContact]));
+    contactService.getContactsSummary.mockReturnValue(of([adminContact, tutorContact]));
   });
 
   it('loads reminders and defaults to upcoming only', () => {
@@ -108,7 +108,7 @@ describe('Reminders', () => {
 
   it('swallows load errors and renders an empty table', () => {
     reminderService.getReminders.mockReturnValue(throwError(() => new Error('boom')));
-    contactService.getContacts.mockReturnValue(throwError(() => new Error('boom')));
+    contactService.getContactsSummary.mockReturnValue(throwError(() => new Error('boom')));
     const c = build();
     c.ngOnInit();
     expect(data(c)).toEqual([]);
@@ -152,7 +152,7 @@ describe('Reminders', () => {
   });
 
   it('handles contacts without ids and reminders without dates or recipients', () => {
-    contactService.getContacts.mockReturnValue(
+    contactService.getContactsSummary.mockReturnValue(
       of([adminContact, { first_name: 'NoId', user_group: 'Admins' }]),
     );
     reminderService.getReminders.mockReturnValue(

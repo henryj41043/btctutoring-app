@@ -1,6 +1,7 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, Input, OnInit, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, inject, Input, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ContactService} from '../services/contact.service';
-import {catchError, EMPTY, of, retry, switchMap} from 'rxjs';
+import {catchError, EMPTY, of, switchMap} from 'rxjs';
 import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
 import {AvailabilityBlock} from '../models/availability-block.model';
@@ -84,6 +85,8 @@ export class Contact implements OnInit {
   protected authService: AuthService = inject(AuthService);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  // Cancels in-flight HTTP reads when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
   private scheduleService: ScheduleService = inject(ScheduleService);
   private billingService: BillingService = inject(BillingService);
@@ -185,7 +188,6 @@ export class Contact implements OnInit {
     this.loadStudents();
     this.loadNotes();
     this.getTutors();
-    this.loadRosterStudents();
   }
 
   private loadRosterStudents() {
@@ -193,7 +195,8 @@ export class Contact implements OnInit {
       catchError(error => {
         console.log(error);
         return EMPTY;
-      })
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(students => {
       // The tutor's roster is their CURRENT roster — previously-assigned
       // students who are no longer active stay off it.
@@ -205,11 +208,11 @@ export class Contact implements OnInit {
   private getTutors() {
     this.contactService.getStaff()
       .pipe(
-        retry(2),
         catchError(error => {
           console.log(error);
           return EMPTY;
-        })
+        }),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(contacts => {
         contacts.forEach(c => {
@@ -242,7 +245,8 @@ export class Contact implements OnInit {
         catchError(error => {
           console.log(error);
           return EMPTY;
-        })
+        }),
+        takeUntilDestroyed(this.destroyRef),
       ).subscribe(contacts => {
         if (contacts[0]) {
           this.staffById.set(id, contacts[0]);
@@ -302,12 +306,20 @@ export class Contact implements OnInit {
     this.contactService.getContact(this.id).pipe(
       catchError(error => {
         console.log(error);
+        this.contactLoading = false;
+        this.cdr.markForCheck();
         return EMPTY;
-      })
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(contacts => {
       this.loadedContact = contacts[0];
       this.buildContactForm(contacts[0]);
       this.contactLoading = false;
+      // Only staff have a tutor roster - a parent page was previously firing
+      // this (always-empty) fetch too.
+      if (contacts[0]?.service === Service.HIRING) {
+        this.loadRosterStudents();
+      }
     });
   }
 
@@ -370,29 +382,19 @@ export class Contact implements OnInit {
     this.cdr.markForCheck();
   }
 
-  private loadStudents() {
+  /** Loads (and re-loads after a create/edit/delete/schedule change) the students list. */
+  private loadStudents(then?: () => void) {
     this.studentService.getStudentsByContact(this.id).pipe(
       catchError(error => {
         console.log(error);
+        this.studentsLoading = false;
+        this.cdr.markForCheck();
         return EMPTY;
-      })
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(students => {
       this.students = students;
       this.studentsLoading = false;
-      this.resolveMissingTutorNames();
-      this.cdr.markForCheck();
-    });
-  }
-
-  /** Re-fetches the students list after a create/edit/delete/schedule change. */
-  private reloadStudents(then?: () => void) {
-    this.studentService.getStudentsByContact(this.id).pipe(
-      catchError(error => {
-        console.log(error);
-        return EMPTY;
-      })
-    ).subscribe(students => {
-      this.students = students;
       this.resolveMissingTutorNames();
       this.cdr.markForCheck();
       then?.();
@@ -403,8 +405,11 @@ export class Contact implements OnInit {
     this.noteService.getNotesByRecipient(this.id).pipe(
       catchError(error => {
         console.log(error);
+        this.notesLoading = false;
+        this.cdr.markForCheck();
         return EMPTY;
-      })
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(notes => {
       this.buildNotesFormArray(notes);
       this.notesLoading = false;
@@ -532,7 +537,7 @@ export class Contact implements OnInit {
       });
       ref.afterClosed().subscribe((updated?: Student) => {
         if (updated) {
-          this.reloadStudents(recomputeBilling ? () => this.recomputeCurrentPeriodBilling() : undefined);
+          this.loadStudents(recomputeBilling ? () => this.recomputeCurrentPeriodBilling() : undefined);
         }
       });
     });
@@ -642,7 +647,7 @@ export class Contact implements OnInit {
         return;
       }
       const openScheduleFor = typeof result === 'object' ? result.openScheduleForStudentId : undefined;
-      this.reloadStudents(() => {
+      this.loadStudents(() => {
         if (openScheduleFor) {
           const changed = this.students.find(s => s.id === openScheduleFor);
           if (changed) {

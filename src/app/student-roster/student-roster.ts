@@ -1,4 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
@@ -40,6 +41,8 @@ export class StudentRoster implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
@@ -77,7 +80,8 @@ export class StudentRoster implements OnInit {
         this.loading = false;
         this.cdr.markForCheck();
         return EMPTY;
-      })
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(students => {
       // The roster is the ACTIVE roster (other statuses live on the contact
       // page), listed by parent name per the client's request.

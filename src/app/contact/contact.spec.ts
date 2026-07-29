@@ -157,6 +157,25 @@ describe('Contact', () => {
     // Notes sorted newest-first.
     expect(notes(c).at(0).value.id).toBe('n-2');
     expect((c as unknown as { tutors: unknown[] }).tutors).toHaveLength(1);
+    // A parent (tutoring) contact never fires the tutor-roster fetch.
+    expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+  });
+
+  it('loads the tutor roster only for a staff (hiring) contact', () => {
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ service: Service.HIRING })]),
+    );
+    studentService.getStudentsByTutor.mockReturnValue(
+      of([
+        { id: 's-9', status: StudentStatus.ACTIVE_STUDENT },
+        { id: 's-10', status: StudentStatus.PAST_STUDENT }, // off the current roster
+      ]),
+    );
+
+    const c = build();
+    c.ngOnInit();
+
+    expect(studentService.getStudentsByTutor).toHaveBeenCalledWith('c-1');
     expect(
       (c as unknown as { rosterDataSource: { data: unknown[] } }).rosterDataSource.data,
     ).toHaveLength(1);
@@ -985,25 +1004,19 @@ describe('Contact', () => {
       expect(c.getTutorName('t-full')).toBe('Full Roster');
     });
 
-    it('retries a transient staff load failure', () => {
+    it('degrades to the em-dash fallback after a single failed staff load (no retries)', () => {
       let calls = 0;
       contactService.getStaff.mockReturnValue(
         defer(() => {
           calls += 1;
-          return calls < 3
-            ? throwError(() => new Error('flaky'))
-            : of([
-                {
-                  id: 't-1', first_name: 'Tess', last_name: 'Coach',
-                  status: ContactStatus.STAFF, currently_accepting_students: true, service: Service.HIRING,
-                },
-              ]);
+          return throwError(() => new Error('flaky'));
         }),
       );
       const c = build();
       c.ngOnInit();
-      expect(calls).toBe(3);
-      expect(c.getTutorName('t-1')).toBe('Tess Coach');
+      // Retrying a slow full-staff fetch multiplied backend load - one attempt only.
+      expect(calls).toBe(1);
+      expect(c.getTutorName('t-1')).toBe('—');
     });
 
     it('fetches a former-staff assigned tutor by id when missing from the staff list', () => {

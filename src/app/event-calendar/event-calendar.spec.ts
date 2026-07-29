@@ -23,7 +23,7 @@ describe('EventCalendar', () => {
     getSessionsByTutor: jest.fn(),
   };
   const reminderService = { getReminders: jest.fn() };
-  const contactService = { getContacts: jest.fn() };
+  const contactService = { getContactsSummary: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
     user: () => ({ groups }),
@@ -54,7 +54,7 @@ describe('EventCalendar', () => {
     afterClosed = {} as Session;
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     reminderService.getReminders.mockReturnValue(of([]));
-    contactService.getContacts.mockReturnValue(of([]));
+    contactService.getContactsSummary.mockReturnValue(of([]));
   });
 
   it('themes the body and loads admin sessions on init', () => {
@@ -372,7 +372,7 @@ describe('EventCalendar', () => {
     it('swallows reminder and contact load errors', () => {
       sessionsService.getAllSessions.mockReturnValue(of([]));
       reminderService.getReminders.mockReturnValue(throwError(() => new Error('boom')));
-      contactService.getContacts.mockReturnValue(throwError(() => new Error('boom')));
+      contactService.getContactsSummary.mockReturnValue(throwError(() => new Error('boom')));
       const c = build();
       expect(() => c.ngOnInit()).not.toThrow();
       expect(c.events.some(e => c.isReminderEvent(e))).toBe(false);

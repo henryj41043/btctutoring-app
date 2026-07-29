@@ -5,6 +5,7 @@ import {
   Inject,
   inject,
   LOCALE_ID,
+  DestroyRef,
   OnInit,
   Renderer2
 } from '@angular/core';
@@ -39,7 +40,8 @@ import {ReminderDialog, ReminderDialogMode} from '../reminder-dialog/reminder-di
 import {ContactService} from '../services/contact.service';
 import {Contact} from '../models/contact.model';
 import {AuthService} from '../services/auth.service';
-import {catchError, Observable, Subject} from 'rxjs';
+import {catchError, EMPTY, Subject} from 'rxjs';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -164,6 +166,9 @@ export class EventCalendar implements OnInit {
   // fetched-month cache is untouched; clearing the box shows everything.
   protected filterText: string = '';
 
+  // Cancels in-flight HTTP work when the user navigates away.
+  private destroyRef: DestroyRef = inject(DestroyRef);
+
   constructor(
     private renderer: Renderer2,
     @Inject(DOCUMENT) private document: Document,
@@ -242,8 +247,10 @@ export class EventCalendar implements OnInit {
         console.log(error);
         this.loading = false;
         this.cdr.markForCheck();
-        return new Observable();
-      })
+        // EMPTY completes (a bare Observable never would); prior months stay cached.
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(response => {
       this.loading = false;
       const sessions: Session[] = response as Session[];
@@ -282,18 +289,22 @@ export class EventCalendar implements OnInit {
     this.reminderService.getReminders().pipe(
       catchError(error => {
         console.log(error);
-        return new Observable<never>();
-      })
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(reminders => {
       this.reminders = reminders as Reminder[];
       this.rebuildEvents();
       this.cdr.markForCheck();
     });
-    this.contactService.getContacts().pipe(
+    // Lean cached summary (id/name/email/user_group) - the dialog and admin
+    // filter never need full contact records.
+    this.contactService.getContactsSummary().pipe(
       catchError(error => {
         console.log(error);
-        return new Observable<never>();
-      })
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe(contacts => {
       this.contacts = contacts as Contact[];
       this.admins = (contacts as Contact[]).filter(c => c.user_group === UserGroup.ADMINS);

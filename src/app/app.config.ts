@@ -4,12 +4,13 @@ import {provideRouter, withComponentInputBinding} from '@angular/router';
 import { routes } from './app.routes';
 import {provideHttpClient, withInterceptors} from '@angular/common/http';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
+import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes, withComponentInputBinding()),
-    provideHttpClient(withInterceptors([AuthInterceptor])),
+    provideHttpClient(withInterceptors([AuthInterceptor, TimeoutInterceptor])),
   ]
 };
