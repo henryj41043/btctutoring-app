@@ -16,6 +16,7 @@ import { SessionType } from '../enums/session-type.enum';
 
 describe('EventCalendar', () => {
   let isAdmin: boolean;
+  let contactId: string | undefined;
   let groups: string[];
   let afterClosed: unknown;
   const sessionsService = {
@@ -27,7 +28,7 @@ describe('EventCalendar', () => {
   const authService = {
     isAdmin: () => isAdmin,
     user: () => ({ groups }),
-    contact: () => ({ id: 'contact-1' }),
+    contact: () => ({ id: contactId }),
   };
   const dialog = {
     open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })),
@@ -50,6 +51,7 @@ describe('EventCalendar', () => {
 
   beforeEach(() => {
     isAdmin = true;
+    contactId = 'contact-1';
     groups = ['Admins'];
     afterClosed = {} as Session;
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -538,5 +540,14 @@ describe('EventCalendar', () => {
       // No-call-no-shows still consume minutes — red, matching tutoring.
       expect(colorFor({ type: SessionType.MAKE_UP, status: SessionStatus.NO_CALL_NO_SHOW })).toBe('#ad2121');
     });
+  });
+
+  it('does not query sessions when a tutor has no resolved contact id', () => {
+    isAdmin = false;
+    contactId = undefined;
+    const component = build();
+    component.ngOnInit();
+    expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
+    expect((component as never as {loading: boolean}).loading).toBe(false);
   });
 });

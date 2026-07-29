@@ -195,6 +195,16 @@ describe('Contact', () => {
     expect(form(c).controls['user_group'].disabled).toBe(true);
   });
 
+  it('skips the family-students load for a non-admin and clears its spinner', () => {
+    isAdmin = false;
+    const c = build();
+    c.ngOnInit();
+    expect(studentService.getStudentsByContact).not.toHaveBeenCalled();
+    expect((c as unknown as { studentsLoading: boolean }).studentsLoading).toBe(
+      false,
+    );
+  });
+
   it('swallows a contact load error', () => {
     contactService.getContact.mockReturnValue(throwError(() => new Error('x')));
     const c = build();

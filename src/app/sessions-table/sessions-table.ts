@@ -104,13 +104,14 @@ export class SessionsTable implements OnInit {
     this.loading = true;
     this.cdr.markForCheck();
     const isAdmin = this.authService.isAdmin();
-    const isTutor = this.authService.user().groups.includes(UserGroup.TUTORS);
+    const isTutor = (this.authService.user().groups ?? []).includes(UserGroup.TUTORS);
     const range = this.selectedMonthRange();
+    const tutorId = this.authService.contact().id;
 
     const source$ = isAdmin
       ? this.sessionsService.getAllSessions(range)
-      : isTutor
-        ? this.sessionsService.getSessionsByTutor(this.authService.contact().id!, range)
+      : isTutor && tutorId
+        ? this.sessionsService.getSessionsByTutor(tutorId, range)
         : null;
 
     if (!source$) {

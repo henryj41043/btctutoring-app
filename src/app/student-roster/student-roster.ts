@@ -70,9 +70,16 @@ export class StudentRoster implements OnInit {
     };
 
     const isAdmin = this.authService.isAdmin();
+    const tutorId = this.authService.contact().id;
+    if (!isAdmin && !tutorId) {
+      // No resolved contact id — never query with 'undefined'.
+      this.loading = false;
+      this.cdr.markForCheck();
+      return;
+    }
     const source$ = isAdmin
       ? this.studentService.getStudents(true)
-      : this.studentService.getStudentsByTutor(this.authService.contact().id!, true);
+      : this.studentService.getStudentsByTutor(tutorId!, true);
 
     source$.pipe(
       catchError(error => {

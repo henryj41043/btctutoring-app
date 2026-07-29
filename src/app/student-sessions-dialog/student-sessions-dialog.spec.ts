@@ -13,13 +13,14 @@ const student = { id: 'stu-1', name: 'Pat' } as Student;
 
 describe('StudentSessionsDialog', () => {
   let isAdmin: boolean;
+  let contactId: string | undefined;
   const sessionsService = {
     getSessionsByStudent: jest.fn(),
     getSessions: jest.fn(),
   };
   const authService = {
     isAdmin: () => isAdmin,
-    contact: () => ({ id: 'contact-1' }),
+    contact: () => ({ id: contactId }),
   };
 
   const build = (): StudentSessionsDialog => {
@@ -42,6 +43,7 @@ describe('StudentSessionsDialog', () => {
 
   beforeEach(() => {
     isAdmin = true;
+    contactId = 'contact-1';
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
   });
 
@@ -109,5 +111,14 @@ describe('StudentSessionsDialog', () => {
     (component as unknown as { paginator: MatPaginator | undefined }).paginator = undefined;
     expect(ds(component).sort).toBe(sort);
     expect(ds(component).paginator).toBe(paginator);
+  });
+
+  it('does not query when a tutor has no resolved contact id', () => {
+    isAdmin = false;
+    contactId = undefined;
+    const component = build();
+    component.ngOnInit();
+    expect(sessionsService.getSessions).not.toHaveBeenCalled();
+    expect((component as never as {loading: boolean}).loading).toBe(false);
   });
 });

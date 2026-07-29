@@ -206,7 +206,7 @@ export class EventCalendar implements OnInit {
 
   private updateSessionsData(force: boolean = false): void {
     const isAdmin = this.authService.isAdmin();
-    const isTutor = this.authService.user().groups.includes(UserGroup.TUTORS);
+    const isTutor = (this.authService.user().groups ?? []).includes(UserGroup.TUTORS);
     if (!isAdmin && !isTutor) {
       this.events = [];
       this.cdr.markForCheck();
@@ -236,9 +236,16 @@ export class EventCalendar implements OnInit {
       from: new Date(first.getFullYear(), first.getMonth(), 1).toISOString(),
       to: new Date(last.getFullYear(), last.getMonth() + 1, 0, 23, 59, 59, 999).toISOString(),
     };
+    const tutorId = this.authService.contact().id;
+    if (!isAdmin && !tutorId) {
+      // No resolved contact id — never query with 'undefined'.
+      this.loading = false;
+      this.cdr.markForCheck();
+      return;
+    }
     const source$ = isAdmin
       ? this.sessionsService.getAllSessions(range)
-      : this.sessionsService.getSessionsByTutor(this.authService.contact().id!, range);
+      : this.sessionsService.getSessionsByTutor(tutorId!, range);
 
     this.loading = true;
     this.cdr.markForCheck();

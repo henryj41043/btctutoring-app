@@ -19,7 +19,12 @@ export class ContactAccessGuard implements CanActivate {
       return true;
     }
 
-    const ownContactId = this.authService.contact().id!;
+    // Never navigate with an unresolved contact (e.g. a failed contact fetch
+    // at login) — bounce to login instead of building /contacts/undefined.
+    const ownContactId = this.authService.contact().id;
+    if (!ownContactId) {
+      return this.router.createUrlTree(['/login']);
+    }
     const routeId = route.paramMap.get('id');
 
     // Tutor accessing the contacts table (/contacts) → redirect to their own contact
