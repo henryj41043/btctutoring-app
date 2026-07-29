@@ -14,13 +14,14 @@ const student = { id: 's-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT }
 
 describe('StudentRoster', () => {
   let isAdmin: boolean;
+  let contactId: string | undefined;
   const studentService = {
     getStudents: jest.fn(),
     getStudentsByTutor: jest.fn(),
   };
   const authService = {
     isAdmin: () => isAdmin,
-    contact: () => ({ id: 'contact-1' }),
+    contact: () => ({ id: contactId }),
   };
   const dialog = { open: jest.fn() };
 
@@ -38,6 +39,7 @@ describe('StudentRoster', () => {
 
   beforeEach(() => {
     isAdmin = true;
+    contactId = 'contact-1';
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
   });
 
@@ -180,5 +182,14 @@ describe('StudentRoster', () => {
       data: student,
       width: '700px',
     });
+  });
+
+  it('does not query when a tutor has no resolved contact id', () => {
+    isAdmin = false;
+    contactId = undefined;
+    const component = build();
+    component.ngOnInit();
+    expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+    expect((component as never as {loading: boolean}).loading).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import { Session } from '../models/session.model';
 
 describe('SessionsTable', () => {
   let isAdmin: boolean;
+  let contactId: string | undefined;
   let groups: string[];
   let afterClosed: unknown;
   const sessionsService = {
@@ -21,7 +22,7 @@ describe('SessionsTable', () => {
   const authService = {
     isAdmin: () => isAdmin,
     user: () => ({ groups }),
-    contact: () => ({ id: 'contact-1' }),
+    contact: () => ({ id: contactId }),
   };
   const dialog = {
     open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })),
@@ -41,6 +42,7 @@ describe('SessionsTable', () => {
 
   beforeEach(() => {
     isAdmin = true;
+    contactId = 'contact-1';
     groups = ['Admins'];
     afterClosed = {} as Session;
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -179,5 +181,24 @@ describe('SessionsTable', () => {
     sessionsService.getAllSessions.mockClear();
     (c as unknown as Record<string, (x: unknown) => void>)[method]({} as Session);
     expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+  });
+
+  it('does not query when a tutor has no resolved contact id', () => {
+    isAdmin = false;
+    groups = ['Tutors'];
+    contactId = undefined;
+    const component = build();
+    component.ngOnInit();
+    expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
+    expect((component as never as {loading: boolean}).loading).toBe(false);
+  });
+
+  it('treats a missing groups array as not-a-tutor instead of crashing', () => {
+    isAdmin = false;
+    groups = undefined as unknown as string[];
+    const component = build();
+    component.ngOnInit();
+    expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
+    expect((component as never as {loading: boolean}).loading).toBe(false);
   });
 });

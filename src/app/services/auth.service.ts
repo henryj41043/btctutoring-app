@@ -106,8 +106,15 @@ export class AuthService {
           this._resetPassword.set(false);
           sessionStorage.setItem('sessionToken', '');
         }
+        // A user whose contact record is missing can't use the app — surface
+        // the error instead of logging in with an id-less contact.
+        const contact = (response as Contact[])[0];
+        if (!contact?.id) {
+          this._hasError.set(true);
+          return;
+        }
         this._loggedIn.set(true);
-        this._contact.set(response[0] as Contact);
+        this._contact.set(contact);
         void this.router.navigate(['/calendar']);
       });
   }

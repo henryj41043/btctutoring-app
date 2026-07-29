@@ -78,9 +78,15 @@ export class StudentSessionsDialog implements OnInit {
 
   ngOnInit(): void {
     const isAdmin = this.authService.isAdmin();
+    const tutorId = this.authService.contact().id;
+    if (!isAdmin && !tutorId) {
+      // No resolved contact id — never query with 'undefined'.
+      this.loading = false;
+      return;
+    }
     const source$ = isAdmin
       ? this.sessionsService.getSessionsByStudent(this.student.id!)
-      : this.sessionsService.getSessions(this.authService.contact().id!, this.student.id!);
+      : this.sessionsService.getSessions(tutorId!, this.student.id!);
 
     source$.pipe(
       takeUntilDestroyed(this.destroyRef),

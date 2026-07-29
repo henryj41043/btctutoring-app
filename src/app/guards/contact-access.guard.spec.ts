@@ -53,4 +53,22 @@ describe('ContactAccessGuard', () => {
     expect(guard.canActivate(routeWithId(ownContactId), {} as never)).toBe(true);
     expect(router.createUrlTree).not.toHaveBeenCalled();
   });
+
+  it('redirects to login when the contact id is unresolved', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ContactAccessGuard,
+        {
+          provide: AuthService,
+          useValue: { isAdmin: () => false, contact: () => ({}) },
+        },
+        { provide: Router, useValue: router },
+      ],
+    });
+    const idlessGuard = TestBed.inject(ContactAccessGuard);
+    const result = idlessGuard.canActivate(routeWithId('any'), {} as never);
+    expect(router.createUrlTree).toHaveBeenCalledWith(['/login']);
+    expect(result).toBe(urlTree);
+  });
 });

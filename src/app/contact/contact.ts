@@ -185,7 +185,13 @@ export class Contact implements OnInit {
 
   ngOnInit() {
     this.loadContact();
-    this.loadStudents();
+    // Family students are an admin view — tutors only ever see their own
+    // (Hiring) page, where the roster loads via loadContact instead.
+    if (this.authService.isAdmin()) {
+      this.loadStudents();
+    } else {
+      this.studentsLoading = false;
+    }
     this.loadNotes();
     this.getTutors();
   }

@@ -71,6 +71,24 @@ describe('AuthService', () => {
       expect(router.navigate).toHaveBeenCalledWith(['/calendar']);
     });
 
+    it('errors instead of logging in when the contact record is missing', () => {
+      service.login('a@b.com', 'pw');
+      httpMock
+        .expectOne(`${base}/auth/login`)
+        .flush({ AccessToken: 'access', IdToken: 'id' });
+      httpMock.expectOne(`${base}/auth`).flush({
+        username: 'a@b.com',
+        email: 'a@b.com',
+        groups: ['Tutors'],
+        contact: 'c-gone',
+      });
+      httpMock.expectOne(`${base}/contacts?id=c-gone`).flush([]);
+
+      expect(service.loggedIn()).toBe(false);
+      expect(service.hasError()).toBe(true);
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
     it('marks a tutor (no Admins group) as not admin', () => {
       completeSuccessfulLogin(['Tutors']);
       expect(service.isAdmin()).toBe(false);
