@@ -12,7 +12,7 @@ import { Session } from '../models/session.model';
 import { PayrollEntry } from '../models/payroll-entry.model';
 import { Service } from '../enums/service.enum';
 import { StudentStatus } from '../enums/student-status.enum';
-import { ContactStatus } from '../enums/contact-status.enum';
+import { StaffStatus } from '../enums/staff-status.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { SessionType } from '../enums/session-type.enum';
 
@@ -37,7 +37,7 @@ const staffContact = (over: Partial<Contact> = {}): Contact =>
     first_name: 'Tess',
     hourly_rate: 40,
     service: Service.HIRING,
-    status: ContactStatus.STAFF,
+    status: StaffStatus.ACTIVE_STAFF,
     ...over,
   }) as Contact;
 

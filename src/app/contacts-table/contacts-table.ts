@@ -1,3 +1,5 @@
+import {staffStatusLabel} from '../enums/staff-status.enum';
+import {contactStatusChipClass} from '../utils/status-chip';
 import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
@@ -58,8 +60,10 @@ export class ContactsTable implements OnInit {
     if (paginator) { this.dataSource.paginator = paginator; }
   }
 
-  contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'actions'];
+  contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'status', 'actions'];
   dataSource = new MatTableDataSource<Contact>([]);
+  protected readonly statusLabel = staffStatusLabel;
+  protected readonly statusChipClass = contactStatusChipClass;
   loading: boolean = true;
 
   ngOnInit(): void {
@@ -68,6 +72,7 @@ export class ContactsTable implements OnInit {
       const haystack = [
         contact.first_name, contact.last_name, contact.email,
         contact.phone_number, contact.service,
+        contact.status, this.statusLabel(contact.status),
       ].join(' ').toLowerCase();
       return haystack.includes(filter);
     };

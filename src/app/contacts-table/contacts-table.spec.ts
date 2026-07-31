@@ -164,4 +164,20 @@ describe('ContactsTable', () => {
     );
     expect(c.dataSource.data).toEqual([contact('c-1')]);
   });
+
+  it('includes the status column and searches it by label', () => {
+    const component = build();
+    component.ngOnInit();
+    expect((component as unknown as { contactColumns: string[] }).contactColumns)
+      .toContain('status');
+    const predicate = (component as unknown as {
+      dataSource: { filterPredicate: (c: unknown, f: string) => boolean };
+    }).dataSource.filterPredicate;
+    const staff = { first_name: 'Tess', status: 'Staff' };
+    // Matches both the stored value and the display label.
+    expect(predicate(staff, 'staff')).toBe(true);
+    expect(predicate(staff, 'active staff')).toBe(true);
+    expect(predicate({ first_name: 'Ada', status: 'Declined Services' }, 'declined')).toBe(true);
+    expect(predicate({ first_name: 'Ada' }, 'declined')).toBe(false);
+  });
 });

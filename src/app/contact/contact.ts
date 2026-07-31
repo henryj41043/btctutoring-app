@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, inject, Input, OnInit, ViewChild} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ContactService} from '../services/contact.service';
-import {catchError, EMPTY, of, switchMap} from 'rxjs';
+import {catchError, EMPTY, forkJoin, of, switchMap} from 'rxjs';
 import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
 import {AvailabilityBlock} from '../models/availability-block.model';
@@ -21,7 +21,9 @@ import {Student} from '../models/student.model';
 import {Note} from '../models/note.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {TwentyFiveStatus} from '../enums/twenty-five-status.enum';
-import {ContactStatus} from '../enums/contact-status.enum';
+import {StaffStatus, staffStatusLabel} from '../enums/staff-status.enum';
+import {ParentStatus} from '../enums/parent-status.enum';
+import {cascadeTargetFor} from '../utils/parent-status-cascade';
 import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {BillingCycle} from '../enums/billing-cycle.enum';
@@ -100,7 +102,9 @@ export class Contact implements OnInit {
     if (paginator) { this.rosterDataSource.paginator = paginator; }
   }
   protected serviceOptions: string[] = Object.values(Service);
-  protected statusOptions: string[] = Object.values(ContactStatus);
+  protected staffStatusOptions: string[] = Object.values(StaffStatus);
+  protected parentStatusOptions: string[] = Object.values(ParentStatus);
+  protected readonly staffStatusLabel = staffStatusLabel;
   protected packageOptions: string[] = Object.values(Package);
   protected billingCycleOptions: string[] = Object.values(BillingCycle);
   protected groupOptions: string[] = Object.values(UserGroup);
@@ -228,7 +232,7 @@ export class Contact implements OnInit {
           if (c.id) this.staffById.set(c.id, c);
         });
         this.tutors = [...contacts.filter(contact => {
-          return contact.status === ContactStatus.STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
+          return contact.status === StaffStatus.ACTIVE_STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
         })];
         this.staffLoaded = true;
         this.resolveMissingTutorNames();
@@ -852,6 +856,13 @@ export class Contact implements OnInit {
     const accountExists = this.loadedContact?.user_profile_created ?? false;
     const groupChanged =
       accountExists && !!contact.email && contact.user_group !== this.loadedContact?.user_group;
+    // Captured before loadedContact is reassigned below: a deactivating
+    // parent-status change cascades onto the family's students after the save.
+    const statusChanged = contact.status !== this.loadedContact?.status;
+    const cascadeTarget =
+      statusChanged && contact.service === Service.TUTORING
+        ? cascadeTargetFor(contact.status)
+        : null;
     const save$ = groupChanged
       ? this.contactService
           .adminUpdateUserGroup(contact.email!, contact.user_group ?? '')
@@ -878,11 +889,47 @@ export class Contact implements OnInit {
         this.updateError = false;
         this.contactForm.markAsPristine();
         this.contactForm.markAsUntouched();
+        if (cascadeTarget) {
+          this.cascadeStatusToStudents(cascadeTarget);
+        }
         this.cdr.markForCheck();
         setTimeout(() => {
           this.updatedSuccessfully = false;
           this.cdr.markForCheck();
         }, 1000);
+      });
+  }
+
+  /**
+   * Applies a deactivating parent-status change to every student in the
+   * family (partial updates — the backend preserves untouched fields), then
+   * refreshes the students list. Students already at the target are skipped.
+   */
+  private cascadeStatusToStudents(target: StudentStatus): void {
+    const pending = this.students.filter(s => !!s.id && s.status !== target);
+    if (pending.length === 0) {
+      return;
+    }
+    forkJoin(
+      pending.map(s =>
+        this.studentService
+          .updateStudent({
+            id: s.id,
+            contact_id: s.contact_id,
+            name: s.name,
+            status: target,
+          } as Student)
+          .pipe(
+            catchError(error => {
+              console.log(error);
+              return of(null);
+            }),
+          ),
+      ),
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.loadStudents();
       });
   }
 

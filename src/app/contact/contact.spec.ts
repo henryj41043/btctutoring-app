@@ -18,7 +18,7 @@ import { BillingService } from '../services/billing.service';
 import { BillingCycle } from '../enums/billing-cycle.enum';
 import { Service } from '../enums/service.enum';
 import { StudentStatus } from '../enums/student-status.enum';
-import { ContactStatus } from '../enums/contact-status.enum';
+import { StaffStatus } from '../enums/staff-status.enum';
 import { Package } from '../enums/package.enum';
 import { ScheduleService } from '../services/schedule.service';
 
@@ -126,7 +126,7 @@ describe('Contact', () => {
           id: 't-1',
           first_name: 'Tess',
           last_name: 'Coach',
-          status: ContactStatus.STAFF,
+          status: StaffStatus.ACTIVE_STAFF,
           currently_accepting_students: true,
           service: Service.HIRING,
         },
@@ -181,10 +181,20 @@ describe('Contact', () => {
     ).toHaveLength(1);
   });
 
-  it('offers only contact statuses in the status dropdown (no student values)', () => {
+  it('offers staff statuses for hiring contacts (Staff labeled Active Staff)', () => {
     const c = build();
-    const options = (c as unknown as { statusOptions: string[] }).statusOptions;
-    expect(options).toEqual(['Staff', 'Former Staff', 'MIA']);
+    const options = (c as unknown as { staffStatusOptions: string[] }).staffStatusOptions;
+    expect(options).toEqual(['Staff', 'Former Staff', 'Onboarding', 'MIA']);
+    const label = (c as unknown as { staffStatusLabel: (s: string) => string })
+      .staffStatusLabel;
+    expect(label('Staff')).toBe('Active Staff');
+    expect(label('Former Staff')).toBe('Former Staff');
+  });
+
+  it('offers parent statuses for tutoring contacts', () => {
+    const c = build();
+    const options = (c as unknown as { parentStatusOptions: string[] }).parentStatusOptions;
+    expect(options).toEqual(['Active Client', 'Former Client', 'MIA', 'Declined Services']);
   });
 
   it('disables restricted fields for a non-admin', () => {
@@ -269,7 +279,7 @@ describe('Contact', () => {
   it('populates every form field from a loaded contact', () => {
     const rich = fullContact({
       first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x.com', phone_number: '1234567890',
-      service: Service.HIRING, status: ContactStatus.STAFF, billing_cycle: 'monthly',
+      service: Service.HIRING, status: StaffStatus.ACTIVE_STAFF, billing_cycle: 'monthly',
       cc_authorization_received: true, twenty_five_deducted: true, special_circumstance: 'note',
       scholarship_state: 'TX', invoice_Month: 'July', invoice_number: 'INV-1',
       inquiry_note_from_parent: 'hello', scholarship_name: 'Sch', title: 'Mr',
@@ -956,6 +966,88 @@ describe('Contact', () => {
       expect((c as unknown as { updateError: boolean }).updateError).toBe(false);
     });
 
+    describe('parent-status cascade', () => {
+      const family = (status: string) =>
+        contactService.getContact.mockReturnValue(
+          of([fullContact({ service: Service.TUTORING, status })]),
+        );
+
+      beforeEach(() => {
+        contactService.updateContact.mockReturnValue(of({} as ContactModel));
+        studentService.updateStudent.mockReturnValue(of({}));
+      });
+
+      it('cascades a deactivating change onto every student not already there', () => {
+        family('Active Client');
+        studentService.getStudentsByContact.mockReturnValue(
+          of([
+            { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT },
+            { id: 's-2', contact_id: 'c-1', name: 'Sam', status: StudentStatus.MIA },
+          ]),
+        );
+        const c = build();
+        c.ngOnInit();
+        form(c).controls['status'].setValue('MIA');
+        c.updateContact();
+
+        // Only the non-MIA student is updated, with the partial payload shape.
+        expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+        expect(studentService.updateStudent).toHaveBeenCalledWith({
+          id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.MIA,
+        });
+        // Students are re-fetched afterwards (initial load + post-cascade).
+        expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(2);
+      });
+
+      it('maps Former Client to Past Student', () => {
+        family('Active Client');
+        studentService.getStudentsByContact.mockReturnValue(
+          of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT }]),
+        );
+        const c = build();
+        c.ngOnInit();
+        form(c).controls['status'].setValue('Former Client');
+        c.updateContact();
+        expect(studentService.updateStudent).toHaveBeenCalledWith(
+          expect.objectContaining({ status: StudentStatus.PAST_STUDENT }),
+        );
+      });
+
+      it('does not cascade when the status is unchanged', () => {
+        family('MIA');
+        studentService.getStudentsByContact.mockReturnValue(
+          of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT }]),
+        );
+        const c = build();
+        c.ngOnInit();
+        c.updateContact();
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+      });
+
+      it('does not cascade a return to Active Client', () => {
+        family('MIA');
+        studentService.getStudentsByContact.mockReturnValue(
+          of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.MIA }]),
+        );
+        const c = build();
+        c.ngOnInit();
+        form(c).controls['status'].setValue('Active Client');
+        c.updateContact();
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+      });
+
+      it('never cascades for a hiring (staff) contact', () => {
+        contactService.getContact.mockReturnValue(
+          of([fullContact({ service: Service.HIRING, status: 'Staff' })]),
+        );
+        const c = build();
+        c.ngOnInit();
+        form(c).controls['status'].setValue('MIA');
+        c.updateContact();
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+      });
+    });
+
     it('syncs Cognito when the group changes on an existing account', () => {
       contactService.getContact.mockReturnValue(
         of([fullContact({ user_profile_created: true, user_group: 'Tutors' })]),
@@ -1045,7 +1137,7 @@ describe('Contact', () => {
         of([
           {
             id: 't-1', first_name: 'Tess', last_name: 'Coach',
-            status: ContactStatus.STAFF, currently_accepting_students: true, service: Service.HIRING,
+            status: StaffStatus.ACTIVE_STAFF, currently_accepting_students: true, service: Service.HIRING,
           },
         ]),
       );
@@ -1061,7 +1153,7 @@ describe('Contact', () => {
         of([
           {
             id: 't-full', first_name: 'Full', last_name: 'Roster',
-            status: ContactStatus.STAFF, currently_accepting_students: false, service: Service.HIRING,
+            status: StaffStatus.ACTIVE_STAFF, currently_accepting_students: false, service: Service.HIRING,
           },
         ]),
       );

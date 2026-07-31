@@ -12,13 +12,13 @@ import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {Package} from '../enums/package.enum';
 import { StudentStatus } from '../enums/student-status.enum';
-import { ContactStatus } from '../enums/contact-status.enum';
+import { StaffStatus } from '../enums/staff-status.enum';
 
 const tutor = (over: Partial<Contact> = {}): Contact =>
   ({
     id: 't-1',
     first_name: 'Tess',
-    status: ContactStatus.STAFF,
+    status: StaffStatus.ACTIVE_STAFF,
     availability: [{days: Object.values(Weekday), start_time: '09:00', end_time: '17:00'}],
     ...over,
   }) as Contact;
