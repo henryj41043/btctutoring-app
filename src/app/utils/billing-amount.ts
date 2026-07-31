@@ -4,15 +4,15 @@ import {countRemainingSlots, proratedFirstMonthCost, semiMonthlySplit} from './p
 
 /**
  * Applies a family's sibling discount to an amount, but only when the family
- * actually has 2+ enrolled students. A stale percent never discounts an only
- * child. Mirror of the backend billing-amount helper.
+ * actually has 3+ enrolled students (per the client's policy). A stale percent
+ * never discounts a smaller family. Mirror of the backend billing-amount helper.
  */
 export function siblingDiscountedTotal(
   amount: number,
   percent: number | undefined,
   enrolledStudentCount: number,
 ): number {
-  if (!percent || percent <= 0 || enrolledStudentCount < 2) {
+  if (!percent || percent <= 0 || enrolledStudentCount < 3) {
     return amount;
   }
   const pct = Math.min(100, Math.max(0, percent));

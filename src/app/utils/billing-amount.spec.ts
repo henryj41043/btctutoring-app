@@ -172,21 +172,22 @@ describe('studentNeedsAttention', () => {
 });
 
 describe('siblingDiscountedTotal', () => {
-  it('discounts the amount when 2+ students are enrolled', () => {
-    expect(siblingDiscountedTotal(1000, 10, 2)).toBe(900);
+  it('discounts the amount when 3+ students are enrolled', () => {
+    expect(siblingDiscountedTotal(1000, 10, 3)).toBe(900);
   });
 
   it('does not discount an only child', () => {
     expect(siblingDiscountedTotal(1000, 10, 1)).toBe(1000);
+    expect(siblingDiscountedTotal(1000, 10, 2)).toBe(1000);
   });
 
   it('is a no-op when the percent is missing or zero', () => {
-    expect(siblingDiscountedTotal(1000, undefined, 2)).toBe(1000);
-    expect(siblingDiscountedTotal(1000, 0, 2)).toBe(1000);
+    expect(siblingDiscountedTotal(1000, undefined, 3)).toBe(1000);
+    expect(siblingDiscountedTotal(1000, 0, 3)).toBe(1000);
   });
 
   it('clamps a percent above 100 to a full discount', () => {
-    expect(siblingDiscountedTotal(1000, 150, 2)).toBe(0);
+    expect(siblingDiscountedTotal(1000, 150, 3)).toBe(0);
   });
 
   it('rounds to the nearest penny', () => {

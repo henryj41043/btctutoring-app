@@ -20,6 +20,7 @@ import {NoteService} from '../services/note.service';
 import {Student} from '../models/student.model';
 import {Note} from '../models/note.model';
 import {StudentStatus} from '../enums/student-status.enum';
+import {TwentyFiveStatus} from '../enums/twenty-five-status.enum';
 import {ContactStatus} from '../enums/contact-status.enum';
 import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
@@ -104,6 +105,7 @@ export class Contact implements OnInit {
   protected billingCycleOptions: string[] = Object.values(BillingCycle);
   protected groupOptions: string[] = Object.values(UserGroup);
   protected tutors: _Contact[] = [];
+  protected readonly twentyFiveStatusOptions: string[] = Object.values(TwentyFiveStatus);
   protected readonly studentDisplayName = studentDisplayName;
   protected readonly statusChipClass = studentStatusChipClass;
   // Name lookup for ALL staff (unfiltered) — `tutors` is the assignment
@@ -142,6 +144,7 @@ export class Contact implements OnInit {
     inquiry_note_from_parent: '',
     consult_date: undefined,
     twenty_five_received: false,
+    twenty_five_status: TwentyFiveStatus.PENDING,
     scholarship_student: false,
     scholarship_name: '',
     trial_date: undefined,
@@ -351,6 +354,10 @@ export class Contact implements OnInit {
     this.contactForm.controls['inquiry_note_from_parent'].setValue(contact.inquiry_note_from_parent);
     this.contactForm.controls['consult_date'].setValue(contact.consult_date);
     this.contactForm.controls['twenty_five_received'].setValue(contact.twenty_five_received);
+    // New tri-state wins; a legacy checked box reads as Received.
+    this.contactForm.controls['twenty_five_status'].setValue(
+      contact.twenty_five_status ??
+        (contact.twenty_five_received ? TwentyFiveStatus.RECEIVED : TwentyFiveStatus.PENDING));
     this.contactForm.controls['scholarship_student'].setValue(contact.scholarship_student);
     this.contactForm.controls['scholarship_name'].setValue(contact.scholarship_name);
     this.contactForm.controls['trial_date'].setValue(contact.trial_date);
@@ -514,9 +521,14 @@ export class Contact implements OnInit {
     return availableMakeupMinutes(student);
   }
 
-  /** True when the family has 2+ active, enrolled students — the sibling-discount condition. */
-  get hasMultipleEnrolledStudents(): boolean {
-    return this.students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT && !!s.package).length >= 2;
+  /** True when the family has 3+ active, enrolled students — the sibling-discount condition. */
+  get qualifiesForSiblingDiscount(): boolean {
+    return this.students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT && !!s.package).length >= 3;
+  }
+
+  /** Scholarship paperwork applies when any student in the family holds one. */
+  get hasScholarshipStudent(): boolean {
+    return this.students.some(s => !!s.scholarship);
   }
 
   /** True once a student has both an assigned tutor and a package — required to schedule. */

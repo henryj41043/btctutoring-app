@@ -93,7 +93,26 @@ describe('Billing', () => {
     expect(entry.cycle).toBe(BillingCycle.MONTHLY);
   });
 
-  it('applies the sibling discount to a family with 2+ enrolled students', () => {
+  it('applies the sibling discount to a family with 3+ enrolled students', () => {
+    contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
+    studentService.getStudents.mockReturnValue(
+      of([
+        student({ id: 's-1' }),
+        student({ id: 's-2', name: 'Sam' }),
+        student({ id: 's-3', name: 'Sky' }),
+      ]),
+    );
+    const c = build();
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    // 3 × $362 = $1086, less 10% = $977.40.
+    expect(entry.total).toBe(977.4);
+    expect(entry.due_first).toBe(977.4);
+    expect(entry.discount).toBe(108.6);
+    expect(entry.discount_percent).toBe(10);
+  });
+
+  it('does not discount a two-student family (below the 3+ threshold)', () => {
     contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
     studentService.getStudents.mockReturnValue(
       of([student({ id: 's-1' }), student({ id: 's-2', name: 'Sam' })]),
@@ -101,11 +120,8 @@ describe('Billing', () => {
     const c = build();
     c.ngOnInit();
     const entry = (c as any).dataSource.data[0];
-    // 2 × $362 = $724, less 10% = $651.60.
-    expect(entry.total).toBe(651.6);
-    expect(entry.due_first).toBe(651.6);
-    expect(entry.discount).toBe(72.4);
-    expect(entry.discount_percent).toBe(10);
+    expect(entry.total).toBe(724);
+    expect(entry.discount).toBe(0);
   });
 
   it('does not apply the sibling discount to an only child', () => {
@@ -123,16 +139,20 @@ describe('Billing', () => {
       of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY, sibling_discount: 50 })]),
     );
     studentService.getStudents.mockReturnValue(
-      of([student({ id: 's-1' }), student({ id: 's-2', name: 'Sam' })]),
+      of([
+        student({ id: 's-1' }),
+        student({ id: 's-2', name: 'Sam' }),
+        student({ id: 's-3', name: 'Sky' }),
+      ]),
     );
     const c = build();
     c.ngOnInit();
     const entry = (c as any).dataSource.data[0];
-    // 724 → 362/362 halves → 50% off → 181/181 → total 362, discount 362.
-    expect(entry.due_first).toBe(181);
-    expect(entry.due_fifteenth).toBe(181);
-    expect(entry.total).toBe(362);
-    expect(entry.discount).toBe(362);
+    // 1086 → 543/543 halves → 50% off → 271.50/271.50 → total 543, discount 543.
+    expect(entry.due_first).toBe(271.5);
+    expect(entry.due_fifteenth).toBe(271.5);
+    expect(entry.total).toBe(543);
+    expect(entry.discount).toBe(543);
   });
 
   it('splits a semi-monthly contact across the 1st and 15th', () => {
