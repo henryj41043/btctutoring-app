@@ -7,6 +7,7 @@ describe('studentStatusChipClass', () => {
     expect(studentStatusChipClass(StudentStatus.ONBOARDING)).toBe('btc-chip--warn');
     expect(studentStatusChipClass(StudentStatus.PAST_STUDENT)).toBe('btc-chip--info');
     expect(studentStatusChipClass(StudentStatus.MIA)).toBe('btc-chip--bad');
+    expect(studentStatusChipClass(StudentStatus.DECLINED_SERVICES)).toBe('btc-chip--bad');
   });
 
   it('falls back to the neutral chip for unknown or missing statuses', () => {

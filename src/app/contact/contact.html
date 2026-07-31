@@ -37,12 +37,24 @@
           }
         </mat-select>
       </mat-form-field>
+      <!-- Family-level lifecycle; deactivating values cascade onto the
+           family's students on save. -->
+      @if (contactForm.controls['service'].value === Service.TUTORING) {
+        <mat-form-field>
+          <mat-label>Select Status</mat-label>
+          <mat-select formControlName="status">
+            @for (statusOption of parentStatusOptions; track statusOption) {
+              <mat-option [value]="statusOption">{{statusOption}}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
       @if (contactForm.controls['service'].value === Service.HIRING) {
         <mat-form-field>
           <mat-label>Select Status</mat-label>
           <mat-select formControlName="status">
-            @for (statusOption of statusOptions; track statusOption) {
-              <mat-option [value]="statusOption">{{statusOption}}</mat-option>
+            @for (statusOption of staffStatusOptions; track statusOption) {
+              <mat-option [value]="statusOption">{{staffStatusLabel(statusOption)}}</mat-option>
             }
           </mat-select>
         </mat-form-field>

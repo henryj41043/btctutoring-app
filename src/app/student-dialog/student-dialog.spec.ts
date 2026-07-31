@@ -269,7 +269,9 @@ describe('StudentDialog', () => {
     it('offers only student statuses in the dropdown (no Staff)', () => {
       const c = build({ mode: 'edit', student: richStudent() });
       const options = (c as unknown as { statusOptions: string[] }).statusOptions;
-      expect(options).toEqual(['Onboarding', 'Active Student', 'Past Student', 'MIA']);
+      expect(options).toEqual([
+        'Onboarding', 'Active Student', 'Past Student', 'MIA', 'Declined Services',
+      ]);
     });
 
     it('persists a status change while still onboarding (the MIA escape)', () => {

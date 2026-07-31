@@ -24,7 +24,7 @@ import {catchError, EMPTY, forkJoin, Observable, of} from 'rxjs';
 import {ContactService} from '../services/contact.service';
 import {StudentService} from '../services/student.service';
 import {StudentStatus} from '../enums/student-status.enum';
-import {ContactStatus} from '../enums/contact-status.enum';
+import {StaffStatus} from '../enums/staff-status.enum';
 import {Service} from '../enums/service.enum';
 import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
@@ -746,7 +746,7 @@ export class SessionDialog implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(contacts => {
-        this.tutors = contacts.filter(c => c.status === ContactStatus.STAFF && c.currently_accepting_students && c.service === Service.HIRING);
+        this.tutors = contacts.filter(c => c.status === StaffStatus.ACTIVE_STAFF && c.currently_accepting_students && c.service === Service.HIRING);
       });
   }
 

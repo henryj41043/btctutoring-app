@@ -11,7 +11,7 @@ import { Contact } from '../models/contact.model';
 import { Student } from '../models/student.model';
 import { Session } from '../models/session.model';
 import { StudentStatus } from '../enums/student-status.enum';
-import { ContactStatus } from '../enums/contact-status.enum';
+import { StaffStatus } from '../enums/staff-status.enum';
 import { Service } from '../enums/service.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { SessionType } from '../enums/session-type.enum';
@@ -22,7 +22,7 @@ const tutor = (over: Partial<Contact> = {}): Contact =>
   ({
     id: 't-1',
     first_name: 'Tess',
-    status: ContactStatus.STAFF,
+    status: StaffStatus.ACTIVE_STAFF,
     currently_accepting_students: true,
     service: Service.HIRING,
     availability: [

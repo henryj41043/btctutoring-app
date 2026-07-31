@@ -15,6 +15,9 @@ export function studentStatusChipClass(status?: string): string {
       return 'btc-chip--info';
     case StudentStatus.MIA:
       return 'btc-chip--bad';
+    // Operationally identical to MIA; the label carries the distinction.
+    case StudentStatus.DECLINED_SERVICES:
+      return 'btc-chip--bad';
     default:
       return '';
   }

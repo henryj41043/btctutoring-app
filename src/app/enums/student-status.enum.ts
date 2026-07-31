@@ -9,4 +9,6 @@ export enum StudentStatus {
   PAST_STUDENT = 'Past Student',
   /** The family stopped responding during onboarding — the lifecycle escape. */
   MIA = 'MIA',
+  /** Family formally declined services — operationally identical to MIA. */
+  DECLINED_SERVICES = 'Declined Services',
 }
