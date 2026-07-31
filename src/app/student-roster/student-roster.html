@@ -1,6 +1,9 @@
 <div class="student-roster">
   <div class="btc-page-header">
     <h2>Student Roster</h2>
+    @if (!loading) {
+      <span class="btc-chip btc-chip--ok roster-count">{{activeCount}} active students</span>
+    }
     <mat-form-field subscriptSizing="dynamic" appearance="outline" class="roster-search">
       <mat-label>Search</mat-label>
       <input matInput #rosterSearch placeholder="Parent, student, package"
@@ -41,6 +44,15 @@
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Make Up Min</th>
           <td mat-cell *matCellDef="let item">{{availableMakeup(item)}}</td>
         </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>Sessions</th>
+          <td mat-cell *matCellDef="let item">
+            <button matIconButton aria-label="View sessions"
+                    (click)="openSessionsDialog(item, $event)">
+              <mat-icon>event_note</mat-icon>
+            </button>
+          </td>
+        </ng-container>
         <ng-container matColumnDef="scholarship">
           <th mat-header-cell *matHeaderCellDef>Scholarship</th>
           <td mat-cell *matCellDef="let item">
@@ -52,10 +64,10 @@
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="rosterColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: rosterColumns;" (click)="openSessionsDialog(row)"></tr>
+        <tr mat-row *matRowDef="let row; columns: rosterColumns;" (click)="openContact(row)"></tr>
       </table>
       </div>
-      <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+      <mat-paginator [pageSize]="50" [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
       }
     </mat-card-content>
   </mat-card>

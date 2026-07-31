@@ -310,7 +310,8 @@
           </div>
         }
       </div>
-    } @else if (students.length > 0 && students[0].scholarship) {
+    } @else {
+      @if (hasScholarshipStudent) {
       <h2>Scholarship</h2>
       <div class="scholarship-grid">
         <mat-form-field>
@@ -348,7 +349,7 @@
           <textarea matInput formControlName="special_circumstance"></textarea>
         </mat-form-field>
       </div>
-    } @else {
+      }
       <h2>Billing</h2>
       <div class="billing-grid">
         <p class="billing-note">Charges and payment tracking now live on the <strong>Billing</strong> page.</p>
@@ -362,7 +363,7 @@
             }
           </mat-select>
         </mat-form-field>
-        @if (hasMultipleEnrolledStudents) {
+        @if (qualifiesForSiblingDiscount) {
           <mat-form-field>
             <mat-label>Sibling Discount (%)</mat-label>
             <input matInput type="number" min="0" max="100" formControlName="sibling_discount">
@@ -459,7 +460,14 @@
           <mat-datepicker-toggle [for]="registrationReceivedDatepicker" matSuffix/>
         </mat-form-field>
         <mat-checkbox formControlName="scholarship_student">Scholarship Student</mat-checkbox>
-        <mat-checkbox formControlName="twenty_five_received">$25 Received</mat-checkbox>
+        <mat-form-field>
+          <mat-label>$25 Fee</mat-label>
+          <mat-select formControlName="twenty_five_status">
+            @for (option of twentyFiveStatusOptions; track option) {
+              <mat-option [value]="option">{{option}}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
       </div>
     }
   </div>

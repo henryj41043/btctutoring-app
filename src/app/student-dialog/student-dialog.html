@@ -34,13 +34,6 @@
     </mat-form-field>
 
     @if (mode === 'edit') {
-      <mat-form-field>
-        <mat-label>Birthday</mat-label>
-        <input matInput [matDatepicker]="birthdayPicker" formControlName="birthday">
-        <mat-datepicker-toggle [for]="birthdayPicker" matSuffix/>
-        <mat-datepicker #birthdayPicker/>
-      </mat-form-field>
-
       @if (showOnboardingToggle) {
         <mat-checkbox formControlName="onboarding_complete"
                       (change)="onOnboardingCompleteChange($event.checked)">
@@ -74,7 +67,19 @@
         </mat-select>
       </mat-form-field>
 
+      <!-- Scholarship is intake-time knowledge, so it stays editable during
+           onboarding (client request). -->
+      <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
+
       @if (!locked) {
+        <!-- Birthday is collected on the post-onboarding paperwork, so it only
+             appears once onboarding is complete (client request). -->
+        <mat-form-field>
+          <mat-label>Birthday</mat-label>
+          <input matInput [matDatepicker]="birthdayPicker" formControlName="birthday">
+          <mat-datepicker-toggle [for]="birthdayPicker" matSuffix/>
+          <mat-datepicker #birthdayPicker/>
+        </mat-form-field>
         <mat-form-field>
           <mat-label>Package</mat-label>
           <mat-select formControlName="package">
@@ -106,7 +111,6 @@
           <span class="makeup-hint">(from cancelled sessions; expire after 90 days)</span>
         </p>
         <mat-checkbox formControlName="make_up_never_expire">Makeup minutes never expire</mat-checkbox>
-        <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
       }
     }
 

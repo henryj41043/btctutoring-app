@@ -9,6 +9,8 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatDialog} from '@angular/material/dialog';
+import {MatButtonModule} from '@angular/material/button';
+import {Router} from '@angular/router';
 import {catchError, EMPTY} from 'rxjs';
 import {StudentService} from '../services/student.service';
 import {AuthService} from '../services/auth.service';
@@ -31,6 +33,7 @@ import {studentStatusChipClass} from '../utils/status-chip';
     MatProgressSpinnerModule,
     MatFormFieldModule,
     MatInputModule,
+    MatButtonModule,
   ],
   templateUrl: './student-roster.html',
   styleUrl: './student-roster.scss',
@@ -44,6 +47,7 @@ export class StudentRoster implements OnInit {
   // Cancels in-flight HTTP work when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
+  private router: Router = inject(Router);
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
   // once loading finishes.
@@ -54,7 +58,7 @@ export class StudentRoster implements OnInit {
     if (paginator) { this.dataSource.paginator = paginator; }
   }
 
-  protected rosterColumns: string[] = ['contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship'];
+  protected rosterColumns: string[] = ['contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship', 'actions'];
   protected dataSource = new MatTableDataSource<Student>([]);
   protected readonly studentDisplayName = studentDisplayName;
   protected readonly statusChipClass = studentStatusChipClass;
@@ -105,7 +109,21 @@ export class StudentRoster implements OnInit {
     this.dataSource.paginator?.firstPage();
   }
 
-  openSessionsDialog(student: Student): void {
+  /** The number of active students on the roster (not parents). */
+  get activeCount(): number {
+    return this.dataSource.data.length;
+  }
+
+  /** Row click drills into the student's family contact page. */
+  openContact(student: Student): void {
+    if (student.contact_id) {
+      void this.router.navigate(['/contacts', student.contact_id]);
+    }
+  }
+
+  openSessionsDialog(student: Student, event: Event): void {
+    // Icon-button action — don't also trigger the row's contact navigation.
+    event.stopPropagation();
     this.dialog.open(StudentSessionsDialog, {
       data: student,
       width: '700px',

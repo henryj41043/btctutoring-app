@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { MatSort } from '@angular/material/sort';
 import { MatPaginator } from '@angular/material/paginator';
 import { StudentRoster } from './student-roster';
@@ -24,6 +25,7 @@ describe('StudentRoster', () => {
     contact: () => ({ id: contactId }),
   };
   const dialog = { open: jest.fn() };
+  const router = { navigate: jest.fn() };
 
   const build = (): StudentRoster => {
     TestBed.configureTestingModule({
@@ -32,6 +34,7 @@ describe('StudentRoster', () => {
         { provide: StudentService, useValue: studentService },
         { provide: AuthService, useValue: authService },
         { provide: MatDialog, useValue: dialog },
+        { provide: Router, useValue: router },
       ],
     });
     return TestBed.createComponent(StudentRoster).componentInstance;
@@ -170,18 +173,35 @@ describe('StudentRoster', () => {
     studentService.getStudents.mockReturnValue(of([]));
     const component = build();
     expect((component as unknown as { rosterColumns: string[] }).rosterColumns).toEqual([
-      'contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship',
+      'contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship', 'actions',
     ]);
   });
 
-  it('opens the sessions dialog for a student', () => {
+  it('opens the sessions dialog from the icon without triggering row navigation', () => {
     studentService.getStudents.mockReturnValue(of([]));
     const component = build();
-    component.openSessionsDialog(student);
+    const event = { stopPropagation: jest.fn() } as unknown as Event;
+    component.openSessionsDialog(student, event);
+    expect(event.stopPropagation).toHaveBeenCalled();
     expect(dialog.open).toHaveBeenCalledWith(StudentSessionsDialog, {
       data: student,
       width: '700px',
     });
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('row click navigates to the family contact page', () => {
+    studentService.getStudents.mockReturnValue(of([]));
+    const component = build();
+    component.openContact({ ...student, contact_id: 'c-9' });
+    expect(router.navigate).toHaveBeenCalledWith(['/contacts', 'c-9']);
+  });
+
+  it('row click is a no-op for a student without a contact id', () => {
+    studentService.getStudents.mockReturnValue(of([]));
+    const component = build();
+    component.openContact({ ...student, contact_id: undefined });
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
   it('does not query when a tutor has no resolved contact id', () => {

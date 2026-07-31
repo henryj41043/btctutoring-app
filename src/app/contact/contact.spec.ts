@@ -521,7 +521,20 @@ describe('Contact', () => {
       expect(c.availableMakeup(s)).toBe(25);
     });
 
-    it('hasMultipleEnrolledStudents is true with 2+ active packaged students', () => {
+    it('qualifiesForSiblingDiscount is true with 3+ active packaged students', () => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([
+          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
+          { id: 's-2', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
+          { id: 's-3', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
+        ]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.qualifiesForSiblingDiscount).toBe(true);
+    });
+
+    it('qualifiesForSiblingDiscount is false for a two-student family', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([
           { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
@@ -530,20 +543,66 @@ describe('Contact', () => {
       );
       const c = build();
       c.ngOnInit();
-      expect(c.hasMultipleEnrolledStudents).toBe(true);
+      expect(c.qualifiesForSiblingDiscount).toBe(false);
     });
 
-    it('hasMultipleEnrolledStudents ignores onboarding and package-less students', () => {
+    it('qualifiesForSiblingDiscount ignores onboarding and package-less students', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([
           { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
           { id: 's-2', status: StudentStatus.ONBOARDING, package: Package.THRIVE },
           { id: 's-3', status: StudentStatus.ACTIVE_STUDENT }, // no package
+          { id: 's-4', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
         ]),
       );
       const c = build();
       c.ngOnInit();
-      expect(c.hasMultipleEnrolledStudents).toBe(false);
+      expect(c.qualifiesForSiblingDiscount).toBe(false);
+    });
+
+    it('hasScholarshipStudent is true when any student holds a scholarship', () => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([
+          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT },
+          { id: 's-2', status: StudentStatus.ACTIVE_STUDENT, scholarship: true },
+        ]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.hasScholarshipStudent).toBe(true);
+    });
+
+    it('hasScholarshipStudent is false without any scholarship students', () => {
+      const c = build();
+      c.ngOnInit();
+      expect(c.hasScholarshipStudent).toBe(false);
+    });
+
+    it('maps a legacy twenty_five_received=true to Received in the tri-state', () => {
+      contactService.getContact.mockReturnValue(
+        of([fullContact({ twenty_five_received: true, twenty_five_status: undefined })]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(form(c).controls['twenty_five_status'].value).toBe('Received');
+    });
+
+    it('prefers a stored twenty_five_status over the legacy checkbox', () => {
+      contactService.getContact.mockReturnValue(
+        of([fullContact({ twenty_five_received: true, twenty_five_status: 'N/A' })]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(form(c).controls['twenty_five_status'].value).toBe('N/A');
+    });
+
+    it('defaults the tri-state to Pending for an untouched contact', () => {
+      contactService.getContact.mockReturnValue(
+        of([fullContact({ twenty_five_received: undefined, twenty_five_status: undefined })]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(form(c).controls['twenty_five_status'].value).toBe('Pending');
     });
 
     it('defaults the sibling discount to 0 when the contact has none', () => {
