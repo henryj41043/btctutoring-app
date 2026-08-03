@@ -93,3 +93,35 @@ export function consumeMakeupMinutes(
   }
   return apply(student, kept);
 }
+
+/** An unexpired batch prepared for display: source date + computed expiry. */
+export interface MakeupBatchView {
+  minutes: number;
+  /** The cancelled session's date (when the minutes were banked). */
+  earned_date: string;
+  /** Expiry date, or null when the student is exempt from expiry. */
+  expires: Date | null;
+}
+
+/**
+ * The student's unexpired batches, oldest first, each with its computed
+ * expiry (earned + 90 days; null when make_up_never_expire).
+ */
+export function unexpiredBatchViews(
+  student: Student,
+  now: Date = new Date(),
+): MakeupBatchView[] {
+  return (student.make_up_batches ?? [])
+    .filter(b => !isExpired(b, student, now))
+    .map(b => ({
+      minutes: b.minutes,
+      earned_date: b.earned_date,
+      expires: student.make_up_never_expire
+        ? null
+        : new Date(new Date(b.earned_date).getTime() + MAKEUP_EXPIRY_DAYS * DAY_MS),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(a.earned_date).getTime() - new Date(b.earned_date).getTime(),
+    );
+}

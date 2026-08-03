@@ -63,4 +63,7 @@ export class ToolBar {
   remindersNav(): void {
     void this.router.navigate(['/reminders']);
   }
+  makeupReportNav(): void {
+    void this.router.navigate(['/makeup-report']);
+  }
 }

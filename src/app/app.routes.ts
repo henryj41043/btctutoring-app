@@ -12,6 +12,7 @@ import {Billing} from './billing/billing';
 import {StudentRoster} from './student-roster/student-roster';
 import {Onboarding} from './onboarding/onboarding';
 import {Reminders} from './reminders/reminders';
+import {MakeupReport} from './makeup-report/makeup-report';
 
 export const routes: Routes = [
   {
@@ -56,6 +57,11 @@ export const routes: Routes = [
   {
     path: 'reminders',
     component: Reminders,
+    canActivate: [AuthGuard, AdminGuard],
+  },
+  {
+    path: 'makeup-report',
+    component: MakeupReport,
     canActivate: [AuthGuard, AdminGuard],
   },
   {
