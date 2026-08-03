@@ -37,6 +37,8 @@ export class Contact {
   registration_received?: Date;
   title?: string;
   currently_accepting_students?: boolean;
+  /** Staff role: tutors appear in tutoring dropdowns; undefined = true (legacy staff). */
+  is_tutor?: boolean;
   availability?: AvailabilityBlock[];
   zoom_link?: string;
   hourly_rate?: number;

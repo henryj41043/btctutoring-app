@@ -76,7 +76,17 @@ export class SessionDialog implements OnInit {
     [SessionType.MAKE_UP]: 'Make-up',
     [SessionType.ADMIN]: 'Admin',
   };
-  tutors: Contact[] = [];
+  // All active staff (Hiring + Active Staff); the `tutors` getter narrows by
+  // session type — Admin time is loggable by any staff member, tutoring only
+  // by accepting tutors.
+  private allStaff: Contact[] = [];
+  get tutors(): Contact[] {
+    return this.selectedType === SessionType.ADMIN
+      ? this.allStaff
+      : this.allStaff.filter(
+          c => c.is_tutor !== false && c.currently_accepting_students,
+        );
+  }
   students: Student[] = [];
   filteredStudents: Student[] = [];
   showStatusConfirm: boolean = false;
@@ -746,7 +756,7 @@ export class SessionDialog implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(contacts => {
-        this.tutors = contacts.filter(c => c.status === StaffStatus.ACTIVE_STAFF && c.currently_accepting_students && c.service === Service.HIRING);
+        this.allStaff = contacts.filter(c => c.status === StaffStatus.ACTIVE_STAFF && c.service === Service.HIRING);
       });
   }
 

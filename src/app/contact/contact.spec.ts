@@ -161,6 +161,36 @@ describe('Contact', () => {
     expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
   });
 
+  it('excludes non-tutor staff from the assignment dropdown', () => {
+    contactService.getStaff.mockReturnValue(
+      of([
+        { id: 't-1', first_name: 'Tess', status: 'Staff', currently_accepting_students: true, service: Service.HIRING },
+        { id: 't-2', first_name: 'Adm', status: 'Staff', currently_accepting_students: true, is_tutor: false, service: Service.HIRING },
+      ]),
+    );
+    const c = build();
+    c.ngOnInit();
+    expect((c as unknown as { tutors: { id: string }[] }).tutors.map(t => t.id)).toEqual(['t-1']);
+  });
+
+  it('defaults the is_tutor checkbox to true when the flag is absent', () => {
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ service: Service.HIRING, is_tutor: undefined })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    expect(form(c).controls['is_tutor'].value).toBe(true);
+  });
+
+  it('loads a stored is_tutor=false into the checkbox', () => {
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ service: Service.HIRING, is_tutor: false })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    expect(form(c).controls['is_tutor'].value).toBe(false);
+  });
+
   it('loads the tutor roster only for a staff (hiring) contact', () => {
     contactService.getContact.mockReturnValue(
       of([fullContact({ service: Service.HIRING })]),
