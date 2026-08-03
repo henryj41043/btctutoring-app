@@ -156,6 +156,7 @@ export class Contact implements OnInit {
     registration_received: undefined,
     title: '',
     currently_accepting_students: false,
+    is_tutor: true,
     availability: this.formBuilder.array([]),
     zoom_link: '',
     hourly_rate: 0,
@@ -232,7 +233,7 @@ export class Contact implements OnInit {
           if (c.id) this.staffById.set(c.id, c);
         });
         this.tutors = [...contacts.filter(contact => {
-          return contact.status === StaffStatus.ACTIVE_STAFF && contact.currently_accepting_students && contact.service === Service.HIRING;
+          return contact.status === StaffStatus.ACTIVE_STAFF && contact.currently_accepting_students && contact.is_tutor !== false && contact.service === Service.HIRING;
         })];
         this.staffLoaded = true;
         this.resolveMissingTutorNames();
@@ -370,6 +371,8 @@ export class Contact implements OnInit {
     this.contactForm.controls['status'].setValue(contact.status);
     this.contactForm.controls['title'].setValue(contact.title);
     this.contactForm.controls['currently_accepting_students'].setValue(contact.currently_accepting_students);
+    // Undefined reads as true — every pre-flag staff member is a tutor.
+    this.contactForm.controls['is_tutor'].setValue(contact.is_tutor !== false);
     this.availabilityBlocks.clear();
     (contact.availability ?? []).forEach(block =>
       this.availabilityBlocks.push(this.createAvailabilityGroup(block)),

@@ -80,7 +80,7 @@ describe('SessionDialog', () => {
       existingSessions: [],
       ...over,
     } as SessionDialogData);
-    c.tutors = [tutor()];
+    (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
     c.students = [student()];
     c.selectedTutor = 't-1';
     c.selectedStudent = 's-1';
@@ -373,7 +373,7 @@ describe('SessionDialog', () => {
         } as Session,
         existingSessions: [],
       } as SessionDialogData);
-      c.tutors = [tutor()];
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
       c.students = [scheduled()];
       c.selectedTutor = 't-1';
       c.selectedStudent = 's-1';
@@ -487,7 +487,7 @@ describe('SessionDialog', () => {
         } as Session,
         existingSessions: [],
       } as SessionDialogData);
-      c.tutors = [tutor()];
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
       c.students = [scheduled()];
       c.selectedTutor = 't-1';
       c.selectedStudent = 's-1';
@@ -558,7 +558,7 @@ describe('SessionDialog', () => {
         session: { id: 'sess-1', start_datetime: '2026-06-01T10:00:00Z' } as Session,
         existingSessions: [],
       } as SessionDialogData);
-      c.tutors = [tutor()];
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
       c.selectedTutor = 't-1';
       const inflight = new Subject<unknown>();
       sessionsService.deleteSession.mockReturnValue(inflight.asObservable());
@@ -618,7 +618,7 @@ describe('SessionDialog', () => {
 
     const primedEdit = (data: SessionDialogData): SessionDialog => {
       const c = build(data);
-      c.tutors = [tutor()];
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
       c.students = [student()];
       c.selectedTutor = 't-1';
       c.selectedStudent = 's-1';
@@ -767,7 +767,7 @@ describe('SessionDialog', () => {
         } as Session,
         existingSessions: [],
       } as SessionDialogData);
-      c.tutors = [tutor()];
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
       c.students = [student()];
       c.selectedTutor = 't-1';
       c.selectedStudent = 's-1';
@@ -866,7 +866,7 @@ describe('SessionDialog', () => {
         } as Session,
         existingSessions: [],
       } as SessionDialogData);
-      c.tutors = [tutor()];
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
       c.students = [student()];
       c.selectedTutor = 't-1';
       c.selectedStudent = 's-1';
@@ -977,7 +977,7 @@ describe('SessionDialog', () => {
         } as Session,
         existingSessions: [],
       } as SessionDialogData);
-      c.tutors = [tutor()];
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
       c.students = [student()];
       c.selectedTutor = 't-1';
       c.selectedStudent = 's-1';
@@ -1129,6 +1129,37 @@ describe('SessionDialog', () => {
       sessionsService.deleteSession.mockReturnValue(throwError(() => new Error('x')));
       c3.chooseSeriesScope('future');
       expect(c3.hasError).toBe(true);
+    });
+  });
+
+  describe('staff dropdown by session type', () => {
+    const staffPool = () => [
+      tutor({ id: 't-1', first_name: 'Tess' }),
+      tutor({ id: 't-2', first_name: 'Cap', currently_accepting_students: false }),
+      tutor({ id: 't-3', first_name: 'Ada', is_tutor: false, currently_accepting_students: false }),
+    ];
+
+    it('tutoring sessions only offer accepting tutors', () => {
+      const c = build();
+      (c as unknown as { allStaff: Contact[] }).allStaff = staffPool();
+      (c as unknown as { selectedType: SessionType }).selectedType = SessionType.TUTORING;
+      expect(c.tutors.map(t => t.id)).toEqual(['t-1']);
+    });
+
+    it('admin sessions offer every active staff member, tutor or not', () => {
+      const c = build();
+      (c as unknown as { allStaff: Contact[] }).allStaff = staffPool();
+      (c as unknown as { selectedType: SessionType }).selectedType = SessionType.ADMIN;
+      expect(c.tutors.map(t => t.id)).toEqual(['t-1', 't-2', 't-3']);
+    });
+
+    it('treats a missing is_tutor flag as tutor (legacy staff)', () => {
+      const c = build();
+      (c as unknown as { allStaff: Contact[] }).allStaff = [
+        tutor({ id: 't-9', is_tutor: undefined }),
+      ];
+      (c as unknown as { selectedType: SessionType }).selectedType = SessionType.TUTORING;
+      expect(c.tutors.map(t => t.id)).toEqual(['t-9']);
     });
   });
 });
