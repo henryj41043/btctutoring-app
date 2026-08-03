@@ -26,7 +26,8 @@
     <mat-datepicker-toggle [for]="datepicker" matSuffix/>
   </mat-form-field>
   <mat-form-field>
-    <mat-label>Select Tutor</mat-label>
+    <!-- Admin time is loggable by any staff member; tutoring/make-up only by tutors. -->
+    <mat-label>{{selectedType === SessionType.ADMIN ? 'Select Staff' : 'Select Tutor'}}</mat-label>
     <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)">
       @for (tutor of tutors; track tutor) {
         <mat-option [value]="tutor.id">{{tutor.first_name}}</mat-option>
