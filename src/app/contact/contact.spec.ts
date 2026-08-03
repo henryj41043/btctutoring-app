@@ -971,6 +971,53 @@ describe('Contact', () => {
     });
   });
 
+  describe('per-student trial dates', () => {
+    const trialStudent = () => ({
+      id: 's-1', contact_id: 'c-1', name: 'Pat',
+      status: StudentStatus.ONBOARDING, trial_date: '2026-08-10',
+    });
+
+    it('parses the stored date for the picker without a UTC off-by-one', () => {
+      const c = build();
+      const date = c.trialDateFor(trialStudent() as Student)!;
+      expect(date.getFullYear()).toBe(2026);
+      expect(date.getMonth()).toBe(7);
+      expect(date.getDate()).toBe(10);
+      expect(c.trialDateFor({ id: 's-2' } as Student)).toBeNull();
+    });
+
+    it('saves a picked date as a partial student update', () => {
+      studentService.updateStudent.mockReturnValue(of({}));
+      const c = build();
+      const student = trialStudent() as Student;
+      c.saveTrialDate(student, new Date(2026, 7, 21));
+      expect(studentService.updateStudent).toHaveBeenCalledWith({
+        id: 's-1', contact_id: 'c-1', name: 'Pat', trial_date: '2026-08-21',
+      });
+      expect(student.trial_date).toBe('2026-08-21');
+    });
+
+    it('skips saves for unchanged dates, null dates, and id-less students', () => {
+      const c = build();
+      c.saveTrialDate(trialStudent() as Student, new Date(2026, 7, 10));
+      c.saveTrialDate(trialStudent() as Student, null);
+      c.saveTrialDate({ contact_id: 'c-1' } as Student, new Date(2026, 7, 21));
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('clears the in-flight guard when the save fails', () => {
+      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      const student = trialStudent() as Student;
+      c.saveTrialDate(student, new Date(2026, 7, 21));
+      expect(student.trial_date).toBe('2026-08-10');
+      // A retry after the failure fires a fresh request.
+      studentService.updateStudent.mockReturnValue(of({}));
+      c.saveTrialDate(student, new Date(2026, 7, 22));
+      expect(student.trial_date).toBe('2026-08-22');
+    });
+  });
+
   describe('updateContact', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
