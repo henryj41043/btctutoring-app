@@ -1,0 +1,71 @@
+.makeup-report {
+  padding: 16px;
+
+  .report-search {
+    margin-left: auto;
+    min-width: 260px;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .report-row {
+    cursor: pointer;
+
+    &.expanded {
+      background: rgba(0, 0, 0, 0.03);
+    }
+  }
+
+  .detail-row {
+    height: 0;
+
+    &.collapsed td {
+      border-bottom-width: 0;
+      padding: 0;
+    }
+  }
+
+  .batch-detail {
+    padding: 8px 16px 16px;
+  }
+
+  .batch-note {
+    margin: 8px 0;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  .batch-table {
+    border-collapse: collapse;
+
+    th,
+    td {
+      text-align: left;
+      padding: 4px 24px 4px 0;
+      font-size: 13px;
+    }
+
+    th {
+      color: rgba(0, 0, 0, 0.6);
+      font-weight: 500;
+    }
+  }
+
+  .empty-note {
+    margin: 16px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  .table-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px;
+
+    .table-spinner-label {
+      color: rgba(0, 0, 0, 0.6);
+    }
+  }
+}

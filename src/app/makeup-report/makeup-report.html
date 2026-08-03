@@ -1,0 +1,103 @@
+<div class="makeup-report">
+  <div class="btc-page-header">
+    <h2>Make-up Report</h2>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="report-search">
+      <mat-label>Search</mat-label>
+      <input matInput #reportSearch placeholder="Parent, student"
+             (input)="applyFilter(reportSearch.value)">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+  </div>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      @if (loading) {
+        <div class="table-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="table-spinner-label">Loading make-up balances…</span>
+        </div>
+      } @else if (dataSource.data.length === 0) {
+        <p class="empty-note">No students currently hold make-up minutes.</p>
+      } @else {
+      <div class="table-scroll">
+      <table mat-table [dataSource]="dataSource" multiTemplateDataRows class="mat-elevation-z8">
+        <ng-container matColumnDef="contact_name">
+          <th mat-header-cell *matHeaderCellDef>Parent</th>
+          <td mat-cell *matCellDef="let row">{{row.student.contact_name || '—'}}</td>
+        </ng-container>
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Student</th>
+          <td mat-cell *matCellDef="let row">{{studentDisplayName(row.student)}}</td>
+        </ng-container>
+        <ng-container matColumnDef="available">
+          <th mat-header-cell *matHeaderCellDef>Available Minutes</th>
+          <td mat-cell *matCellDef="let row">{{row.available}}</td>
+        </ng-container>
+        <ng-container matColumnDef="soonest_expiry">
+          <th mat-header-cell *matHeaderCellDef>Soonest Expiry</th>
+          <td mat-cell *matCellDef="let row">
+            @if (row.student.make_up_never_expire) {
+              <span class="btc-chip btc-chip--info">Never expires</span>
+            } @else if (row.legacy) {
+              <span class="btc-chip">No expiry data</span>
+            } @else {
+              {{row.soonestExpiry | date:'MMM d, y'}}
+            }
+          </td>
+        </ng-container>
+
+        <!-- Per-batch detail: minutes, the cancelled session they came from,
+             and when they expire. -->
+        <ng-container matColumnDef="expandedDetail">
+          <td mat-cell *matCellDef="let row" [attr.colspan]="reportColumns.length">
+            @if (isExpanded(row)) {
+              <div class="batch-detail">
+                @if (row.legacy) {
+                  <p class="batch-note">
+                    Balance predates per-session tracking — no source-session or
+                    expiry detail is available for these minutes.
+                  </p>
+                } @else {
+                  <table class="batch-table">
+                    <thead>
+                      <tr>
+                        <th>Minutes</th>
+                        <th>From cancelled session on</th>
+                        <th>Expires</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (batch of row.batches; track batch.earned_date) {
+                        <tr>
+                          <td>{{batch.minutes}}</td>
+                          <td>{{batch.earned_date | date:'MMM d, y'}}</td>
+                          <td>
+                            @if (batch.expires) {
+                              {{batch.expires | date:'MMM d, y'}}
+                            } @else {
+                              Never
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                }
+              </div>
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="reportColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: reportColumns;"
+            class="report-row" [class.expanded]="isExpanded(row)"
+            (click)="toggleExpanded(row)"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['expandedDetail']"
+            class="detail-row" [class.collapsed]="!isExpanded(row)"></tr>
+      </table>
+      </div>
+      <mat-paginator [pageSize]="50" [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

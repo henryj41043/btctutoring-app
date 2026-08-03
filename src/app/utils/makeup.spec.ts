@@ -3,7 +3,7 @@ import {
   bankMakeupMinutes,
   consumeMakeupMinutes,
   pruneExpiredBatches,
-} from './makeup';
+, unexpiredBatchViews} from './makeup';
 import {Student} from '../models/student.model';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -184,5 +184,54 @@ describe('pruneExpiredBatches', () => {
       student({make_up_batches: [{minutes: 12, earned_date: new Date().toISOString()}]}),
     );
     expect(s.make_up_minutes).toBe(12);
+  });
+});
+
+describe('ensureBatches via pruneExpiredBatches (legacy edge cases)', () => {
+  it('produces no batches for a zero or absent legacy balance', () => {
+    expect(pruneExpiredBatches({ make_up_minutes: 0 } as never).make_up_batches).toEqual([]);
+    expect(pruneExpiredBatches({} as never).make_up_batches).toEqual([]);
+  });
+});
+
+describe('unexpiredBatchViews', () => {
+  const now = new Date('2026-08-03T12:00:00Z');
+
+  it('drops expired batches and computes each expiry, oldest first', () => {
+    const views = unexpiredBatchViews(
+      {
+        make_up_batches: [
+          { minutes: 30, earned_date: '2026-07-01T14:00:00.000Z' },
+          { minutes: 15, earned_date: '2026-04-01T14:00:00.000Z' }, // expired
+          { minutes: 45, earned_date: '2026-06-01T14:00:00.000Z' },
+        ],
+      } as never,
+      now,
+    );
+    expect(views.map(v => v.minutes)).toEqual([45, 30]);
+    expect(views[0].expires!.toISOString()).toBe('2026-08-30T14:00:00.000Z');
+  });
+
+  it('returns null expiries for a never-expire student', () => {
+    const views = unexpiredBatchViews(
+      {
+        make_up_never_expire: true,
+        make_up_batches: [{ minutes: 30, earned_date: '2025-01-01T00:00:00.000Z' }],
+      } as never,
+      now,
+    );
+    expect(views).toHaveLength(1);
+    expect(views[0].expires).toBeNull();
+  });
+
+  it('defaults `now` to the current time', () => {
+    const views = unexpiredBatchViews({
+      make_up_batches: [{ minutes: 30, earned_date: new Date().toISOString() }],
+    } as never);
+    expect(views).toHaveLength(1);
+  });
+
+  it('returns an empty list for batch-less (legacy) students', () => {
+    expect(unexpiredBatchViews({ make_up_minutes: 60 } as never, now)).toEqual([]);
   });
 });
