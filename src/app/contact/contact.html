@@ -454,12 +454,27 @@
           <mat-label>Scholarship Name</mat-label>
           <input matInput formControlName="scholarship_name">
         </mat-form-field>
-        <mat-form-field>
-          <mat-label>Trial Date</mat-label>
-          <input matInput [matDatepicker]="trialDatepicker" formControlName="trial_date">
-          <mat-datepicker #trialDatepicker/>
-          <mat-datepicker-toggle [for]="trialDatepicker" matSuffix/>
-        </mat-form-field>
+        <!-- One trial date per student — saved onto the student immediately. -->
+        @for (trialStudent of students; track trialStudent.id) {
+          <mat-form-field>
+            <mat-label>Trial Date — {{studentDisplayName(trialStudent)}}</mat-label>
+            <input matInput [matDatepicker]="studentTrialPicker"
+                   [value]="trialDateFor(trialStudent)"
+                   (dateChange)="saveTrialDate(trialStudent, $event.value)">
+            <mat-datepicker #studentTrialPicker/>
+            <mat-datepicker-toggle [for]="studentTrialPicker" matSuffix/>
+          </mat-form-field>
+        }
+        <!-- Pre-split family-level date; read-only reference until each
+             student has their own. -->
+        @if (contactForm.controls['trial_date'].value) {
+          <mat-form-field>
+            <mat-label>Trial Date (legacy, family-wide)</mat-label>
+            <input matInput formControlName="trial_date" readonly
+                   [matDatepicker]="trialDatepicker">
+            <mat-datepicker #trialDatepicker [disabled]="true"/>
+          </mat-form-field>
+        }
         <mat-form-field>
           <mat-label>Registration Sent</mat-label>
           <input matInput [matDatepicker]="registrationSentDatepicker" formControlName="registration_sent">

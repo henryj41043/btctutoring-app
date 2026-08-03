@@ -533,6 +533,52 @@ export class Contact implements OnInit {
     return this.students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT && !!s.package).length >= 3;
   }
 
+  // In-flight per-student trial-date saves (blocks double-fire from the picker).
+  private savingTrialIds = new Set<string>();
+
+  /** The student's trial date as a local Date for the picker (UTC-parse safe). */
+  trialDateFor(student: Student): Date | null {
+    if (!student.trial_date) {
+      return null;
+    }
+    const [year, month, day] = student.trial_date.split('-').map(Number);
+    return year && month && day ? new Date(year, month - 1, day) : new Date(student.trial_date);
+  }
+
+  /** Persists a picked trial date straight onto the student (partial update). */
+  saveTrialDate(student: Student, date: Date | null): void {
+    const id = student.id;
+    if (!id || !date || this.savingTrialIds.has(id)) {
+      return;
+    }
+    const iso = `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`;
+    if (iso === student.trial_date) {
+      return;
+    }
+    this.savingTrialIds.add(id);
+    this.studentService
+      .updateStudent({
+        id,
+        contact_id: student.contact_id,
+        name: student.name,
+        trial_date: iso,
+      } as Student)
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          this.savingTrialIds.delete(id);
+          this.cdr.markForCheck();
+          return EMPTY;
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.savingTrialIds.delete(id);
+        student.trial_date = iso;
+        this.cdr.markForCheck();
+      });
+  }
+
   /** Scholarship paperwork applies when any student in the family holds one. */
   get hasScholarshipStudent(): boolean {
     return this.students.some(s => !!s.scholarship);
