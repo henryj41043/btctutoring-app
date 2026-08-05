@@ -503,6 +503,45 @@ describe('Contact', () => {
       expect(notes(c).at(0).get('id')!.value).toBe('n-new');
     });
 
+    it('re-sorts by date after saving a backdated note (manual order cleared)', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-08-02T00:00:00Z', order: 0 },
+          { id: 'b', date_time: '2026-08-01T00:00:00Z', order: 1 },
+        ] as Note[]),
+      );
+      noteService.updateNote.mockReturnValue(of({ id: 'a' } as Note));
+      const c = build();
+      c.ngOnInit();
+      // Open the top note and backdate it to 7/28 — like the client's report.
+      c.setNotesEditIndex(0);
+      notes(c).at(0).get('date_time')!.setValue(new Date('2026-07-28T00:00:00Z'));
+      c.saveNoteAt(0);
+      // The list snaps back to newest-date-first: 8/1 above the 7/28 note.
+      expect(ids(c)).toEqual(['b', 'a']);
+      expect(c.notesHaveManualOrder).toBe(false);
+    });
+
+    it('keeps the current arrangement when a save leaves the date untouched', () => {
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([
+          { id: 'a', date_time: '2026-08-01T00:00:00Z', order: 0 },
+          { id: 'b', date_time: '2026-08-02T00:00:00Z', order: 1 },
+        ] as Note[]),
+      );
+      noteService.updateNote.mockReturnValue(of({ id: 'a' } as Note));
+      const c = build();
+      c.ngOnInit();
+      c.setNotesEditIndex(0);
+      notes(c).at(0).get('message')!.setValue('edited text only');
+      c.saveNoteAt(0);
+      // Message-only edit: the manual arrangement survives.
+      expect(ids(c)).toEqual(['a', 'b']);
+      expect(c.notesHaveManualOrder).toBe(true);
+      // Only the edited note was persisted — no order-rewrite fan-out.
+      expect(noteService.updateNote).toHaveBeenCalledTimes(1);
+    });
+
     it('sortNotesByDate clears the order, persists null, and re-sorts by date', () => {
       noteService.getNotesByRecipient.mockReturnValue(
         of([
