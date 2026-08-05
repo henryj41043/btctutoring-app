@@ -1010,6 +1010,40 @@ describe('Contact', () => {
     });
   });
 
+  describe('schedule trial button', () => {
+    it('is enabled only when the assigned tutor is resolvable', () => {
+      contactService.getStaff.mockReturnValue(
+        of([{ id: 't-1', first_name: 'Tess', status: 'Staff', currently_accepting_students: true, service: Service.HIRING }]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(c.canScheduleTrial({ id: 's-1', assigned_tutor_id: 't-1' } as Student)).toBe(true);
+      expect(c.canScheduleTrial({ id: 's-2' } as Student)).toBe(false);
+      expect(c.canScheduleTrial({ id: 's-3', assigned_tutor_id: 't-unknown' } as Student)).toBe(false);
+    });
+
+    it('opens the trial dialog and syncs the returned date onto the student', () => {
+      contactService.getStaff.mockReturnValue(
+        of([{ id: 't-1', first_name: 'Tess', status: 'Staff', currently_accepting_students: true, service: Service.HIRING }]),
+      );
+      afterClosed = '2026-08-21';
+      const c = build();
+      c.ngOnInit();
+      const student = { id: 's-1', contact_id: 'c-1', assigned_tutor_id: 't-1' } as Student;
+      c.openTrialDialog(student);
+      expect(dialog.open).toHaveBeenCalled();
+      expect(student.trial_date).toBe('2026-08-21');
+    });
+
+    it('does nothing when the tutor is unresolvable', () => {
+      const c = build();
+      c.ngOnInit();
+      dialog.open.mockClear();
+      c.openTrialDialog({ id: 's-1' } as Student);
+      expect(dialog.open).not.toHaveBeenCalled();
+    });
+  });
+
   describe('per-student trial dates', () => {
     const trialStudent = () => ({
       id: 's-1', contact_id: 'c-1', name: 'Pat',

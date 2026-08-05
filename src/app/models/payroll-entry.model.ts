@@ -1,6 +1,8 @@
 export class PayrollEntry {
   name?: string;
   tutoring_hours?: number;
+  /** Completed/NCNS trials in the period — each pays a flat 1.0h at pay_rate. */
+  trial_hours?: number;
   administrative_time?: number;
   planning_time?: number;
   /** Extra planning hours from per-student extra_planning_minutes credits. */

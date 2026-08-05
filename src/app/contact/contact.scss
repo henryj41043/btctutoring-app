@@ -247,3 +247,13 @@
   color: var(--btc-teal-deep, #555);
   opacity: 0.85;
 }
+
+.trial-date-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  mat-form-field {
+    flex: 1;
+  }
+}

@@ -122,6 +122,62 @@ describe('Payroll', () => {
     expect(priv(p).loading).toBe(false);
   });
 
+  it('pays a flat hour per held trial and keeps trials out of planning time', () => {
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          // Completed 45-min trial in the window -> flat 1.0 trial hour.
+          type: SessionType.TRIAL,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-06-05T10:00:00',
+          end_datetime: '2026-06-05T10:45:00',
+        },
+        {
+          // NCNS trial also pays the flat hour (tutor held the slot).
+          type: SessionType.TRIAL,
+          status: SessionStatus.NO_CALL_NO_SHOW,
+          student_id: 's-2',
+          start_datetime: '2026-06-06T10:00:00',
+          end_datetime: '2026-06-06T10:45:00',
+        },
+        {
+          // Cancelled trial pays nothing.
+          type: SessionType.TRIAL,
+          status: SessionStatus.CANCELLED,
+          start_datetime: '2026-06-07T10:00:00',
+          end_datetime: '2026-06-07T10:45:00',
+        },
+        {
+          // Out-of-window trial contributes zero.
+          type: SessionType.TRIAL,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-05-01T10:00:00',
+          end_datetime: '2026-05-01T10:45:00',
+        },
+        {
+          // A normal completed tutoring hour keeps the planning math visible.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-06-08T10:00:00',
+          end_datetime: '2026-06-08T11:00:00',
+        },
+      ] as Session[]),
+    );
+
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+
+    const entry = data(p)[0];
+    expect(entry.trial_hours).toBe(2); // completed + NCNS, flat 1.0 each
+    expect(entry.tutoring_hours).toBe(1); // trials never join tutoring hours
+    // Planning derives from tutoring hours only: 1/6 h.
+    expect(entry.planning_time).toBeCloseTo(0.17, 2);
+    expect(entry.hours_subtotal).toBe(3); // 1 tutoring + 0 admin + 2 trial
+    // 3h x $40 = $120 at the regular rate — the flat trial hours are in.
+    expect(entry.tutoring_compensation).toBe(120);
+  });
+
   it('credits extra planning minutes per counted session for tagged students', () => {
     studentService.getStudentsByTutor.mockReturnValue(
       of([

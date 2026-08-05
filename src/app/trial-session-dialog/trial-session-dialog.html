@@ -1,0 +1,46 @@
+<h2 mat-dialog-title>Schedule Trial — {{studentDisplayName(data.student)}}</h2>
+
+<mat-dialog-content class="trial-dialog-content">
+  <p class="trial-tutor-line">
+    Tutor: <strong>{{data.tutor.first_name}}</strong>
+    <span class="trial-length-hint">Trial sessions are always 45 minutes.</span>
+  </p>
+
+  <mat-form-field>
+    <mat-label>Trial Date</mat-label>
+    <input matInput [matDatepicker]="trialPicker" [(ngModel)]="date">
+    <mat-datepicker #trialPicker/>
+    <mat-datepicker-toggle [for]="trialPicker" matSuffix/>
+  </mat-form-field>
+
+  <mat-form-field>
+    <mat-label>Start Time</mat-label>
+    <input matInput [matTimepicker]="startPicker" [(ngModel)]="startTime">
+    <mat-timepicker #startPicker/>
+    <mat-timepicker-toggle [for]="startPicker" matSuffix/>
+  </mat-form-field>
+
+  @if (endTime) {
+    <p class="trial-end-line">Ends at {{endTime | date:'shortTime'}}</p>
+  }
+
+  <mat-form-field class="trial-notes">
+    <mat-label>Notes (optional)</mat-label>
+    <textarea matInput [(ngModel)]="notes"></textarea>
+  </mat-form-field>
+
+  @if (hasError) {
+    <mat-error class="dialog-error">{{ errorMessage }}</mat-error>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions>
+  @if (submitting) {
+    <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+  } @else {
+    <button matButton (click)="cancel()">Cancel</button>
+    <button mat-raised-button color="primary" [disabled]="!canSave" (click)="save()">
+      Schedule Trial
+    </button>
+  }
+</mat-dialog-actions>

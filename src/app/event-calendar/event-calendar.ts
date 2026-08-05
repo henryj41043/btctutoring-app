@@ -77,6 +77,10 @@ const colors: Record<string, EventColor> = {
     primary: '#e07b00',
     secondary: '#ffd9ad',
   },
+  teal: {
+    primary: '#00897b',
+    secondary: '#b2dfdb',
+  },
 };
 
 @Component({
@@ -372,11 +376,12 @@ export class EventCalendar implements OnInit {
     return sessions.filter(session => this.matchesFilter(session)).map((session: Session) => {
       const isAdmin = session.type === SessionType.ADMIN;
       const isMakeUp = session.type === SessionType.MAKE_UP;
+      const isTrial = session.type === SessionType.TRIAL;
       const timeRange = `${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`;
       return {
         title: isAdmin
           ? `${session.tutor_name} - Admin Time - ${timeRange}`
-          : `${isMakeUp ? '[Make-up] ' : ''}${session.tutor_name} with ${session.student_name} - ${timeRange}`,
+          : `${isMakeUp ? '[Make-up] ' : ''}${isTrial ? '[Trial] ' : ''}${session.tutor_name} with ${session.student_name} - ${timeRange}`,
         start: new Date(session.start_datetime as string),
         end: new Date(session.end_datetime as string),
         meta: session,
@@ -391,6 +396,16 @@ export class EventCalendar implements OnInit {
   private setColor(type: SessionType | undefined, status: SessionStatus | undefined): EventColor {
     if (type === SessionType.ADMIN) {
       return colors['purple'];
+    }
+    // Teal marks a SCHEDULED trial; once finalized it takes the outcome color.
+    if (type === SessionType.TRIAL) {
+      if (status === SessionStatus.COMPLETED) {
+        return colors['green'];
+      }
+      if (status === SessionStatus.NO_CALL_NO_SHOW || status === SessionStatus.CANCELLED) {
+        return colors['red'];
+      }
+      return colors['teal'];
     }
     if (type === SessionType.MAKE_UP) {
       // Orange marks a SCHEDULED make-up; once finalized it takes the outcome

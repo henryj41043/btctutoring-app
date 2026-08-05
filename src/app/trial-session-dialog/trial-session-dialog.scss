@@ -1,0 +1,35 @@
+.trial-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 360px;
+}
+
+.trial-tutor-line {
+  margin: 0 0 12px;
+
+  .trial-length-hint {
+    display: block;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.6);
+  }
+}
+
+.trial-end-line {
+  margin: -4px 0 12px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.trial-notes {
+  width: 100%;
+}
+
+.dialog-error {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.dialog-saving-spinner {
+  margin: 8px 16px;
+}

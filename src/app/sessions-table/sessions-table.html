@@ -40,6 +40,9 @@
             @if (item.type === SessionType.MAKE_UP) {
               <span class="btc-chip btc-chip--warn make-up-chip">Make-up</span>
             }
+            @if (item.type === SessionType.TRIAL) {
+              <span class="btc-chip btc-chip--info trial-chip">Trial</span>
+            }
           </td>
         </ng-container>
         <ng-container matColumnDef="start">

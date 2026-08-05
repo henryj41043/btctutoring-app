@@ -68,24 +68,34 @@ export class SessionDialog implements OnInit {
   selectedTutor: string | undefined;
   selectedStudent: string | undefined;
   selectedAttendance: any;
-  sessionTypeOptions: SessionType[] = Object.values(SessionType);
+  // Trials are only created from the contact page; the generic dialog offers
+  // TRIAL only when the session being edited already is one.
+  sessionTypeOptions: SessionType[] =
+    Object.values(SessionType).filter(t => t !== SessionType.TRIAL);
   readonly SessionType = SessionType;
   readonly SessionStatus = SessionStatus;
   readonly typeLabels: Record<string, string> = {
     [SessionType.TUTORING]: 'Tutoring',
     [SessionType.MAKE_UP]: 'Make-up',
     [SessionType.ADMIN]: 'Admin',
+    [SessionType.TRIAL]: 'Trial',
   };
   // All active staff (Hiring + Active Staff); the `tutors` getter narrows by
   // session type — Admin time is loggable by any staff member, tutoring only
   // by accepting tutors.
   private allStaff: Contact[] = [];
   get tutors(): Contact[] {
-    return this.selectedType === SessionType.ADMIN
-      ? this.allStaff
-      : this.allStaff.filter(
-          c => c.is_tutor !== false && c.currently_accepting_students,
-        );
+    if (this.selectedType === SessionType.ADMIN) {
+      return this.allStaff;
+    }
+    // Trials keep the accepting-students filter off: the assigned tutor may
+    // be at capacity and must still be selectable.
+    if (this.selectedType === SessionType.TRIAL) {
+      return this.allStaff.filter(c => c.is_tutor !== false);
+    }
+    return this.allStaff.filter(
+      c => c.is_tutor !== false && c.currently_accepting_students,
+    );
   }
   students: Student[] = [];
   filteredStudents: Student[] = [];
@@ -169,6 +179,12 @@ export class SessionDialog implements OnInit {
    * constrained (make-up is already bounded by the make-up minutes bank).
    */
   private validateSessionLength(durationMinutes: number): string | null {
+    // Trials are fixed-length by policy.
+    if (this.selectedType === SessionType.TRIAL) {
+      return durationMinutes === 45
+        ? null
+        : 'Trial sessions are always exactly 45 minutes.';
+    }
     if (this.selectedType !== SessionType.TUTORING) return null;
     const def = this.selectedPackageDef;
     if (!def) return null;
@@ -225,6 +241,9 @@ export class SessionDialog implements OnInit {
   ngOnInit(): void {
     if(this.dialogData.type !== 'create') {
       this.selectedType = this.dialogData.session.type ?? SessionType.TUTORING;
+      if (this.selectedType === SessionType.TRIAL) {
+        this.sessionTypeOptions = Object.values(SessionType);
+      }
       this.selectedStudent = this.dialogData.session.student_id;
       this.selectedTutor = this.dialogData.session.tutor_id;
       this.date = new Date(this.dialogData.session.start_datetime as string);
@@ -595,6 +614,7 @@ export class SessionDialog implements OnInit {
           })
         ).subscribe(response => {
           this.hasError = false;
+          this.syncTrialDateAfterReschedule(session);
           this.dialogRef.close(response as Session);
         });
       }
@@ -742,8 +762,40 @@ export class SessionDialog implements OnInit {
     this.seriesAction = null;
   }
 
+  /**
+   * A rescheduled trial's session date is the trial date of record — keep the
+   * student's trial_date in sync (fire-and-forget; the Onboarding table reads it).
+   */
+  private syncTrialDateAfterReschedule(session: Session): void {
+    if (session.type !== SessionType.TRIAL || !session.student_id || !session.start_datetime) {
+      return;
+    }
+    const original = this.dialogData.session.start_datetime;
+    if (original && new Date(original).toDateString() === new Date(session.start_datetime).toDateString()) {
+      return;
+    }
+    const start = new Date(session.start_datetime);
+    const iso = `${start.getFullYear()}-${`${start.getMonth() + 1}`.padStart(2, '0')}-${`${start.getDate()}`.padStart(2, '0')}`;
+    const student = this.students.find(s => s.id === session.student_id);
+    this.studentService.updateStudent({
+      id: session.student_id,
+      contact_id: student?.contact_id,
+      name: student?.name,
+      trial_date: iso,
+    } as Student).pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      }),
+    ).subscribe();
+  }
+
   /** Whether finalizing a session of this type/status changes the student's minute banks. */
   private mutatesStudent(type: SessionType, status: SessionStatus): boolean {
+    // Trials never touch the make-up bank — a cancelled trial banks nothing.
+    if (type === SessionType.TRIAL) {
+      return false;
+    }
     if (type === SessionType.MAKE_UP) {
       return status === SessionStatus.COMPLETED || status === SessionStatus.NO_CALL_NO_SHOW;
     }
@@ -778,7 +830,11 @@ export class SessionDialog implements OnInit {
       catchError(error => { console.log(error); return EMPTY; }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(students => {
-      this.students = students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT);
+      // Trial students are usually still Onboarding — include them when this
+      // dialog is working on a trial session.
+      this.students = students.filter(s =>
+        s.status === StudentStatus.ACTIVE_STUDENT ||
+        (this.selectedType === SessionType.TRIAL && s.status === StudentStatus.ONBOARDING));
       // Pre-filter for edit mode where tutor is already selected when students load
       if (this.selectedTutor) {
         this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === this.selectedTutor);

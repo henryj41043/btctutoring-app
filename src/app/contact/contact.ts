@@ -26,6 +26,7 @@ import {ParentStatus} from '../enums/parent-status.enum';
 import {cascadeTargetFor} from '../utils/parent-status-cascade';
 import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {UserGroup} from '../enums/user-group.enum';
 import {AuthService} from '../services/auth.service';
@@ -43,6 +44,7 @@ import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions
 import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
 import {ManageScheduleDialog} from '../manage-schedule-dialog/manage-schedule-dialog';
 import {StudentDialog, StudentDialogMode, StudentDialogResult} from '../student-dialog/student-dialog';
+import {TrialSessionDialog} from '../trial-session-dialog/trial-session-dialog';
 import {BillingService} from '../services/billing.service';
 import {BillingRecord} from '../models/billing-record.model';
 import {studentMonthlyCharge, studentSemiMonthlyCharge, siblingDiscountedTotal} from '../utils/billing-amount';
@@ -65,6 +67,7 @@ import {Router} from '@angular/router';
     MatSelectModule,
     MatIconModule,
     MatCheckbox,
+    MatTooltipModule,
     DatePipe,
     MatDatepickerModule,
     MatTimepickerModule,
@@ -577,6 +580,32 @@ export class Contact implements OnInit {
         student.trial_date = iso;
         this.cdr.markForCheck();
       });
+  }
+
+  /** A trial can be scheduled once the student has a resolvable assigned tutor. */
+  canScheduleTrial(student: Student): boolean {
+    return !!student.id && !!student.assigned_tutor_id && this.staffById.has(student.assigned_tutor_id);
+  }
+
+  /** Opens the trial scheduler for a student; syncs the picked date on close. */
+  openTrialDialog(student: Student): void {
+    const tutor = student.assigned_tutor_id
+      ? this.staffById.get(student.assigned_tutor_id)
+      : undefined;
+    if (!tutor) {
+      return;
+    }
+    const ref = this.dialog.open(TrialSessionDialog, {
+      data: {student, tutor},
+      width: '420px',
+    });
+    ref.afterClosed().subscribe((scheduledIso?: string) => {
+      if (scheduledIso) {
+        // The session's date is the trial date of record.
+        student.trial_date = scheduledIso;
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   /** Scholarship paperwork applies when any student in the family holds one. */
