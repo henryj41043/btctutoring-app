@@ -497,8 +497,15 @@ export class SessionDialog implements OnInit {
         this.hasError = true;
         return;
       }
-      // Series sessions: ask whether to apply to this occurrence or this + future.
-      if (this.dialogData.session.series_id && this.seriesScope === null) {
+      // Series sessions: ask whether to apply to this occurrence or this +
+      // future — but only for actual reschedules. Attendance/notes-only edits
+      // (no date/time/tutor/student change) are inherently single-occurrence,
+      // so the prompt would only confuse.
+      if (
+        this.dialogData.session.series_id &&
+        this.seriesScope === null &&
+        !this.scheduleFieldsUnchanged()
+      ) {
         this.seriesAction = 'edit';
         this.showSeriesScopePrompt = true;
         return;

@@ -704,6 +704,40 @@ describe('SessionDialog', () => {
       expect(c.showSeriesScopePrompt).toBe(true);
     });
 
+    /** Edit data whose scheduling fields exactly match the primed selections. */
+    const attendanceOnlyEditData = (over: Partial<Session> = {}) =>
+      editData({
+        series_id: 'series-1',
+        tutor_id: 't-1',
+        student_id: 's-1',
+        start_datetime: new Date(2026, 5, 1, 10, 0).toISOString(),
+        end_datetime: new Date(2026, 5, 1, 11, 0).toISOString(),
+        ...over,
+      });
+
+    it('skips the scope prompt when only attendance changes on a series session', () => {
+      const c = primedEdit(attendanceOnlyEditData());
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.updateSession();
+      // No series-scope prompt — straight to the normal attendance confirm.
+      expect(c.showSeriesScopePrompt).toBe(false);
+      c.confirmStatusChange();
+      // Single-occurrence update only, no series fan-out.
+      expect(sessionsService.updateSession).toHaveBeenCalledTimes(1);
+      expect(sessionsService.getSessionsBySeries).not.toHaveBeenCalled();
+    });
+
+    it('still prompts for scope when a series session is rescheduled', () => {
+      const c = primedEdit(attendanceOnlyEditData());
+      // Move the start time — now it's a real reschedule.
+      c.startTime = new Date(2026, 5, 1, 12, 0);
+      c.endTime = new Date(2026, 5, 1, 13, 0);
+      c.updateSession();
+      expect(c.showSeriesScopePrompt).toBe(true);
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+    });
+
     it('rejects when the date/time is missing', () => {
       const c = primedEdit(editData());
       c.date = undefined;
