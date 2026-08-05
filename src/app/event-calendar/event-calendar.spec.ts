@@ -524,6 +524,31 @@ describe('EventCalendar', () => {
       expect(colorFor({ type: SessionType.TUTORING, status })).toBe(primary);
     });
 
+    it.each([
+      [SessionStatus.PENDING, '#00897b'],
+      [SessionStatus.COMPLETED, '#18c100'],
+      [SessionStatus.CANCELLED, '#ad2121'],
+      [SessionStatus.NO_CALL_NO_SHOW, '#ad2121'],
+    ])('colors TRIAL %s sessions (teal while scheduled)', (status, primary) => {
+      expect(colorFor({ type: SessionType.TRIAL, status })).toBe(primary);
+    });
+
+    it('prefixes trial titles with [Trial]', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([
+        {
+          type: SessionType.TRIAL,
+          status: SessionStatus.PENDING,
+          tutor_name: 'T',
+          student_name: 'S',
+          start_datetime: '2026-06-01T09:00:00',
+          end_datetime: '2026-06-01T09:45:00',
+        },
+      ] as Session[]));
+      const c = build();
+      c.ngOnInit();
+      expect(c.events[0].title).toContain('[Trial] ');
+    });
+
     it('defaults unknown statuses to yellow', () => {
       expect(colorFor({ type: SessionType.TUTORING, status: undefined })).toBe('#e3bc08');
     });

@@ -456,14 +456,25 @@
         </mat-form-field>
         <!-- One trial date per student — saved onto the student immediately. -->
         @for (trialStudent of students; track trialStudent.id) {
-          <mat-form-field>
-            <mat-label>Trial Date — {{studentDisplayName(trialStudent)}}</mat-label>
-            <input matInput [matDatepicker]="studentTrialPicker"
-                   [value]="trialDateFor(trialStudent)"
-                   (dateChange)="saveTrialDate(trialStudent, $event.value)">
-            <mat-datepicker #studentTrialPicker/>
-            <mat-datepicker-toggle [for]="studentTrialPicker" matSuffix/>
-          </mat-form-field>
+          <div class="trial-date-row">
+            <mat-form-field>
+              <mat-label>Trial Date — {{studentDisplayName(trialStudent)}}</mat-label>
+              <input matInput [matDatepicker]="studentTrialPicker"
+                     [value]="trialDateFor(trialStudent)"
+                     (dateChange)="saveTrialDate(trialStudent, $event.value)">
+              <mat-datepicker #studentTrialPicker/>
+              <mat-datepicker-toggle [for]="studentTrialPicker" matSuffix/>
+            </mat-form-field>
+            <button matIconButton type="button" class="schedule-trial-button"
+                    [disabled]="!canScheduleTrial(trialStudent)"
+                    [matTooltip]="canScheduleTrial(trialStudent)
+                      ? 'Schedule the trial session'
+                      : 'Assign a tutor to schedule the trial'"
+                    (click)="openTrialDialog(trialStudent)"
+                    aria-label="Schedule trial session">
+              <mat-icon>event_available</mat-icon>
+            </button>
+          </div>
         }
         <!-- Pre-split family-level date; read-only reference until each
              student has their own. -->

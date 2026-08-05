@@ -1166,6 +1166,134 @@ describe('SessionDialog', () => {
     });
   });
 
+  /** An edit dialog primed on an existing 45-min trial session. */
+  const primedTrialEdit = (): SessionDialog => {
+    const c = build({
+      type: 'edit',
+      session: {
+        id: 'sess-t',
+        type: SessionType.TRIAL,
+        status: SessionStatus.PENDING,
+        tutor_id: 't-1',
+        student_id: 's-1',
+        start_datetime: new Date(2026, 5, 1, 10, 0).toISOString(),
+        end_datetime: new Date(2026, 5, 1, 10, 45).toISOString(),
+      },
+      existingSessions: [],
+    } as never);
+    c.ngOnInit();
+    (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
+    c.students = [student({ id: 's-1', contact_id: 'c-1', name: 'Pat' })];
+    c.selectedTutor = 't-1';
+    c.selectedStudent = 's-1';
+    c.date = new Date(2026, 5, 1);
+    c.startTime = new Date(2026, 5, 1, 10, 0);
+    c.endTime = new Date(2026, 5, 1, 10, 45);
+    c.selectedAttendance = SessionStatus.PENDING;
+    return c;
+  };
+
+  describe('TRIAL guards', () => {
+    it('offers TRIAL in the type dropdown only when editing a trial', () => {
+      const createDialog = build();
+      expect(createDialog.sessionTypeOptions).not.toContain(SessionType.TRIAL);
+
+      const trialEdit = build({
+        type: 'edit',
+        session: {
+          id: 'sess-t', type: SessionType.TRIAL, status: SessionStatus.PENDING,
+          start_datetime: '2026-06-01T10:00:00Z',
+        },
+      } as never);
+      trialEdit.ngOnInit();
+      expect(trialEdit.sessionTypeOptions).toContain(SessionType.TRIAL);
+    });
+
+    it('lets trial edits pick non-accepting tutors (but never non-tutors)', () => {
+      const c = build();
+      (c as unknown as { allStaff: Contact[] }).allStaff = [
+        tutor({ id: 't-1', currently_accepting_students: false }),
+        tutor({ id: 't-2', is_tutor: false }),
+      ];
+      (c as unknown as { selectedType: SessionType }).selectedType = SessionType.TRIAL;
+      expect(c.tutors.map(t => t.id)).toEqual(['t-1']);
+    });
+
+    it('never touches the make-up bank for a cancelled trial', () => {
+      const mutates = (
+        build() as unknown as {
+          mutatesStudent: (t: SessionType, st: SessionStatus) => boolean;
+        }
+      ).mutatesStudent;
+      const c = build() as unknown as {
+        mutatesStudent: (t: SessionType, st: SessionStatus) => boolean;
+      };
+      expect(c.mutatesStudent(SessionType.TRIAL, SessionStatus.CANCELLED)).toBe(false);
+      expect(c.mutatesStudent(SessionType.TRIAL, SessionStatus.COMPLETED)).toBe(false);
+      expect(c.mutatesStudent(SessionType.TRIAL, SessionStatus.NO_CALL_NO_SHOW)).toBe(false);
+      // Tutoring cancel still banks.
+      expect(c.mutatesStudent(SessionType.TUTORING, SessionStatus.CANCELLED)).toBe(true);
+      void mutates;
+    });
+
+    it('rejects a trial edit that is not exactly 45 minutes', () => {
+      const c = primedTrialEdit();
+      c.endTime = new Date(2026, 5, 1, 11, 0); // 60 min
+      c.updateSession();
+      expect(c.hasError).toBe(true);
+      expect((c.errorMessage as string)).toContain('45 minutes');
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+    });
+
+    it('syncs the student trial date when a trial is rescheduled', () => {
+      const c = primedTrialEdit();
+      // Move to a different DAY, keep 45 minutes.
+      c.date = new Date(2026, 5, 3);
+      c.startTime = new Date(2026, 5, 3, 10, 0);
+      c.endTime = new Date(2026, 5, 3, 10, 45);
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-t' }));
+      studentService.updateStudent.mockReturnValue(of({}));
+      c.updateSession();
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 's-1', trial_date: '2026-06-03' }),
+      );
+    });
+
+    it('syncs with blank family fields when the student is not in the list', () => {
+      const c = primedTrialEdit();
+      c.students = [];
+      studentService.updateStudent.mockReturnValue(of({}));
+      (c as unknown as {
+        syncTrialDateAfterReschedule: (s: unknown) => void;
+      }).syncTrialDateAfterReschedule({
+        type: SessionType.TRIAL,
+        student_id: 's-1',
+        start_datetime: new Date(2026, 5, 4, 10, 0).toISOString(),
+      });
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 's-1', trial_date: '2026-06-04' }),
+      );
+    });
+
+    it('never syncs non-trial or student-less sessions', () => {
+      const sync = (session: unknown) =>
+        (build() as unknown as {
+          syncTrialDateAfterReschedule: (s: unknown) => void;
+        }).syncTrialDateAfterReschedule(session);
+      sync({ type: SessionType.TUTORING, student_id: 's-1', start_datetime: '2026-06-04T10:00:00Z' });
+      sync({ type: SessionType.TRIAL, start_datetime: '2026-06-04T10:00:00Z' });
+      sync({ type: SessionType.TRIAL, student_id: 's-1' });
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('does not sync the trial date when only attendance changes', () => {
+      const c = primedTrialEdit();
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-t' }));
+      c.updateSession();
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+  });
+
   describe('staff dropdown by session type', () => {
     const staffPool = () => [
       tutor({ id: 't-1', first_name: 'Tess' }),
