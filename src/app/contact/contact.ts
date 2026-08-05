@@ -732,6 +732,13 @@ export class Contact implements OnInit {
   saveNoteAt(index: number) {
     const raw = this.notes.controls.at(index)?.getRawValue() as Record<string, unknown>;
     const noteToSave: Note = {...raw, date_time: this.noteDateIso(raw['date_time'])} as Note;
+    // A save that changed the note's date (incl. backdating a fresh note)
+    // snaps the whole list back to newest-date-first — manual drag order is
+    // a between-saves arrangement only (client decision 2026-08).
+    const previousIso = this.noteEditSnapshot
+      ? this.noteDateIso(this.noteEditSnapshot['date_time'])
+      : null;
+    const dateChanged = previousIso !== null && previousIso !== noteToSave.date_time;
     this.noteService.updateNote(noteToSave)
       .pipe(
         catchError(error => {
@@ -743,6 +750,9 @@ export class Contact implements OnInit {
         console.log(`Note ${note.id} updated successfully.`);
         this.newNoteIds.delete(noteToSave.id!);
         this.setNotesEditIndex(-1);
+        if (dateChanged) {
+          this.sortNotesByDate();
+        }
       });
   }
 
