@@ -42,6 +42,8 @@ export class Contact {
   availability?: AvailabilityBlock[];
   zoom_link?: string;
   hourly_rate?: number;
+  /** Staff hire classification for payroll/tax purposes: 'W2' | '1099' (HireType). */
+  hire_type?: string;
   hiring_inquiry_received?: Date;
   interview_offer_sent?: Date;
   interview_scheduled?: Date;

@@ -21,6 +21,7 @@ import {Student} from '../models/student.model';
 import {Note} from '../models/note.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {TwentyFiveStatus} from '../enums/twenty-five-status.enum';
+import {HireType} from '../enums/hire-type.enum';
 import {StaffStatus, staffStatusLabel} from '../enums/staff-status.enum';
 import {ParentStatus} from '../enums/parent-status.enum';
 import {cascadeTargetFor} from '../utils/parent-status-cascade';
@@ -113,6 +114,7 @@ export class Contact implements OnInit {
   protected groupOptions: string[] = Object.values(UserGroup);
   protected tutors: _Contact[] = [];
   protected readonly twentyFiveStatusOptions: string[] = Object.values(TwentyFiveStatus);
+  protected readonly hireTypeOptions: string[] = Object.values(HireType);
   protected readonly studentDisplayName = studentDisplayName;
   protected readonly statusChipClass = studentStatusChipClass;
   // Name lookup for ALL staff (unfiltered) — `tutors` is the assignment
@@ -163,6 +165,7 @@ export class Contact implements OnInit {
     availability: this.formBuilder.array([]),
     zoom_link: '',
     hourly_rate: 0,
+    hire_type: '',
     hiring_inquiry_received: undefined,
     interview_offer_sent: undefined,
     interview_scheduled: undefined,
@@ -382,6 +385,7 @@ export class Contact implements OnInit {
     );
     this.contactForm.controls['zoom_link'].setValue(contact.zoom_link);
     this.contactForm.controls['hourly_rate'].setValue(contact.hourly_rate);
+    this.contactForm.controls['hire_type'].setValue(contact.hire_type);
     this.contactForm.controls['hiring_inquiry_received'].setValue(contact.hiring_inquiry_received);
     this.contactForm.controls['interview_offer_sent'].setValue(contact.interview_offer_sent);
     this.contactForm.controls['interview_scheduled'].setValue(contact.interview_scheduled);

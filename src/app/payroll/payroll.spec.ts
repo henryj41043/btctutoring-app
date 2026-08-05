@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -406,6 +407,7 @@ describe('Payroll', () => {
       (p as unknown as { dataSource: { data: PayrollEntry[] } }).dataSource.data = [
         {
           name: 'Tess',
+          hire_type: '1099',
           tutoring_hours: 2,
           administrative_time: 1,
           hours_subtotal: 3,
@@ -428,15 +430,99 @@ describe('Payroll', () => {
       expect(doc.save).toHaveBeenCalled();
       expect(doc.setPage).toHaveBeenCalledTimes(2);
       const tableArgs = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1] as {
+        head: unknown[][];
         body: unknown[][];
+        foot: unknown[][];
+        showFoot: string;
+        footStyles: { fillColor: number[] };
       };
+      // Exact head pins the Hire Type column's position.
+      expect(tableArgs.head).toEqual([[
+        'Staff Name', 'Hire Type', 'Tutoring (hrs)', 'Trials (hrs)', 'Admin Time (hrs)',
+        'Subtotal (hrs)', 'Pay Rate', 'Tutoring Comp', 'Planning (hrs)', 'Planning Rate',
+        'Planning Comp', 'Total Comp',
+      ]]);
+      expect(tableArgs.body[0][1]).toBe('1099');
+      expect(tableArgs.body[1][1]).toBe(''); // `?? ''` fallback
       expect(tableArgs.body[0]).toContain('0.33 +0.5');
+      // Grand total of Total Comp in the last cell of a 12-cell foot, last page only.
+      expect(tableArgs.foot).toEqual([
+        ['Grand Total', '', '', '', '', '', '', '', '', '', '', '$124.95'],
+      ]);
+      expect(tableArgs.showFoot).toBe('lastPage');
+      expect(tableArgs.footStyles).toEqual({ fillColor: [17, 138, 178] });
     });
 
     it('tolerates an unset date range', () => {
       const p = build();
       expect(() => p.exportPDF()).not.toThrow();
       expect(autoTable).toHaveBeenCalled();
+    });
+  });
+
+  describe('grand total', () => {
+    const totals = (p: Payroll) => p as unknown as { grandTotalComp: number };
+
+    it('sums total compensation across all rows, re-rounded', () => {
+      const p = build();
+      // 0.1 + 0.2 is 0.30000000000000004 unrounded — pins the round2 wrapper.
+      (p as unknown as { dataSource: { data: PayrollEntry[] } }).dataSource.data = [
+        { total_compensation: 0.1 } as PayrollEntry,
+        { total_compensation: 0.2 } as PayrollEntry,
+        {} as PayrollEntry, // `?? 0` fallback
+      ];
+      expect(totals(p).grandTotalComp).toBe(0.3);
+    });
+
+    it('is zero with no rows', () => {
+      const p = build();
+      expect(totals(p).grandTotalComp).toBe(0);
+    });
+  });
+
+  describe('hire type', () => {
+    it('carries the staff contact hire type onto admin-path entries', () => {
+      isAdmin = true;
+      contactService.getStaff.mockReturnValue(
+        of([staffContact({ hire_type: '1099' })]),
+      );
+      const p = build();
+      p.onDateChange(new Date(2026, 5, 10));
+      expect(data(p)[0].hire_type).toBe('1099');
+    });
+
+    it('carries the own contact hire type on the self path', () => {
+      self = staffContact({ hire_type: 'W2' });
+      sessionsService.getSessionsByTutor.mockReturnValue(of([]));
+      const p = build();
+      p.onDateChange(new Date(2026, 5, 10));
+      expect(data(p)[0].hire_type).toBe('W2');
+    });
+
+    // Rendered against the template so a missing matFooterCellDef (a runtime
+    // error mat-table throws) cannot slip through — no e2e visits this page.
+    it('renders the hire type column and footer grand-total row', () => {
+      isAdmin = true;
+      contactService.getStaff.mockReturnValue(
+        of([staffContact({ hire_type: 'W2' })]),
+      );
+      TestBed.configureTestingModule({
+        imports: [Payroll],
+        providers: [
+          provideNoopAnimations(),
+          { provide: AuthService, useValue: authService },
+          { provide: SessionsService, useValue: sessionsService },
+          { provide: ContactService, useValue: contactService },
+          { provide: StudentService, useValue: studentService },
+        ],
+      });
+      const fixture = TestBed.createComponent(Payroll);
+      fixture.componentInstance.onDateChange(new Date(2026, 5, 10));
+      fixture.detectChanges();
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Hire Type');
+      expect(text).toContain('W2');
+      expect(text).toContain('Grand Total');
     });
   });
 
