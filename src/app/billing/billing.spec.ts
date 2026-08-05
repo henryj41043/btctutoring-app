@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -412,5 +413,49 @@ describe('Billing', () => {
       ['Sam Roe', 'Kai: Thrive; Rio: Thrive', 'Semi-monthly', '$163.00', '$163.00', '-$36.00 (10%)', '$326.00'],
       ['', '', 'Monthly', '—', '—', '—', '$0.00'],
     ]);
+    // Grand total in the last cell of a 7-cell foot, rendered on the last page only.
+    expect(config.foot).toEqual([['Grand Total', '', '', '', '', '', '$688.00']]);
+    expect(config.showFoot).toBe('lastPage');
+    expect(config.footStyles).toEqual({ fillColor: [17, 138, 178] });
+  });
+
+  describe('grand total', () => {
+    it('sums the Total column across all rows, re-rounded', () => {
+      const c = build();
+      // 0.1 + 0.2 is 0.30000000000000004 unrounded — pins the round2 wrapper.
+      (c as any).dataSource.data = [
+        { total: 0.1 } as BillingEntry,
+        { total: 0.2 } as BillingEntry,
+        {} as BillingEntry, // `?? 0` fallback
+      ];
+      expect((c as any).grandTotal).toBe(0.3);
+    });
+
+    it('is zero with no rows', () => {
+      const c = build();
+      expect((c as any).grandTotal).toBe(0);
+    });
+
+    // Rendered against the template so a missing matFooterCellDef (a runtime
+    // error mat-table throws) cannot slip through — no e2e visits this page.
+    it('renders a footer row with the grand total', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        imports: [Billing],
+        providers: [
+          provideNoopAnimations(),
+          { provide: AuthService, useValue: authService },
+          { provide: ContactService, useValue: contactService },
+          { provide: StudentService, useValue: studentService },
+          { provide: BillingService, useValue: billingService },
+        ],
+      });
+      const fixture = TestBed.createComponent(Billing);
+      fixture.componentInstance.selectedDate = new Date(2026, 6, 10);
+      fixture.detectChanges();
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Grand Total');
+      expect(text).toContain('$362.00');
+    });
   });
 });

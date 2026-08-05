@@ -258,6 +258,12 @@ export class Billing implements OnInit {
     });
   }
 
+  /** Sum of the Total column across all rows (there is no filtering, so this
+   *  is the full month regardless of the paginator page). */
+  protected get grandTotal(): number {
+    return round2(this.dataSource.data.reduce((sum, e) => sum + (e.total ?? 0), 0));
+  }
+
   exportPDF(): void {
     const monthStr = this.monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const doc = new jsPDF();
@@ -283,8 +289,11 @@ export class Billing implements OnInit {
         e.discount ? `-${this.formatMoney(e.discount)} (${e.discount_percent}%)` : '—',
         this.formatMoney(e.total),
       ]),
+      foot: [['Grand Total', '', '', '', '', '', this.formatMoney(this.grandTotal)]],
+      showFoot: 'lastPage',
       styles: { fontSize: 9 },
       headStyles: { fillColor: [17, 138, 178] },
+      footStyles: { fillColor: [17, 138, 178] },
     });
 
     doc.save(`billing-${monthStr.replace(' ', '-')}.pdf`);

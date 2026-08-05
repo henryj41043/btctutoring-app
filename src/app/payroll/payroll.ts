@@ -28,6 +28,7 @@ import {Service} from '../enums/service.enum';
 import {StaffStatus} from '../enums/staff-status.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
+import {round2} from '../utils/package-config';
 
 @Component({
   selector: 'app-payroll',
@@ -71,6 +72,7 @@ export class Payroll implements OnInit {
 
   protected payrollColumns: string[] = [
     'name',
+    'hire_type',
     'tutoring_hours',
     'trial_hours',
     'administrative_time',
@@ -120,12 +122,13 @@ export class Payroll implements OnInit {
       margin: { top: 28, bottom: 18 },
       showHead: 'everyPage',
       head: [[
-        'Staff Name', 'Tutoring (hrs)', 'Trials (hrs)', 'Admin Time (hrs)', 'Subtotal (hrs)',
+        'Staff Name', 'Hire Type', 'Tutoring (hrs)', 'Trials (hrs)', 'Admin Time (hrs)', 'Subtotal (hrs)',
         'Pay Rate', 'Tutoring Comp', 'Planning (hrs)', 'Planning Rate',
         'Planning Comp', 'Total Comp',
       ]],
       body: this.dataSource.data.map(entry => [
         entry.name ?? '',
+        entry.hire_type ?? '',
         entry.tutoring_hours ?? 0,
         entry.trial_hours ?? 0,
         entry.administrative_time ?? 0,
@@ -137,8 +140,11 @@ export class Payroll implements OnInit {
         this.formatMoney(entry.planning_compensation),
         this.formatMoney(entry.total_compensation),
       ]),
+      foot: [['Grand Total', '', '', '', '', '', '', '', '', '', '', this.formatMoney(this.grandTotalComp)]],
+      showFoot: 'lastPage',
       styles: { fontSize: 8 },
       headStyles: { fillColor: [17, 138, 178] },
+      footStyles: { fillColor: [17, 138, 178] },
     });
 
     // Add total page count to each page's footer ("Page X of Y").
@@ -154,6 +160,12 @@ export class Payroll implements OnInit {
     }
 
     doc.save(`payroll-${startStr}-${endStr}.pdf`);
+  }
+
+  /** Sum of Total Comp across all rows. Re-rounded: each entry's
+   *  total_compensation is a raw sum of two rounded floats. */
+  protected get grandTotalComp(): number {
+    return round2(this.dataSource.data.reduce((sum, e) => sum + (e.total_compensation ?? 0), 0));
   }
 
   /** Planning cell text: base hours plus any extra-planning credit, e.g. "2.33 +0.5". */
@@ -267,6 +279,7 @@ export class Payroll implements OnInit {
   private buildPayrollEntry(contact: Contact, sessions: Session[], extraByStudent: Map<string, number>): PayrollEntry {
     let payrollEntry: PayrollEntry = new PayrollEntry();
     payrollEntry.name = contact.first_name;
+    payrollEntry.hire_type = contact.hire_type;
     payrollEntry.pay_rate = contact.hourly_rate ?? 0;
     payrollEntry.planning_rate = 15;
     payrollEntry.administrative_time = 0;

@@ -314,6 +314,7 @@ describe('Contact', () => {
       scholarship_state: 'TX', invoice_Month: 'July', invoice_number: 'INV-1',
       inquiry_note_from_parent: 'hello', scholarship_name: 'Sch', title: 'Mr',
       currently_accepting_students: true, zoom_link: 'http://z', hourly_rate: 42,
+      hire_type: '1099',
       user_profile_created: true, user_group: 'Tutors', twenty_five_received: true,
       scholarship_student: true,
       availability: [{ days: ['MONDAY'], start_time: '09:00', end_time: '10:00' }],
@@ -340,6 +341,7 @@ describe('Contact', () => {
     expect(f.controls['currently_accepting_students'].value).toBe(true);
     expect(f.controls['zoom_link'].value).toBe('http://z');
     expect(f.controls['hourly_rate'].value).toBe(42);
+    expect(f.controls['hire_type'].value).toBe('1099');
     expect(f.controls['user_group'].value).toBe('Tutors');
     expect(f.controls['twenty_five_received'].value).toBe(true);
     expect(f.controls['scholarship_student'].value).toBe(true);
@@ -1114,6 +1116,22 @@ describe('Contact', () => {
       expect((c as unknown as { updateError: boolean }).updateError).toBe(true);
       jest.advanceTimersByTime(1000);
       expect((c as unknown as { updateError: boolean }).updateError).toBe(false);
+    });
+
+    it('includes the selected hire type in the save payload', () => {
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['hire_type'].setValue('W2');
+      contactService.updateContact.mockReturnValue(of({} as ContactModel));
+      c.updateContact();
+      expect(contactService.updateContact).toHaveBeenCalledWith(
+        expect.objectContaining({ hire_type: 'W2' }),
+      );
+    });
+
+    it('offers exactly the two hire classifications', () => {
+      const c = build();
+      expect((c as unknown as { hireTypeOptions: string[] }).hireTypeOptions).toEqual(['W2', '1099']);
     });
 
     describe('parent-status cascade', () => {
