@@ -1,4 +1,5 @@
 import {Component, inject, OnInit} from '@angular/core';
+import {DatePipe} from '@angular/common';
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
@@ -45,6 +46,7 @@ export interface TrialSessionDialogData {
   selector: 'app-trial-session-dialog',
   providers: [provideNativeDateAdapter()],
   imports: [
+    DatePipe,
     MatDialogTitle,
     MatDialogContent,
     MatDialogActions,
