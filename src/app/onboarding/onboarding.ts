@@ -5,6 +5,7 @@ import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
@@ -31,6 +32,7 @@ import {studentDisplayName} from '../utils/student-name';
     MatTableModule,
     MatIconModule,
     MatButtonModule,
+    MatTooltipModule,
     MatCheckboxModule,
     MatSortModule,
     MatPaginatorModule,
@@ -59,7 +61,7 @@ export class Onboarding implements OnInit {
   }
 
   protected columns: string[] = [
-    'name', 'contact_name', 'onboarding_complete', 'inquiry_received',
+    'name', 'contact_name', 'tutor_name', 'onboarding_complete', 'inquiry_received',
     'inquiry_note_from_parent', 'consult_date', 'trial_date', 'registration_sent',
     'registration_received', 'scholarship_name', 'scholarship_student', 'twenty_five_received',
     'actions',
