@@ -95,7 +95,10 @@
 .scholarship-grid,
 .onboarding-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  // minmax(0, 1fr): plain 1fr tracks can't shrink below an item's min-content
+  // width, so wide rows (trial date + schedule button) push the grid past the
+  // section's right padding.
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -255,5 +258,8 @@
 
   mat-form-field {
     flex: 1;
+    // Allow the field to shrink within its grid column instead of forcing the
+    // row (and the whole grid) wider than the section.
+    min-width: 0;
   }
 }
