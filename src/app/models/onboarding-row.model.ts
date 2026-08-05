@@ -14,6 +14,9 @@ export interface OnboardingRow {
   inquiry_received?: string;
   inquiry_note_from_parent?: string;
   consult_date?: string;
+  /** The assigned tutor's display name ('' when unassigned). */
+  tutor_name?: string;
+  /** Per-student trial date when set; legacy contact date otherwise. */
   trial_date?: string;
   registration_sent?: string;
   registration_received?: string;

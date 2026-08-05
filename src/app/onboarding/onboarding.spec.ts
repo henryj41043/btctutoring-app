@@ -171,4 +171,11 @@ describe('Onboarding', () => {
     expect(data(c)).toHaveLength(1);
     expect(c.isSaving(row())).toBe(false);
   });
+
+  it('includes the Assigned Tutor column', () => {
+    const component = build();
+    expect(
+      (component as unknown as { columns: string[] }).columns,
+    ).toContain('tutor_name');
+  });
 });

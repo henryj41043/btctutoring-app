@@ -36,3 +36,15 @@
   color: var(--btc-teal-deep);
   font-weight: 700;
 }
+
+.inquiry-note-cell {
+  max-width: 220px;
+}
+
+.inquiry-note-text {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
