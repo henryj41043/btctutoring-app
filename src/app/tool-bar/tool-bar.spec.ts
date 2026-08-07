@@ -44,6 +44,7 @@ describe('ToolBar', () => {
     ['rosterNav', '/roster'],
     ['onboardingNav', '/onboarding'],
     ['payrollNav', '/payroll'],
+    ['teamsNav', '/teams'],
   ])('%s navigates to %s', (method, route) => {
     (component as unknown as Record<string, () => void>)[method]();
     expect(router.navigate).toHaveBeenCalledWith([route]);

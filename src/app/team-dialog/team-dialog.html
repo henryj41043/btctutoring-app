@@ -1,0 +1,68 @@
+<h2 mat-dialog-title>
+  @switch (mode) {
+    @case ('create') { Add Team }
+    @case ('edit') { Edit Team }
+    @case ('delete') { Delete Team }
+  }
+</h2>
+
+<mat-dialog-content class="team-dialog-content">
+  @if (mode === 'delete') {
+    <p>
+      Delete the team <strong>{{ data.team?.name }}</strong>?
+      Its lead will only see their own sessions afterwards. This cannot be undone.
+    </p>
+  } @else {
+    <form [formGroup]="teamForm">
+      <mat-form-field>
+        <mat-label>Team name</mat-label>
+        <input matInput formControlName="name">
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Lead Tutor</mat-label>
+        <mat-select formControlName="lead_contact_id">
+          @for (leadOption of leadOptions; track leadOption.id) {
+            <mat-option [value]="leadOption.id"
+                        [disabled]="isAssignedElsewhere(leadOption.id)">
+              {{ displayName(leadOption) }}
+            </mat-option>
+          }
+        </mat-select>
+        @if (leadOptions.length === 0) {
+          <mat-hint>No contacts have the LeadTutors account group yet.</mat-hint>
+        }
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Members</mat-label>
+        <mat-select formControlName="member_contact_ids" multiple>
+          @for (memberOption of memberOptions; track memberOption.id) {
+            <mat-option [value]="memberOption.id"
+                        [disabled]="isAssignedElsewhere(memberOption.id)">
+              {{ displayName(memberOption) }}
+            </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <p class="team-hint">A tutor can belong to only one team. The lead sees the whole team's sessions, read-only.</p>
+    </form>
+  }
+
+  @if (hasError) {
+    <mat-error class="dialog-error">{{ errorMessage }}</mat-error>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (submitting) {
+    <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+  } @else {
+    <button matButton (click)="cancel()">Cancel</button>
+    @if (mode === 'delete') {
+      <button mat-raised-button color="warn" (click)="confirmDelete()">Delete</button>
+    } @else {
+      <button mat-raised-button color="primary" (click)="save()">
+        {{ mode === 'create' ? 'Create' : 'Save' }}
+      </button>
+    }
+  }
+</mat-dialog-actions>

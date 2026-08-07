@@ -18,9 +18,12 @@ describe('SessionsTable', () => {
   const sessionsService = {
     getAllSessions: jest.fn(),
     getSessionsByTutor: jest.fn(),
+    getTeamSessions: jest.fn(),
   };
   const authService = {
     isAdmin: () => isAdmin,
+    isLead: () => (groups ?? []).includes('LeadTutors'),
+    isTutorLike: () => (groups ?? []).includes('Tutors') || (groups ?? []).includes('LeadTutors'),
     user: () => ({ groups }),
     contact: () => ({ id: contactId }),
   };
@@ -70,6 +73,54 @@ describe('SessionsTable', () => {
       'contact-1',
       expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
     );
+  });
+
+  it('loads the whole team for a lead via the parameterless fetch', () => {
+    isAdmin = false;
+    groups = ['LeadTutors'];
+    contactId = 'c-lead';
+    sessionsService.getTeamSessions.mockReturnValue(of([]));
+    const c = build();
+    c.ngOnInit();
+    expect(sessionsService.getTeamSessions).toHaveBeenCalledWith(
+      expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
+    );
+    expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
+    expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+  });
+
+  describe('lead read-only member rows', () => {
+    const ownSession = { id: 's-own', tutor_id: 'c-lead', type: SessionType.TUTORING } as Session;
+    const memberSession = { id: 's-member', tutor_id: 'c-m1', type: SessionType.TUTORING } as Session;
+
+    const buildLead = (): SessionsTable => {
+      isAdmin = false;
+      groups = ['LeadTutors'];
+      contactId = 'c-lead';
+      sessionsService.getTeamSessions.mockReturnValue(of([ownSession, memberSession]));
+      const c = build();
+      c.ngOnInit();
+      return c;
+    };
+
+    it('isSessionEditable: admins always, leads own-only', () => {
+      const c = buildLead();
+      expect((c as any).isSessionEditable(ownSession)).toBe(true);
+      expect((c as any).isSessionEditable(memberSession)).toBe(false);
+      isAdmin = true;
+      expect((c as any).isSessionEditable(memberSession)).toBe(true);
+    });
+
+    it('opens the view dialog for a member session without reloading', () => {
+      const c = buildLead();
+      afterClosed = undefined;
+      sessionsService.getTeamSessions.mockClear();
+      c.openViewSessionDialog(memberSession);
+      expect(dialog.open).toHaveBeenCalledWith(SessionDialog, {
+        data: { type: 'view', session: memberSession },
+      });
+      expect(sessionsService.getTeamSessions).not.toHaveBeenCalled();
+    });
   });
 
   it('refetches when the month changes and ignores null dates', () => {

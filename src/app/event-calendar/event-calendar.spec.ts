@@ -22,11 +22,14 @@ describe('EventCalendar', () => {
   const sessionsService = {
     getAllSessions: jest.fn(),
     getSessionsByTutor: jest.fn(),
+    getTeamSessions: jest.fn(),
   };
   const reminderService = { getReminders: jest.fn() };
   const contactService = { getContactsSummary: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
+    isLead: () => (groups ?? []).includes('LeadTutors'),
+    isTutorLike: () => (groups ?? []).includes('Tutors') || (groups ?? []).includes('LeadTutors'),
     user: () => ({ groups }),
     contact: () => ({ id: contactId }),
   };
@@ -90,6 +93,79 @@ describe('EventCalendar', () => {
       'contact-1',
       expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
     );
+  });
+
+  it('loads the whole team for a lead tutor via the parameterless fetch', () => {
+    isAdmin = false;
+    groups = ['LeadTutors'];
+    contactId = 'c-lead';
+    sessionsService.getTeamSessions.mockReturnValue(of([]));
+    const c = build();
+    c.ngOnInit();
+    expect(sessionsService.getTeamSessions).toHaveBeenCalledWith(
+      expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
+    );
+    expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
+    expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+  });
+
+  describe('lead read-only member sessions', () => {
+    const ownSession = {
+      id: 's-own', tutor_id: 'c-lead', tutor_name: 'Lea', student_name: 'Pat',
+      start_datetime: '2026-07-01T10:00:00', end_datetime: '2026-07-01T11:00:00',
+    } as Session;
+    const memberSession = {
+      id: 's-member', tutor_id: 'c-m1', tutor_name: 'Tess', student_name: 'Kai',
+      start_datetime: '2026-07-02T10:00:00', end_datetime: '2026-07-02T11:00:00',
+    } as Session;
+
+    const buildLead = (): EventCalendar => {
+      isAdmin = false;
+      groups = ['LeadTutors'];
+      contactId = 'c-lead';
+      sessionsService.getTeamSessions.mockReturnValue(of([ownSession, memberSession]));
+      const c = build();
+      c.viewDate = new Date(2026, 6, 15);
+      c.ngOnInit();
+      return c;
+    };
+
+    it('isSessionEditable: admins always, leads own-only', () => {
+      const c = buildLead();
+      expect((c as any).isSessionEditable(ownSession)).toBe(true);
+      expect((c as any).isSessionEditable(memberSession)).toBe(false);
+      isAdmin = true;
+      expect((c as any).isSessionEditable(memberSession)).toBe(true);
+    });
+
+    it('renders member events without actions, drag, or resize', () => {
+      const c = buildLead();
+      const member = c.events.find(e => (e.meta as Session).id === 's-member')!;
+      expect(member.actions).toEqual([]);
+      expect(member.draggable).toBe(false);
+      expect(member.resizable).toEqual({ beforeStart: false, afterEnd: false });
+      const own = c.events.find(e => (e.meta as Session).id === 's-own')!;
+      expect(own.actions?.length).toBeGreaterThan(0);
+      expect(own.draggable).toBe(true);
+      expect(own.resizable).toEqual({ beforeStart: true, afterEnd: true });
+    });
+
+    it('clicking a member session opens the view dialog, own opens edit', () => {
+      const c = buildLead();
+      afterClosed = undefined; // view dialog closes without a result
+      const member = c.events.find(e => (e.meta as Session).id === 's-member')!;
+      c.handleEvent('Clicked', member);
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), {
+        data: { type: 'view', session: memberSession },
+      });
+
+      dialog.open.mockClear();
+      afterClosed = undefined;
+      const own = c.events.find(e => (e.meta as Session).id === 's-own')!;
+      c.handleEvent('Clicked', own);
+      const editArgs = dialog.open.mock.calls.at(-1)![1] as { data: { type: string } };
+      expect(editArgs.data.type).toBe('edit');
+    });
   });
 
   it('fetches the visible month ±1 and skips refetching cached months', () => {

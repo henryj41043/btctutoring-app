@@ -17,7 +17,6 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {AuthService} from '../services/auth.service';
 import {Session} from '../models/session.model';
 import {SessionType} from '../enums/session-type.enum';
-import {UserGroup} from '../enums/user-group.enum';
 import {catchError, EMPTY} from 'rxjs';
 import {SessionDialog} from '../session-dialog/session-dialog';
 import {Response} from '../models/response.model';
@@ -104,15 +103,17 @@ export class SessionsTable implements OnInit {
     this.loading = true;
     this.cdr.markForCheck();
     const isAdmin = this.authService.isAdmin();
-    const isTutor = (this.authService.user().groups ?? []).includes(UserGroup.TUTORS);
+    const isTutorLike = this.authService.isTutorLike();
     const range = this.selectedMonthRange();
     const tutorId = this.authService.contact().id;
 
     const source$ = isAdmin
       ? this.sessionsService.getAllSessions(range)
-      : isTutor && tutorId
-        ? this.sessionsService.getSessionsByTutor(tutorId, range)
-        : null;
+      : this.authService.isLead()
+        ? this.sessionsService.getTeamSessions(range)
+        : isTutorLike && tutorId
+          ? this.sessionsService.getSessionsByTutor(tutorId, range)
+          : null;
 
     if (!source$) {
       this.dataSource.data = [];
@@ -160,6 +161,23 @@ export class SessionsTable implements OnInit {
       if (result !== undefined) {
         this.updateSessionsData();
       }
+    });
+  }
+
+  /**
+   * True when the current user may modify this session: admins always; tutors
+   * and leads only for their own. A lead's team-member rows get a view (eye)
+   * icon instead of edit.
+   */
+  protected isSessionEditable(item: Session): boolean {
+    return this.authService.isAdmin() ||
+      item.tutor_id === this.authService.contact().id;
+  }
+
+  openViewSessionDialog(item: any): void {
+    // Read-only — nothing can change, so no reload on close.
+    this.sessionDialog.open(SessionDialog, {
+      data: {type: 'view', session: item},
     });
   }
 

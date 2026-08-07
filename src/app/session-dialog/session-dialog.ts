@@ -167,6 +167,11 @@ export class SessionDialog implements OnInit {
       && this.dialogData.session.status !== SessionStatus.PENDING;
   }
 
+  /** View mode: a lead inspecting a team member's session — everything disabled. */
+  get isReadOnly(): boolean {
+    return this.dialogData.type === 'view';
+  }
+
   private get sessionDurationMinutes(): number {
     if (!this.startTime || !this.endTime) return 0;
     return Math.round((this.endTime.getTime() - this.startTime.getTime()) / 60000);
@@ -251,6 +256,12 @@ export class SessionDialog implements OnInit {
       this.endTime = new Date(this.dialogData.session.end_datetime as string);
       this.selectedAttendance = this.dialogData.session.status;
       this.notes = this.dialogData.session.notes as string;
+    }
+    if (this.isReadOnly) {
+      // View mode renders tutor/student from the session's denormalized names.
+      // Skipping the loads matters: leads 403 on the param-less GET /students,
+      // and the accepting-only tutors getter could exclude the member anyway.
+      return;
     }
     this.getTutors();
     this.getStudents();

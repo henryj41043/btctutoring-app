@@ -31,6 +31,13 @@ export class AuthService {
   /** True when the logged-in user belongs to the Admins group.
    *  Admins access overrides Tutors even if both groups are present. */
   readonly isAdmin = computed(() => this._user().groups.includes(UserGroup.ADMINS));
+  /** True for Lead Tutors — tutors with read-only team session visibility. */
+  readonly isLead = computed(() =>
+    this._user().groups.includes(UserGroup.LEAD_TUTORS));
+  /** Tutors and Lead Tutors — every tutor self-access path accepts both. */
+  readonly isTutorLike = computed(() =>
+    this._user().groups.includes(UserGroup.TUTORS) ||
+    this._user().groups.includes(UserGroup.LEAD_TUTORS));
   httpClient: HttpClient = inject(HttpClient);
   contactService: ContactService = inject(ContactService);
   router: Router = inject(Router);
