@@ -210,8 +210,8 @@ export class EventCalendar implements OnInit {
 
   private updateSessionsData(force: boolean = false): void {
     const isAdmin = this.authService.isAdmin();
-    const isTutor = (this.authService.user().groups ?? []).includes(UserGroup.TUTORS);
-    if (!isAdmin && !isTutor) {
+    const isTutorLike = this.authService.isTutorLike();
+    if (!isAdmin && !isTutorLike) {
       this.events = [];
       this.cdr.markForCheck();
       return;
@@ -249,7 +249,9 @@ export class EventCalendar implements OnInit {
     }
     const source$ = isAdmin
       ? this.sessionsService.getAllSessions(range)
-      : this.sessionsService.getSessionsByTutor(tutorId!, range);
+      : this.authService.isLead()
+        ? this.sessionsService.getTeamSessions(range)
+        : this.sessionsService.getSessionsByTutor(tutorId!, range);
 
     this.loading = true;
     this.cdr.markForCheck();
@@ -372,11 +374,22 @@ export class EventCalendar implements OnInit {
     return haystack.includes(this.filterText);
   }
 
+  /**
+   * True when the current user may modify this session: admins always; tutors
+   * and leads only for their own. A lead's team-member sessions render
+   * read-only (no actions/drag/resize; click opens the view dialog).
+   */
+  protected isSessionEditable(session: Session): boolean {
+    return this.authService.isAdmin() ||
+      session.tutor_id === this.authService.contact().id;
+  }
+
   private buildCalendarEvents(sessions: Session[]): CalendarEvent<Session>[] {
     return sessions.filter(session => this.matchesFilter(session)).map((session: Session) => {
       const isAdmin = session.type === SessionType.ADMIN;
       const isMakeUp = session.type === SessionType.MAKE_UP;
       const isTrial = session.type === SessionType.TRIAL;
+      const editable = this.isSessionEditable(session);
       const timeRange = `${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`;
       return {
         title: isAdmin
@@ -385,10 +398,10 @@ export class EventCalendar implements OnInit {
         start: new Date(session.start_datetime as string),
         end: new Date(session.end_datetime as string),
         meta: session,
-        actions: this.actions,
+        actions: editable ? this.actions : [],
         color: this.setColor(session.type, session.status),
-        resizable: { beforeStart: true, afterEnd: true },
-        draggable: true,
+        resizable: { beforeStart: editable, afterEnd: editable },
+        draggable: editable,
       };
     });
   }
@@ -479,6 +492,12 @@ export class EventCalendar implements OnInit {
       }
       return;
     }
+    if (!this.isSessionEditable(event.meta as Session)) {
+      // A lead viewing a team member's session — read-only. Edit/delete/drag
+      // can't fire (actions stripped, drag off), so this covers the click.
+      this.openViewSessionDialog(event.meta);
+      return;
+    }
     switch (action) {
       case 'Edited':
         this.openEditSessionDialog(event.meta);
@@ -522,6 +541,13 @@ export class EventCalendar implements OnInit {
         console.log(result);
         this.updateSessionsData(true);
       }
+    });
+  }
+
+  openViewSessionDialog(item: any): void {
+    // Read-only — nothing can change, so no reload on close.
+    this.sessionDialog.open(SessionDialog, {
+      data: {type: 'view', session: item},
     });
   }
 

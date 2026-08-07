@@ -1,0 +1,58 @@
+.teams {
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    width: 100%;
+    min-width: 640px;
+  }
+
+  .mat-mdc-row {
+    cursor: pointer;
+  }
+
+  .members-cell {
+    max-width: 380px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .teams-empty {
+    padding: 32px 0;
+    text-align: center;
+    color: var(--btc-teal-deep);
+    font-weight: 600;
+  }
+}
+
+.teams-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.teams-search {
+  width: 240px;
+
+  .mat-mdc-text-field-wrapper {
+    height: 44px;
+  }
+  .mat-mdc-form-field-infix {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    min-height: unset;
+  }
+}
+
+.table-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 0;
+}

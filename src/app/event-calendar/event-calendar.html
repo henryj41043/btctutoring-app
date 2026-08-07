@@ -23,7 +23,7 @@
              (input)="applyFilter(calSearch.value)">
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
-    @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+    @if (authService.loggedIn() && authService.isAdmin()) {
       <button mat-raised-button color="primary" (click)="openCreateSessionDialog()" class="cal-add-btn">
         <mat-icon>add</mat-icon>
         Add Session

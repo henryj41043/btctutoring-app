@@ -47,6 +47,21 @@ describe('SessionsService', () => {
     httpMock.expectOne(`${base}/sessions?tutor=t-1&to=B`).flush([]);
   });
 
+  it('getTeamSessions GETs /sessions with no tutor param', () => {
+    service.getTeamSessions().subscribe();
+    const req = httpMock.expectOne(`${base}/sessions`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.has('tutor')).toBe(false);
+    req.flush([]);
+  });
+
+  it('getTeamSessions appends only the range params', () => {
+    service.getTeamSessions({ from: 'A', to: 'B' }).subscribe();
+    const req = httpMock.expectOne(`${base}/sessions?from=A&to=B`);
+    expect(req.request.params.has('tutor')).toBe(false);
+    req.flush([]);
+  });
+
   it('getSessionsBySeries sets the series param', () => {
     service.getSessionsBySeries('series-1').subscribe();
     httpMock.expectOne(`${base}/sessions?series=series-1`).flush([]);

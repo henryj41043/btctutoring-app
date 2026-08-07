@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError, Subject } from 'rxjs';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { SessionDialog } from './session-dialog';
@@ -1322,6 +1323,98 @@ describe('SessionDialog', () => {
       ];
       (c as unknown as { selectedType: SessionType }).selectedType = SessionType.TUTORING;
       expect(c.tutors.map(t => t.id)).toEqual(['t-9']);
+    });
+  });
+
+  describe('view mode (lead read-only)', () => {
+    const viewSession = (): Session =>
+      ({
+        id: 's-9',
+        type: SessionType.TUTORING,
+        tutor_id: 'c-m1',
+        tutor_name: 'Tess',
+        student_id: 's-1',
+        student_name: 'Kai',
+        start_datetime: '2026-07-02T10:00:00',
+        end_datetime: '2026-07-02T11:00:00',
+        status: SessionStatus.COMPLETED,
+        notes: 'went well',
+      }) as Session;
+
+    it('hydrates from the session but never loads staff or students', () => {
+      const c = build({ type: 'view', session: viewSession() } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.isReadOnly).toBe(true);
+      // Leads 403 on the param-less students fetch; view mode must skip both.
+      expect(contactService.getStaff).not.toHaveBeenCalled();
+      expect(studentService.getStudents).not.toHaveBeenCalled();
+      expect(c.selectedTutor).toBe('c-m1');
+      expect(c.selectedStudent).toBe('s-1');
+      expect(c.selectedAttendance).toBe(SessionStatus.COMPLETED);
+      expect(c.notes).toBe('went well');
+    });
+
+    it('edit mode still loads staff and students (regression)', () => {
+      contactService.getStaff.mockReturnValue(of([tutor()]));
+      studentService.getStudents.mockReturnValue(of([student()]));
+      const c = build({
+        type: 'edit',
+        session: viewSession(),
+        existingSessions: [],
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.isReadOnly).toBe(false);
+      expect(contactService.getStaff).toHaveBeenCalled();
+      expect(studentService.getStudents).toHaveBeenCalled();
+    });
+
+    it('is not status-locked in view mode (the disable comes from isReadOnly)', () => {
+      const c = build({ type: 'view', session: viewSession() } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.isStatusLocked).toBe(false);
+      expect(c.isReadOnly).toBe(true);
+    });
+
+    // Rendered against the template: pins the view title, the disabled state
+    // of every control, the denormalized tutor/student text fields, and the
+    // Close-only action row (no e2e exercises this dialog).
+    it('renders every control disabled with a Close-only action row', async () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        imports: [SessionDialog],
+        providers: [
+          provideNoopAnimations(),
+          { provide: MAT_DIALOG_DATA, useValue: { type: 'view', session: viewSession() } },
+          { provide: MatDialogRef, useValue: dialogRef },
+          { provide: SessionsService, useValue: sessionsService },
+          { provide: ContactService, useValue: contactService },
+          { provide: StudentService, useValue: studentService },
+          { provide: AuthService, useValue: authService },
+        ],
+      });
+      const fixture = TestBed.createComponent(SessionDialog);
+      fixture.detectChanges();
+      // NgModel applies [disabled] via setDisabledState on the next tick.
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('h2')?.textContent).toContain('View Session');
+      // Denormalized names render as disabled text inputs.
+      const textInputs = Array.from(el.querySelectorAll('input[disabled]'));
+      const values = textInputs.map(i => (i as HTMLInputElement).value);
+      expect(values).toContain('Tess');
+      expect(values).toContain('Kai');
+      // Notes disabled; every select disabled.
+      const notesArea = el.querySelector('textarea') as HTMLTextAreaElement;
+      expect(notesArea.disabled).toBe(true);
+      const selects = Array.from(el.querySelectorAll('mat-select'));
+      expect(selects.length).toBeGreaterThan(0);
+      selects.forEach(sel =>
+        expect(sel.getAttribute('aria-disabled')).toBe('true'));
+      // Close-only actions: one button, no Update/Create/Confirm.
+      const buttons = Array.from(el.querySelectorAll('mat-dialog-actions button'))
+        .map(b => b.textContent?.trim());
+      expect(buttons).toEqual(['Close']);
     });
   });
 });

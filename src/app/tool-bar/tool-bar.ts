@@ -66,4 +66,8 @@ export class ToolBar {
   makeupReportNav(): void {
     void this.router.navigate(['/makeup-report']);
   }
+
+  teamsNav(): void {
+    void this.router.navigate(['/teams']);
+  }
 }

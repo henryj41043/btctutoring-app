@@ -7,7 +7,7 @@
       <mat-datepicker-toggle [for]="sessionsMonthPicker" matSuffix/>
       <mat-datepicker #sessionsMonthPicker/>
     </mat-form-field>
-    @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+    @if (authService.loggedIn() && authService.isAdmin()) {
       <button mat-raised-button color="primary" (click)="openCreateSessionDialog()">
         <mat-icon>add</mat-icon>
         Add Session
@@ -72,15 +72,22 @@
         <ng-container matColumnDef="edit">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let item">
-            <button matIconButton class="session-table-icon" (click)="openEditSessionDialog(item)" aria-label="Icon button with edit icon">
-              <mat-icon>edit</mat-icon>
-            </button>
+            @if (isSessionEditable(item)) {
+              <button matIconButton class="session-table-icon" (click)="openEditSessionDialog(item)" aria-label="Icon button with edit icon">
+                <mat-icon>edit</mat-icon>
+              </button>
+            } @else {
+              <!-- A lead viewing a team member's session — read-only. -->
+              <button matIconButton class="session-table-icon" (click)="openViewSessionDialog(item)" aria-label="Icon button with view icon">
+                <mat-icon>visibility</mat-icon>
+              </button>
+            }
           </td>
         </ng-container>
         <ng-container matColumnDef="delete">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let item">
-            @if (authService.loggedIn() && authService.user().groups.includes('Admins')) {
+            @if (authService.loggedIn() && authService.isAdmin()) {
               <button matIconButton class="session-table-icon" (click)="openDeleteSessionDialog(item)" aria-label="Icon button with delete icon">
                 <mat-icon>delete</mat-icon>
               </button>

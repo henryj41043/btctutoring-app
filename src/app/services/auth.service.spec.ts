@@ -95,6 +95,17 @@ describe('AuthService', () => {
       expect(service.loggedIn()).toBe(true);
     });
 
+    it.each([
+      [['Admins'], false, false],
+      [['Tutors'], false, true],
+      [['LeadTutors'], true, true],
+      [[], false, false],
+    ])('groups %j -> isLead %s, isTutorLike %s', (groups, isLead, isTutorLike) => {
+      completeSuccessfulLogin(groups as string[]);
+      expect(service.isLead()).toBe(isLead);
+      expect(service.isTutorLike()).toBe(isTutorLike);
+    });
+
     it('enters reset-password mode when a new password is required', () => {
       service.login('a@b.com', 'pw');
       httpMock

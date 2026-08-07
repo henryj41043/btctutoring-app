@@ -30,6 +30,16 @@ export class SessionsService {
     return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params });
   }
 
+  /**
+   * Lead Tutors: the parameterless GET — the server resolves the lead's team
+   * and returns own + members' sessions. Same wire shape as getAllSessions;
+   * kept separate so intent survives at call sites.
+   */
+  getTeamSessions(range?: SessionRange): Observable<Session[]> {
+    const params = this.withRange(new HttpParams(), range);
+    return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params });
+  }
+
   getSessionsBySeries(seriesId: string): Observable<Session[]> {
     let params: HttpParams = new HttpParams().set('series', seriesId);
     return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params: params });
