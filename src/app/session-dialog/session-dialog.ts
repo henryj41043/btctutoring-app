@@ -556,11 +556,15 @@ export class SessionDialog implements OnInit {
       let submitEndDate: Date = new Date(this.date);
       submitEndDate.setHours(this.endTime.getHours());
       submitEndDate.setMinutes(this.endTime.getMinutes());
-      let tutor: Contact = this.tutors.find(t => t.id === this.selectedTutor)!;
+      // Tutor-role users get a names-only staff projection (no accepting
+      // flag), so the accepting-filtered `tutors` getter can be empty for
+      // them — fall back to the stored session's values rather than
+      // crashing or degrading the denormalized names.
+      const tutor: Contact | undefined = this.tutors.find(t => t.id === this.selectedTutor);
       let session: Session = new Session();
       session.type = this.selectedType;
-      session.tutor_name = tutor.first_name;
-      session.tutor_id = tutor.id;
+      session.tutor_name = tutor?.first_name ?? this.dialogData.session.tutor_name;
+      session.tutor_id = tutor?.id ?? this.dialogData.session.tutor_id;
       session.start_datetime = submitStartDate.toISOString();
       session.end_datetime = submitEndDate.toISOString();
       session.status = this.selectedAttendance;
@@ -575,9 +579,13 @@ export class SessionDialog implements OnInit {
         && newStatus !== SessionStatus.PENDING;
 
       if (this.hasStudent) {
-        let student: Student = this.students.find(s => s.id === this.selectedStudent)!;
-        session.student_name = studentDisplayName(student);
-        session.student_id = student?.id;
+        // A missed lookup (e.g. the student list failed to load) must never
+        // overwrite the stored denormalized name with 'Unnamed student'.
+        const student: Student | undefined = this.students.find(s => s.id === this.selectedStudent);
+        session.student_name = student
+          ? studentDisplayName(student)
+          : this.dialogData.session.student_name;
+        session.student_id = student?.id ?? this.dialogData.session.student_id;
 
         if (isStatusChange && student) {
           const duration = this.sessionDurationMinutes;
@@ -837,7 +845,14 @@ export class SessionDialog implements OnInit {
   }
 
   private getStudents() {
-    this.studentService.getStudents().pipe(
+    // The param-less list is admin-only; tutors and leads may only list
+    // their own assigned students — the previous unconditional call 403'd
+    // silently for them, leaving the student dropdown empty.
+    const ownId = this.authService.contact().id;
+    const source$ = this.authService.isAdmin() || !ownId
+      ? this.studentService.getStudents()
+      : this.studentService.getStudentsByTutor(ownId);
+    source$.pipe(
       catchError(error => { console.log(error); return EMPTY; }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(students => {

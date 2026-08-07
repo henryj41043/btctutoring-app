@@ -45,6 +45,7 @@ const student = (over: Partial<Student> = {}): Student =>
 
 describe('SessionDialog', () => {
   let isAdmin: boolean;
+  let ownContactId: string | undefined;
   const dialogRef = { close: jest.fn() };
   const sessionsService = {
     createSession: jest.fn(),
@@ -54,8 +55,15 @@ describe('SessionDialog', () => {
     getSessionsBySeries: jest.fn(),
   };
   const contactService = { getContacts: jest.fn(), getStaff: jest.fn() };
-  const studentService = { getStudents: jest.fn(), updateStudent: jest.fn() };
-  const authService = { isAdmin: () => isAdmin };
+  const studentService = {
+    getStudents: jest.fn(),
+    getStudentsByTutor: jest.fn(),
+    updateStudent: jest.fn(),
+  };
+  const authService = {
+    isAdmin: () => isAdmin,
+    contact: () => ({ id: ownContactId }),
+  };
 
   const build = (data: SessionDialogData): SessionDialog => {
     TestBed.resetTestingModule();
@@ -95,6 +103,7 @@ describe('SessionDialog', () => {
 
   beforeEach(() => {
     isAdmin = true;
+    ownContactId = 'c-self';
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
   });
@@ -1415,6 +1424,107 @@ describe('SessionDialog', () => {
       const buttons = Array.from(el.querySelectorAll('mat-dialog-actions button'))
         .map(b => b.textContent?.trim());
       expect(buttons).toEqual(['Close']);
+    });
+  });
+
+  describe('tutor self-edit student handling', () => {
+    it('a non-admin loads only their own assigned students', () => {
+      isAdmin = false;
+      ownContactId = 'c-self';
+      contactService.getStaff.mockReturnValue(of([]));
+      studentService.getStudentsByTutor.mockReturnValue(
+        of([student({ assigned_tutor_id: 'c-self' })]),
+      );
+      const c = build({
+        type: 'edit',
+        session: { id: 's-1', tutor_id: 'c-self', start_datetime: '2026-06-01T10:00:00', end_datetime: '2026-06-01T11:00:00' } as Session,
+        existingSessions: [],
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(studentService.getStudentsByTutor).toHaveBeenCalledWith('c-self');
+      expect(studentService.getStudents).not.toHaveBeenCalled();
+      expect(c.students).toHaveLength(1);
+    });
+
+    it('an admin still loads the full student list', () => {
+      contactService.getStaff.mockReturnValue(of([]));
+      studentService.getStudents.mockReturnValue(of([student()]));
+      const c = build({
+        type: 'edit',
+        session: { id: 's-1', start_datetime: '2026-06-01T10:00:00', end_datetime: '2026-06-01T11:00:00' } as Session,
+        existingSessions: [],
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(studentService.getStudents).toHaveBeenCalled();
+      expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+    });
+
+    it('a missed lookup preserves the stored names instead of writing Unnamed student', () => {
+      isAdmin = false;
+      ownContactId = 'c-self';
+      sessionsService.updateSession.mockReturnValue(of({}));
+      // Round-trippable instants: hydration + scheduleFieldsUnchanged compare
+      // via toISOString, so the stored strings must be exact ISO output.
+      const startIso = new Date(2026, 5, 1, 10, 0).toISOString();
+      const endIso = new Date(2026, 5, 1, 11, 0).toISOString();
+      const stored = {
+        id: 's-1',
+        type: SessionType.TUTORING,
+        tutor_id: 'c-self',
+        tutor_name: 'Tess',
+        student_id: 'stu-1',
+        student_name: 'Kai Kid',
+        series_id: 'series-1', // skips the extra-session schedule gate
+        start_datetime: startIso,
+        end_datetime: endIso,
+        status: SessionStatus.PENDING,
+        notes: '',
+      } as Session;
+      const c = build({ type: 'edit', session: stored, existingSessions: [] } as SessionDialogData);
+      c.ngOnInit();
+      // Both lists empty — the tutor-role staff projection carries no
+      // accepting flag (tutors getter filters everyone out) and the student
+      // fetch may have failed. The save must fall back to the stored values.
+      (c as unknown as { allStaff: Contact[] }).allStaff = [];
+      c.students = [];
+      c.updateSession();
+      expect(sessionsService.updateSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tutor_id: 'c-self',
+          tutor_name: 'Tess',
+          student_id: 'stu-1',
+          student_name: 'Kai Kid',
+        }),
+      );
+      const sent = sessionsService.updateSession.mock.calls.at(-1)![0] as Session;
+      expect(sent.student_name).not.toBe('Unnamed student');
+    });
+
+    it('a successful lookup still writes the fresh display name', () => {
+      sessionsService.updateSession.mockReturnValue(of({}));
+      contactService.getStaff.mockReturnValue(of([tutor()]));
+      studentService.getStudents.mockReturnValue(of([student({ name: 'Pat' })]));
+      const startIso = new Date(2026, 5, 1, 10, 0).toISOString();
+      const endIso = new Date(2026, 5, 1, 11, 0).toISOString();
+      const stored = {
+        id: 's-1',
+        type: SessionType.TUTORING,
+        tutor_id: 't-1',
+        tutor_name: 'Old Name',
+        student_id: 's-1',
+        student_name: 'Old Student',
+        series_id: 'series-1',
+        start_datetime: startIso,
+        end_datetime: endIso,
+        status: SessionStatus.PENDING,
+        notes: '',
+      } as Session;
+      const c = build({ type: 'edit', session: stored, existingSessions: [] } as SessionDialogData);
+      c.ngOnInit();
+      c.updateSession();
+      expect(sessionsService.updateSession).toHaveBeenCalledWith(
+        expect.objectContaining({ tutor_name: 'Tess', student_name: 'Pat' }),
+      );
     });
   });
 });
