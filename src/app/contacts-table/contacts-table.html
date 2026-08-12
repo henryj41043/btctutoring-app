@@ -69,7 +69,7 @@
         <tr mat-row *matRowDef="let row; columns: contactColumns;" (click)="contactClicked(row)"></tr>
       </table>
       </div>
-      <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+      <mat-paginator [pageSize]="50" [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
       }
     </mat-card-content>
   </mat-card>

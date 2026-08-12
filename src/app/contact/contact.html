@@ -141,7 +141,8 @@
             <button matIconButton type="button" (click)="saveNoteAt(i)" [hidden]="notesEditIndex !== i">
               <mat-icon>save</mat-icon>
             </button>
-            <button matIconButton type="button" (click)="cancelNoteEdit(i)" [hidden]="notesEditIndex !== i" aria-label="Cancel edit">
+            <!-- Pushed to the far edge so save and cancel can't be mis-clicked. -->
+            <button matIconButton type="button" class="note-cancel-button" (click)="cancelNoteEdit(i)" [hidden]="notesEditIndex !== i" aria-label="Cancel edit">
               <mat-icon>close</mat-icon>
             </button>
             <button matIconButton type="button" (click)="deleteNoteAt(i)" [hidden]="notesEditIndex === i">

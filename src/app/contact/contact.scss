@@ -263,3 +263,9 @@
     min-width: 0;
   }
 }
+
+/* Save and cancel sit at opposite ends of the note card while editing so a
+   mis-click can't hit the wrong one. */
+.note-cancel-button {
+  margin-left: auto;
+}
