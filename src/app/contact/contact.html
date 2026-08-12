@@ -114,7 +114,12 @@
             <mat-card-subtitle>{{noteControl.get('date_time')?.value | date:'short'}}</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
-            <p class="note-body" [hidden]="notesEditIndex === i">{{noteControl.get('message')?.value}}</p>
+            @if (noteControl.get('message')?.value?.trim()) {
+              <p class="note-body" [hidden]="notesEditIndex === i">{{noteControl.get('message')?.value}}</p>
+            } @else {
+              <!-- Legacy stranded empties render identifiably instead of as blank cards. -->
+              <p class="note-body note-body--empty" [hidden]="notesEditIndex === i">(no message)</p>
+            }
             <div [hidden]="notesEditIndex !== i">
               <mat-form-field class="notes-form-field">
                 <mat-label>Message</mat-label>
@@ -132,6 +137,9 @@
                 <mat-timepicker-toggle [for]="noteTimePicker" matSuffix/>
                 <mat-timepicker #noteTimePicker/>
               </mat-form-field>
+              @if (noteEmptyError && notesEditIndex === i) {
+                <mat-error class="note-empty-error">Enter a message before saving.</mat-error>
+              }
             </div>
           </mat-card-content>
           <mat-card-actions>

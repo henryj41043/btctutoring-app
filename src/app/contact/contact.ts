@@ -179,6 +179,8 @@ export class Contact implements OnInit {
     notes: this.formBuilder.array([])
   });
   protected notesEditIndex: number = -1;
+  /** Shown in the editing card when a save was attempted with no message. */
+  protected noteEmptyError: boolean = false;
   // Snapshot of the note card being edited, so Cancel can revert unsaved changes.
   private noteEditSnapshot: Record<string, unknown> | null = null;
   // Ids of note cards added this session but not yet saved with real data —
@@ -503,18 +505,20 @@ export class Contact implements OnInit {
     this.cdr.markForCheck();
   }
 
-  /** Cancels editing a note card: a brand-new card is removed entirely, an
-   *  existing one is reverted to its values from when editing began. */
+  /** Cancels editing a note card: a brand-new (never-persisted) card is
+   *  discarded locally, an existing one is reverted to its values from when
+   *  editing began. */
   cancelNoteEdit(index: number) {
     const group = this.notes.at(index)!;
     const id = group.get('id')!.value as string;
     this.notesEditIndex = -1;
+    this.noteEmptyError = false;
     if (this.newNoteIds.has(id)) {
+      // Never hit the server — the note only ever existed in this form.
       this.newNoteIds.delete(id);
-      this.deleteNoteAt(index);
-      return;
-    }
-    if (this.noteEditSnapshot) {
+      this.notes.removeAt(index);
+      this.notes.updateValueAndValidity();
+    } else if (this.noteEditSnapshot) {
       group.reset(this.noteEditSnapshot);
     }
     this.cdr.markForCheck();
@@ -722,6 +726,14 @@ export class Contact implements OnInit {
 
   deleteNoteAt(index: number) {
     const noteToDelete: Note = this.notes.controls.at(index)?.value as Note;
+    if (this.newNoteIds.has(noteToDelete.id!)) {
+      // Never persisted — nothing to delete server-side.
+      this.newNoteIds.delete(noteToDelete.id!);
+      this.notes.removeAt(index);
+      this.notes.updateValueAndValidity();
+      this.cdr.markForCheck();
+      return;
+    }
     this.noteService.deleteNote(noteToDelete.id!)
       .pipe(
         catchError(error => {
@@ -763,8 +775,16 @@ export class Contact implements OnInit {
   }
 
   saveNoteAt(index: number) {
-    const raw = this.notes.controls.at(index)?.getRawValue() as Record<string, unknown>;
+    const group = this.notes.controls.at(index)!;
+    const raw = group.getRawValue() as Record<string, unknown>;
     const noteToSave: Note = {...raw, date_time: this.noteDateIso(raw['date_time'])} as Note;
+    // Empty notes are never persisted — they'd render as blank cards forever.
+    if (!(noteToSave.message ?? '').trim()) {
+      this.noteEmptyError = true;
+      this.cdr.markForCheck();
+      return;
+    }
+    this.noteEmptyError = false;
     // A save that changed the note's date (incl. backdating a fresh note)
     // snaps the whole list back to newest-date-first — manual drag order is
     // a between-saves arrangement only (client decision 2026-08).
@@ -772,6 +792,30 @@ export class Contact implements OnInit {
       ? this.noteDateIso(this.noteEditSnapshot['date_time'])
       : null;
     const dateChanged = previousIso !== null && previousIso !== noteToSave.date_time;
+    const isNew = this.newNoteIds.has(noteToSave.id!);
+    if (isNew) {
+      // First persistence of a locally-created note — the server assigns the
+      // real id, which replaces the local- placeholder in the form.
+      const localId = noteToSave.id!;
+      const {id: _localId, ...createBody} = noteToSave;
+      this.noteService.createNote(createBody as Note)
+        .pipe(
+          catchError(error => {
+            console.log(error);
+            return EMPTY;
+          })
+        )
+        .subscribe(response => {
+          group.get('id')!.setValue(response.id);
+          this.newNoteIds.delete(localId);
+          this.setNotesEditIndex(-1);
+          if (dateChanged) {
+            this.sortNotesByDate();
+          }
+          this.cdr.markForCheck();
+        });
+      return;
+    }
     this.noteService.updateNote(noteToSave)
       .pipe(
         catchError(error => {
@@ -781,7 +825,6 @@ export class Contact implements OnInit {
       )
       .subscribe(note => {
         console.log(`Note ${note.id} updated successfully.`);
-        this.newNoteIds.delete(noteToSave.id!);
         this.setNotesEditIndex(-1);
         if (dateChanged) {
           this.sortNotesByDate();
@@ -819,6 +862,10 @@ export class Contact implements OnInit {
     this.notes.controls.forEach(control => {
       const raw = control.getRawValue() as Record<string, unknown>;
       const note: Note = {...raw, date_time: this.noteDateIso(raw['date_time'])} as Note;
+      if (this.newNoteIds.has(note.id!)) {
+        // An unsaved local note must never be PUT — it doesn't exist server-side.
+        return;
+      }
       this.noteService.updateNote(note).pipe(
         catchError(error => {
           console.log(error);
@@ -829,6 +876,8 @@ export class Contact implements OnInit {
   }
 
   addNote() {
+    // Purely local until saved — persisting on + used to strand permanent
+    // blank notes whenever the editor was abandoned (reload/navigation).
     const dateString = new Date().toISOString();
     const author = this.authService.contact().first_name;
     const authorId = this.authService.contact().id;
@@ -837,29 +886,21 @@ export class Contact implements OnInit {
     // In manual-order mode a new note goes to the top (lowest order); otherwise
     // its default "now" date_time already sorts it to the top.
     const order = this.notesHaveManualOrder ? this.minNoteOrder() - 1 : undefined;
+    const localId = `local-${crypto.randomUUID()}`;
     const note: Note = {
+      id: localId,
       date_time: dateString,
       author,
       author_id: authorId,
       recipient,
       recipient_id: recipientId,
+      type: '',
       order,
     };
-    this.noteService.createNote(note)
-      .pipe(
-        catchError(error => {
-          console.log(error);
-          return EMPTY;
-        })
-      )
-      .subscribe(response => {
-        // Newest note goes to the top; the date/time defaults to now but is
-        // editable in the card that opens for editing.
-        this.notes.insert(0, this.noteGroup({...note, id: response.id, message: response.message, type: ''}));
-        this.notes.updateValueAndValidity();
-        this.newNoteIds.add(response.id);
-        this.setNotesEditIndex(0);
-      });
+    this.notes.insert(0, this.noteGroup(note));
+    this.notes.updateValueAndValidity();
+    this.newNoteIds.add(localId);
+    this.setNotesEditIndex(0);
   }
 
   createAccount() {
