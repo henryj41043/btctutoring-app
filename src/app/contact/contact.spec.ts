@@ -419,8 +419,25 @@ describe('Contact', () => {
       const sent = noteService.createNote.mock.calls[0][0] as Note;
       expect(sent.message).toBe('typed note');
       expect('id' in sent).toBe(false); // the server assigns the real id
+      // In date-sort mode the form holds order: null — the schema rejects
+      // null, so the create payload must omit the key entirely.
+      expect('order' in sent).toBe(false);
       expect(notes(c).at(0).get('id')!.value).toBe('n-new');
       expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(-1);
+    });
+
+    it('surfaces a failed first save instead of silently swallowing it', () => {
+      const c = build();
+      c.ngOnInit();
+      c.addNote();
+      notes(c).at(0).get('message')!.setValue('m');
+      noteService.createNote.mockReturnValue(throwError(() => new Error('500')));
+      c.saveNoteAt(0);
+      expect((c as unknown as { noteSaveFailed: boolean }).noteSaveFailed).toBe(true);
+      // A successful retry clears the error.
+      noteService.createNote.mockReturnValue(of({ id: 'n-new' }));
+      c.saveNoteAt(0);
+      expect((c as unknown as { noteSaveFailed: boolean }).noteSaveFailed).toBe(false);
     });
 
     it('refuses to save an empty note', () => {

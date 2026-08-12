@@ -181,6 +181,8 @@ export class Contact implements OnInit {
   protected notesEditIndex: number = -1;
   /** Shown in the editing card when a save was attempted with no message. */
   protected noteEmptyError: boolean = false;
+  /** Shown in the editing card when a note save hit a server error. */
+  protected noteSaveFailed: boolean = false;
   // Snapshot of the note card being edited, so Cancel can revert unsaved changes.
   private noteEditSnapshot: Record<string, unknown> | null = null;
   // Ids of note cards added this session but not yet saved with real data —
@@ -513,6 +515,7 @@ export class Contact implements OnInit {
     const id = group.get('id')!.value as string;
     this.notesEditIndex = -1;
     this.noteEmptyError = false;
+    this.noteSaveFailed = false;
     if (this.newNoteIds.has(id)) {
       // Never hit the server — the note only ever existed in this form.
       this.newNoteIds.delete(id);
@@ -793,15 +796,21 @@ export class Contact implements OnInit {
       : null;
     const dateChanged = previousIso !== null && previousIso !== noteToSave.date_time;
     const isNew = this.newNoteIds.has(noteToSave.id!);
+    this.noteSaveFailed = false;
     if (isNew) {
       // First persistence of a locally-created note — the server assigns the
-      // real id, which replaces the local- placeholder in the form.
+      // real id, which replaces the local- placeholder in the form. The form
+      // holds order as null in date-sort mode, but the schema rejects null —
+      // it must be omitted entirely.
       const localId = noteToSave.id!;
-      const {id: _localId, ...createBody} = noteToSave;
-      this.noteService.createNote(createBody as Note)
+      const {id: _localId, order, ...rest} = noteToSave;
+      const createBody: Note = {...rest, ...(order != null ? {order} : {})};
+      this.noteService.createNote(createBody)
         .pipe(
           catchError(error => {
             console.log(error);
+            this.noteSaveFailed = true;
+            this.cdr.markForCheck();
             return EMPTY;
           })
         )
@@ -820,6 +829,8 @@ export class Contact implements OnInit {
       .pipe(
         catchError(error => {
           console.log(error);
+          this.noteSaveFailed = true;
+          this.cdr.markForCheck();
           return EMPTY;
         })
       )
