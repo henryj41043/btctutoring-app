@@ -399,14 +399,62 @@ describe('Contact', () => {
       expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(-1);
     });
 
-    it('adds a note at the top and opens it for editing', () => {
+    it('adds a local-only note at the top and opens it for editing', () => {
       const c = build();
       c.ngOnInit();
-      noteService.createNote.mockReturnValue(of({ id: 'n-new', message: 'm' }));
       c.addNote();
-      expect(noteService.createNote).toHaveBeenCalled();
-      expect(notes(c).at(0).value.id).toBe('n-new');
+      // Nothing persists until save — abandoning can't strand a blank note.
+      expect(noteService.createNote).not.toHaveBeenCalled();
+      expect(String(notes(c).at(0).value.id)).toMatch(/^local-/);
       expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(0);
+    });
+
+    it('persists a new note only on save, adopting the server id', () => {
+      const c = build();
+      c.ngOnInit();
+      c.addNote();
+      notes(c).at(0).get('message')!.setValue('typed note');
+      noteService.createNote.mockReturnValue(of({ id: 'n-new', message: 'ok' }));
+      c.saveNoteAt(0);
+      const sent = noteService.createNote.mock.calls[0][0] as Note;
+      expect(sent.message).toBe('typed note');
+      expect('id' in sent).toBe(false); // the server assigns the real id
+      expect(notes(c).at(0).get('id')!.value).toBe('n-new');
+      expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(-1);
+    });
+
+    it('refuses to save an empty note', () => {
+      const c = build();
+      c.ngOnInit();
+      c.addNote();
+      notes(c).at(0).get('message')!.setValue('   ');
+      c.saveNoteAt(0);
+      expect(noteService.createNote).not.toHaveBeenCalled();
+      expect(noteService.updateNote).not.toHaveBeenCalled();
+      expect((c as unknown as { noteEmptyError: boolean }).noteEmptyError).toBe(true);
+      // Typing something and saving clears the error.
+      notes(c).at(0).get('message')!.setValue('real message');
+      noteService.createNote.mockReturnValue(of({ id: 'n-new' }));
+      c.saveNoteAt(0);
+      expect((c as unknown as { noteEmptyError: boolean }).noteEmptyError).toBe(false);
+    });
+
+    it('refuses to blank an existing note on save', () => {
+      const c = build();
+      seedNote(c);
+      notes(c).at(0).get('message')!.setValue('');
+      c.saveNoteAt(0);
+      expect(noteService.updateNote).not.toHaveBeenCalled();
+      expect((c as unknown as { noteEmptyError: boolean }).noteEmptyError).toBe(true);
+    });
+
+    it('deletes an unsaved local note without touching the server', () => {
+      const c = build();
+      c.ngOnInit();
+      c.addNote();
+      c.deleteNoteAt(0);
+      expect(noteService.deleteNote).not.toHaveBeenCalled();
+      expect(notes(c).length).toBe(0);
     });
 
     it('serializes the edited date back to an ISO string on save', () => {
@@ -421,13 +469,10 @@ describe('Contact', () => {
     });
 
     it('uses no order for a new note in date mode', () => {
-      noteService.createNote.mockReturnValue(of({ id: 'n-new' }));
       const c = build(); // no existing notes → date mode
       c.ngOnInit();
       c.addNote();
-      expect(noteService.createNote).toHaveBeenCalledWith(
-        expect.objectContaining({ order: undefined }),
-      );
+      expect(notes(c).at(0).get('order')!.value).toBeNull();
     });
   });
 
@@ -495,12 +540,16 @@ describe('Contact', () => {
           { id: 'b', date_time: '2026-03-01', order: 5 },
         ] as Note[]),
       );
-      noteService.createNote.mockReturnValue(of({ id: 'n-new' }));
       const c = build();
       c.ngOnInit();
       c.addNote();
+      // min order 0 → the new local note takes -1 (top of the manual order)
+      expect(notes(c).at(0).get('order')!.value).toBe(-1);
+      notes(c).at(0).get('message')!.setValue('m');
+      noteService.createNote.mockReturnValue(of({ id: 'n-new' }));
+      c.saveNoteAt(0);
       expect(noteService.createNote).toHaveBeenCalledWith(
-        expect.objectContaining({ order: -1 }), // min order 0 → new -1
+        expect.objectContaining({ order: -1 }),
       );
       expect(notes(c).at(0).get('id')!.value).toBe('n-new');
     });
@@ -508,8 +557,8 @@ describe('Contact', () => {
     it('re-sorts by date after saving a backdated note (manual order cleared)', () => {
       noteService.getNotesByRecipient.mockReturnValue(
         of([
-          { id: 'a', date_time: '2026-08-02T00:00:00Z', order: 0 },
-          { id: 'b', date_time: '2026-08-01T00:00:00Z', order: 1 },
+          { id: 'a', date_time: '2026-08-02T00:00:00Z', order: 0, message: 'a' },
+          { id: 'b', date_time: '2026-08-01T00:00:00Z', order: 1, message: 'b' },
         ] as Note[]),
       );
       noteService.updateNote.mockReturnValue(of({ id: 'a' } as Note));
@@ -527,8 +576,8 @@ describe('Contact', () => {
     it('keeps the current arrangement when a save leaves the date untouched', () => {
       noteService.getNotesByRecipient.mockReturnValue(
         of([
-          { id: 'a', date_time: '2026-08-01T00:00:00Z', order: 0 },
-          { id: 'b', date_time: '2026-08-02T00:00:00Z', order: 1 },
+          { id: 'a', date_time: '2026-08-01T00:00:00Z', order: 0, message: 'a' },
+          { id: 'b', date_time: '2026-08-02T00:00:00Z', order: 1, message: 'b' },
         ] as Note[]),
       );
       noteService.updateNote.mockReturnValue(of({ id: 'a' } as Note));
@@ -871,14 +920,13 @@ describe('Contact', () => {
       expect((c as unknown as { notesEditIndex: number }).notesEditIndex).toBe(-1);
     });
 
-    it('cancels a newly added note by removing the placeholder', () => {
+    it('cancels a newly added note by discarding it locally', () => {
       const c = build();
       c.ngOnInit();
-      noteService.createNote.mockReturnValue(of({ id: 'n-new', message: 'm' }));
       c.addNote();
-      noteService.deleteNote.mockReturnValue(of({ message: 'deleted' }));
       c.cancelNoteEdit(0);
-      expect(noteService.deleteNote).toHaveBeenCalledWith('n-new');
+      // Never persisted, so nothing to delete server-side.
+      expect(noteService.deleteNote).not.toHaveBeenCalled();
       expect(notes(c).length).toBe(0);
     });
 
@@ -1444,12 +1492,16 @@ describe('Contact', () => {
       expect(() => c.saveNoteAt(0)).not.toThrow();
     });
 
-    it('swallows an add-note error', () => {
+    it('swallows a first-save error and keeps the local note editable', () => {
       const c = build();
       c.ngOnInit();
-      noteService.createNote.mockReturnValue(throwError(() => new Error('x')));
       c.addNote();
-      expect(notes(c).length).toBe(0);
+      notes(c).at(0).get('message')!.setValue('m');
+      noteService.createNote.mockReturnValue(throwError(() => new Error('x')));
+      c.saveNoteAt(0);
+      // The note stays local (still editable) rather than being lost.
+      expect(notes(c).length).toBe(1);
+      expect(String(notes(c).at(0).value.id)).toMatch(/^local-/);
     });
 
     it('sorts notes that are missing a timestamp', () => {
