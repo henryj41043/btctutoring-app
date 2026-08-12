@@ -140,6 +140,9 @@
               @if (noteEmptyError && notesEditIndex === i) {
                 <mat-error class="note-empty-error">Enter a message before saving.</mat-error>
               }
+              @if (noteSaveFailed && notesEditIndex === i) {
+                <mat-error class="note-empty-error">Failed to save the note. Please try again.</mat-error>
+              }
             </div>
           </mat-card-content>
           <mat-card-actions>
