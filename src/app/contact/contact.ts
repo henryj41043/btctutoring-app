@@ -53,6 +53,7 @@ import {round2} from '../utils/package-config';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
 import {studentStatusChipClass} from '../utils/status-chip';
+import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
 import {Router} from '@angular/router';
 
@@ -378,7 +379,12 @@ export class Contact implements OnInit {
     this.contactForm.controls['trial_date'].setValue(contact.trial_date);
     this.contactForm.controls['registration_sent'].setValue(contact.registration_sent);
     this.contactForm.controls['registration_received'].setValue(contact.registration_received);
-    this.contactForm.controls['status'].setValue(contact.status);
+    // Tutoring contacts normalize legacy pre-v3 statuses so the parent
+    // dropdown always holds a selectable value (self-heals on next save).
+    this.contactForm.controls['status'].setValue(
+      contact.service === Service.TUTORING
+        ? normalizeParentStatus(contact.status)
+        : contact.status);
     this.contactForm.controls['title'].setValue(contact.title);
     this.contactForm.controls['currently_accepting_students'].setValue(contact.currently_accepting_students);
     // Undefined reads as true — every pre-flag staff member is a tutor.

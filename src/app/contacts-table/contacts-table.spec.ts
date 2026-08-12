@@ -180,4 +180,16 @@ describe('ContactsTable', () => {
     expect(predicate({ first_name: 'Ada', status: 'Declined Services' }, 'declined')).toBe(true);
     expect(predicate({ first_name: 'Ada' }, 'declined')).toBe(false);
   });
+
+  it('statusLabel maps legacy parent statuses and labels staff statuses', () => {
+    const c = build();
+    expect((c as any).statusLabel({ service: 'Tutoring', status: 'Past Student' })).toBe('Former Client');
+    expect((c as any).statusLabel({ service: 'Tutoring', status: 'Onboarding' })).toBe('MIA');
+    expect((c as any).statusLabel({ service: 'Tutoring', status: 'Active Client' })).toBe('Active Client');
+    // Staff keep the label machinery ('Staff' displays as 'Active Staff') and
+    // their VALID 'Onboarding' status untouched.
+    expect((c as any).statusLabel({ service: 'Hiring', status: 'Staff' })).toBe('Active Staff');
+    expect((c as any).statusLabel({ service: 'Hiring', status: 'Onboarding' })).toBe('Onboarding');
+    expect((c as any).statusLabel({ service: 'Hiring' })).toBe('');
+  });
 });

@@ -306,6 +306,25 @@ describe('Contact', () => {
     expect(ci['rosterColumns']).toEqual(['name', 'status', 'package', 'make_up_minutes', 'scholarship']);
   });
 
+  it('normalizes legacy parent statuses at hydration (self-healing)', () => {
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ service: Service.TUTORING, status: 'Past Student' })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    expect(form(c).controls['status'].value).toBe('Former Client');
+  });
+
+  it('leaves staff statuses untouched at hydration', () => {
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ service: Service.HIRING, status: 'Onboarding' })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    // 'Onboarding' is a VALID staff status — only Tutoring contacts normalize.
+    expect(form(c).controls['status'].value).toBe('Onboarding');
+  });
+
   it('populates every form field from a loaded contact', () => {
     const rich = fullContact({
       first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x.com', phone_number: '1234567890',

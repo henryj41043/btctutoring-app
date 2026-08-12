@@ -1,5 +1,7 @@
 import {staffStatusLabel} from '../enums/staff-status.enum';
 import {contactStatusChipClass} from '../utils/status-chip';
+import {normalizeParentStatus} from '../utils/legacy-status';
+import {Service} from '../enums/service.enum';
 import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
@@ -62,8 +64,16 @@ export class ContactsTable implements OnInit {
 
   contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'status', 'actions'];
   dataSource = new MatTableDataSource<Contact>([]);
-  protected readonly statusLabel = staffStatusLabel;
   protected readonly statusChipClass = contactStatusChipClass;
+
+  /** Display status: parent contacts map legacy pre-v3 values to their
+   *  ParentStatus equivalents; staff labels go through staffStatusLabel. */
+  protected statusLabel(contact: Contact): string {
+    const status = contact.service === Service.TUTORING
+      ? normalizeParentStatus(contact.status)
+      : contact.status;
+    return staffStatusLabel(status);
+  }
   loading: boolean = true;
 
   ngOnInit(): void {
@@ -72,7 +82,7 @@ export class ContactsTable implements OnInit {
       const haystack = [
         contact.first_name, contact.last_name, contact.email,
         contact.phone_number, contact.service,
-        contact.status, this.statusLabel(contact.status),
+        contact.status, this.statusLabel(contact),
       ].join(' ').toLowerCase();
       return haystack.includes(filter);
     };
