@@ -4,8 +4,24 @@
     <mat-form-field subscriptSizing="dynamic" appearance="outline" class="contacts-search">
       <mat-label>Search</mat-label>
       <input matInput #contactSearch placeholder="Name, email, phone, service, status"
-             (input)="applyFilter(contactSearch.value)">
+             [value]="searchText" (input)="applyFilter(contactSearch.value)">
       <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="contacts-filter">
+      <mat-label>Service</mat-label>
+      <mat-select multiple [value]="serviceFilter" (selectionChange)="onServiceFilterChange($event.value)">
+        @for (option of serviceOptions; track option) {
+          <mat-option [value]="option">{{option}}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="contacts-filter">
+      <mat-label>Status</mat-label>
+      <mat-select multiple [value]="statusFilter" (selectionChange)="onStatusFilterChange($event.value)">
+        @for (option of statusOptions; track option) {
+          <mat-option [value]="option">{{option}}</mat-option>
+        }
+      </mat-select>
     </mat-form-field>
     <button mat-raised-button color="primary" (click)="openContactDialog()">
       <mat-icon>add</mat-icon>

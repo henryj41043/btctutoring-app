@@ -41,6 +41,7 @@ describe('ContactsTable', () => {
   beforeEach(() => {
     isAdmin = true;
     afterClosed = undefined;
+    sessionStorage.clear();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
   });
 
@@ -118,6 +119,72 @@ describe('ContactsTable', () => {
     expect((c as any).dataSource.filteredData).toHaveLength(2);
   });
 
+  describe('service + status filters', () => {
+    const rows = [
+      { first_name: 'Ada', service: 'Tutoring', status: 'Active Client' },
+      { first_name: 'Legacy', service: 'Tutoring', status: 'Past Student' },
+      { first_name: 'Tess', service: 'Hiring', status: 'Staff' },
+      { first_name: 'Newsy', service: 'Newsletter' },
+    ] as Contact[];
+
+    const seeded = (): ContactsTable => {
+      contactService.getContactsSummary.mockReturnValue(of(rows));
+      const c = build();
+      c.ngOnInit();
+      return c;
+    };
+
+    const names = (c: ContactsTable) =>
+      (c as any).dataSource.filteredData.map((r: Contact) => r.first_name);
+
+    it('filters by service', () => {
+      const c = seeded();
+      c.onServiceFilterChange(['Hiring']);
+      expect(names(c)).toEqual(['Tess']);
+      c.onServiceFilterChange(['Tutoring', 'Newsletter']);
+      expect(names(c)).toEqual(['Ada', 'Legacy', 'Newsy']);
+      c.onServiceFilterChange([]);
+      expect(names(c)).toHaveLength(4);
+    });
+
+    it('filters by DISPLAY status: legacy values and staff labels match their chips', () => {
+      const c = seeded();
+      // 'Past Student' on a parent displays (and filters) as Former Client.
+      c.onStatusFilterChange(['Former Client']);
+      expect(names(c)).toEqual(['Legacy']);
+      // Stored 'Staff' displays as Active Staff.
+      c.onStatusFilterChange(['Active Staff']);
+      expect(names(c)).toEqual(['Tess']);
+    });
+
+    it('combines text, service, and status (all must match)', () => {
+      const c = seeded();
+      c.onServiceFilterChange(['Tutoring']);
+      c.applyFilter('ada');
+      expect(names(c)).toEqual(['Ada']);
+      c.onStatusFilterChange(['Former Client']);
+      expect(names(c)).toEqual([]); // Ada is Active Client
+    });
+
+    it('persists filters for the session and restores them on rebuild', () => {
+      const c = seeded();
+      c.onServiceFilterChange(['Hiring']);
+      c.applyFilter('tess');
+
+      TestBed.resetTestingModule();
+      const c2 = seeded();
+      expect((c2 as any).serviceFilter).toEqual(['Hiring']);
+      expect((c2 as any).searchText).toBe('tess');
+      expect(names(c2)).toEqual(['Tess']);
+    });
+
+    it('starts unfiltered when saved state is corrupt', () => {
+      sessionStorage.setItem('btc-contacts-filters', '{not json');
+      const c = seeded();
+      expect(names(c)).toHaveLength(4);
+    });
+  });
+
   it('navigates to a newly created contact after the dialog closes', () => {
     afterClosed = { id: 'new-1' };
     const c = build();
@@ -170,15 +237,20 @@ describe('ContactsTable', () => {
     component.ngOnInit();
     expect((component as unknown as { contactColumns: string[] }).contactColumns)
       .toContain('status');
-    const predicate = (component as unknown as {
-      dataSource: { filterPredicate: (c: unknown, f: string) => boolean };
-    }).dataSource.filterPredicate;
-    const staff = { first_name: 'Tess', status: 'Staff' };
+    // The predicate reads component state now — drive it through applyFilter.
+    component.dataSource.data = [
+      { first_name: 'Tess', status: 'Staff' },
+      { first_name: 'Ada', status: 'Declined Services' },
+      { first_name: 'Blank' },
+    ] as Contact[];
+    const names = () => component.dataSource.filteredData.map(r => r.first_name);
     // Matches both the stored value and the display label.
-    expect(predicate(staff, 'staff')).toBe(true);
-    expect(predicate(staff, 'active staff')).toBe(true);
-    expect(predicate({ first_name: 'Ada', status: 'Declined Services' }, 'declined')).toBe(true);
-    expect(predicate({ first_name: 'Ada' }, 'declined')).toBe(false);
+    component.applyFilter('staff');
+    expect(names()).toEqual(['Tess']);
+    component.applyFilter('active staff');
+    expect(names()).toEqual(['Tess']);
+    component.applyFilter('declined');
+    expect(names()).toEqual(['Ada']);
   });
 
   it('statusLabel maps legacy parent statuses and labels staff statuses', () => {
