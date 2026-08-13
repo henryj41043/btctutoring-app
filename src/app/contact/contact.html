@@ -49,6 +49,18 @@
           </mat-select>
         </mat-form-field>
       }
+      <!-- Employment inquiries share the staff-status vocabulary but get no
+           user account — they aren't employees (yet). -->
+      @if (contactForm.controls['service'].value === Service.EMPLOYMENT_INQUIRY) {
+        <mat-form-field>
+          <mat-label>Select Status</mat-label>
+          <mat-select formControlName="status">
+            @for (statusOption of staffStatusOptions; track statusOption) {
+              <mat-option [value]="statusOption">{{staffStatusLabel(statusOption)}}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
       @if (contactForm.controls['service'].value === Service.HIRING) {
         <mat-form-field>
           <mat-label>Select Status</mat-label>
@@ -164,7 +176,8 @@
       }
     </div>
   </div>
-  <div class="contact-tutoring contact-section" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
+  <div class="contact-tutoring contact-section"
+       [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER || contactForm.controls['service'].value === Service.EMPLOYMENT_INQUIRY">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>Student Roster</h2>
       <div class="table-scroll">
@@ -267,7 +280,8 @@
       }
     }
   </div>
-  <div class="contact-billing contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
+  <div class="contact-billing contact-section" [formGroup]="contactForm"
+       [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER || contactForm.controls['service'].value === Service.EMPLOYMENT_INQUIRY">
     @if (contactForm.controls['service'].value === Service.HIRING) {
       <h2>BTC Tutor Information</h2>
       <div class="scholarship-grid">
@@ -411,7 +425,7 @@
     }
   </div>
   <div class="contact-onboarding contact-section" [formGroup]="contactForm" [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER">
-    @if (contactForm.controls['service'].value === Service.HIRING) {
+    @if (contactForm.controls['service'].value === Service.HIRING || contactForm.controls['service'].value === Service.EMPLOYMENT_INQUIRY) {
       <h2>Hiring Process</h2>
       <div class="onboarding-grid">
         <mat-form-field>

@@ -36,12 +36,15 @@ export function contactStatusChipClass(status?: string): string {
     case ParentStatus.ACTIVE_CLIENT:
       return 'btc-chip--ok';
     case StaffStatus.ONBOARDING:
+    case StaffStatus.INQUIRY_SUBMITTED:
       return 'btc-chip--warn';
     case StaffStatus.FORMER_STAFF:
     case ParentStatus.FORMER_CLIENT:
       return 'btc-chip--info';
     case ParentStatus.MIA:
     case ParentStatus.DECLINED_SERVICES:
+    case StaffStatus.DECLINED_OFFER:
+    case StaffStatus.NOT_PURSUING:
       return 'btc-chip--bad';
     default:
       return '';

@@ -72,6 +72,7 @@ export class ContactsTable implements OnInit {
   protected readonly statusOptions: string[] = [
     'Active Client', 'Former Client', 'MIA', 'Declined Services',
     'Active Staff', 'Former Staff', 'Onboarding',
+    'Inquiry submitted', 'Declined offer', 'BTC not Pursuing',
   ];
   protected serviceFilter: string[] = [];
   protected statusFilter: string[] = [];
