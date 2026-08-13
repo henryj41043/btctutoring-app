@@ -414,7 +414,9 @@ describe('Billing', () => {
       ['', '', 'Monthly', '—', '—', '—', '$0.00'],
     ]);
     // Grand total in the last cell of a 7-cell foot, rendered on the last page only.
-    expect(config.foot).toEqual([['Grand Total', '', '', '', '', '', '$688.00']]);
+    expect(config.foot).toEqual([
+      ['Grand Total', '', '', '$525.00', '$163.00', '', '$688.00'],
+    ]);
     expect(config.showFoot).toBe('lastPage');
     expect(config.footStyles).toEqual({ fillColor: [17, 138, 178] });
   });
@@ -434,6 +436,18 @@ describe('Billing', () => {
     it('is zero with no rows', () => {
       const c = build();
       expect((c as any).grandTotal).toBe(0);
+    });
+
+    it('sums the due columns null-safely, re-rounded', () => {
+      const c = build();
+      (c as any).dataSource.data = [
+        { due_first: 0.1, due_fifteenth: 0.2 } as BillingEntry,
+        { due_first: 0.2, due_fifteenth: null } as BillingEntry,
+        {} as BillingEntry,
+      ];
+      // 0.1 + 0.2 is 0.30000000000000004 unrounded — pins the round2 wrapper.
+      expect((c as any).grandDueFirst).toBe(0.3);
+      expect((c as any).grandDueFifteenth).toBe(0.2);
     });
 
     // Rendered against the template so a missing matFooterCellDef (a runtime

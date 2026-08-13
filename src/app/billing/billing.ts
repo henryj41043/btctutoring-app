@@ -264,6 +264,14 @@ export class Billing implements OnInit {
     return round2(this.dataSource.data.reduce((sum, e) => sum + (e.total ?? 0), 0));
   }
 
+  protected get grandDueFirst(): number {
+    return round2(this.dataSource.data.reduce((sum, e) => sum + (e.due_first ?? 0), 0));
+  }
+
+  protected get grandDueFifteenth(): number {
+    return round2(this.dataSource.data.reduce((sum, e) => sum + (e.due_fifteenth ?? 0), 0));
+  }
+
   exportPDF(): void {
     const monthStr = this.monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const doc = new jsPDF();
@@ -289,7 +297,10 @@ export class Billing implements OnInit {
         e.discount ? `-${this.formatMoney(e.discount)} (${e.discount_percent}%)` : '—',
         this.formatMoney(e.total),
       ]),
-      foot: [['Grand Total', '', '', '', '', '', this.formatMoney(this.grandTotal)]],
+      foot: [[
+        'Grand Total', '', '', this.formatMoney(this.grandDueFirst),
+        this.formatMoney(this.grandDueFifteenth), '', this.formatMoney(this.grandTotal),
+      ]],
       showFoot: 'lastPage',
       styles: { fontSize: 9 },
       headStyles: { fillColor: [17, 138, 178] },
