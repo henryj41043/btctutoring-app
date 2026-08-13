@@ -9,6 +9,11 @@ export enum StaffStatus {
   FORMER_STAFF = 'Former Staff',
   ONBOARDING = 'Onboarding',
   MIA = 'MIA',
+  /** Hiring-pipeline stages (client, 2026-08): shared by Hiring and
+   *  Employment Inquiry contacts. */
+  INQUIRY_SUBMITTED = 'Inquiry submitted',
+  DECLINED_OFFER = 'Declined offer',
+  NOT_PURSUING = 'BTC not Pursuing',
 }
 
 /** Display labels — only the legacy 'Staff' string needs prettifying. */

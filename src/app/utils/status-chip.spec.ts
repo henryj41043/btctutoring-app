@@ -25,6 +25,10 @@ describe('contactStatusChipClass', () => {
     expect(contactStatusChipClass('Former Client')).toBe('btc-chip--info');
     expect(contactStatusChipClass('MIA')).toBe('btc-chip--bad');
     expect(contactStatusChipClass('Declined Services')).toBe('btc-chip--bad');
+    // Hiring-pipeline additions (shared by Hiring + Employment Inquiry).
+    expect(contactStatusChipClass('Inquiry submitted')).toBe('btc-chip--warn');
+    expect(contactStatusChipClass('Declined offer')).toBe('btc-chip--bad');
+    expect(contactStatusChipClass('BTC not Pursuing')).toBe('btc-chip--bad');
   });
 
   it('falls back to the neutral chip for unknown or missing statuses', () => {

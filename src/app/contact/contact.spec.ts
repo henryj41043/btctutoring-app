@@ -214,11 +214,31 @@ describe('Contact', () => {
   it('offers staff statuses for hiring contacts (Staff labeled Active Staff)', () => {
     const c = build();
     const options = (c as unknown as { staffStatusOptions: string[] }).staffStatusOptions;
-    expect(options).toEqual(['Staff', 'Former Staff', 'Onboarding', 'MIA']);
+    expect(options).toEqual([
+      'Staff', 'Former Staff', 'Onboarding', 'MIA',
+      'Inquiry submitted', 'Declined offer', 'BTC not Pursuing',
+    ]);
     const label = (c as unknown as { staffStatusLabel: (s: string) => string })
       .staffStatusLabel;
     expect(label('Staff')).toBe('Active Staff');
     expect(label('Former Staff')).toBe('Former Staff');
+  });
+
+  it('offers the four services in menu order', () => {
+    const c = build();
+    expect((c as unknown as { serviceOptions: string[] }).serviceOptions)
+      .toEqual(['Tutoring', 'Hiring', 'Employment Inquiry', 'Newsletter']);
+  });
+
+  it('does not fire the tutor-roster fetch for an employment inquiry', () => {
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ service: Service.EMPLOYMENT_INQUIRY, status: 'Inquiry submitted' })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    // Roster is staff-only; inquiries also keep their pipeline status intact.
+    expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+    expect(form(c).controls['status'].value).toBe('Inquiry submitted');
   });
 
   it('offers parent statuses for tutoring contacts', () => {
