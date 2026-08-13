@@ -7,6 +7,7 @@ import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
+import {MatSelectModule} from '@angular/material/select';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
@@ -36,6 +37,7 @@ import {PhonePipe} from '../pipes/phone.pipe';
     MatPaginatorModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatProgressSpinnerModule,
     PhonePipe,
   ],
@@ -65,6 +67,17 @@ export class ContactsTable implements OnInit {
   contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'status', 'actions'];
   dataSource = new MatTableDataSource<Contact>([]);
   protected readonly statusChipClass = contactStatusChipClass;
+  protected readonly serviceOptions: string[] = Object.values(Service);
+  /** Display labels across both status families (parent + staff), deduped. */
+  protected readonly statusOptions: string[] = [
+    'Active Client', 'Former Client', 'MIA', 'Declined Services',
+    'Active Staff', 'Former Staff', 'Onboarding',
+  ];
+  protected serviceFilter: string[] = [];
+  protected statusFilter: string[] = [];
+  private filterText: string = '';
+  /** Survives navigation within the tab (matches the roster-filter precedent). */
+  private static readonly FILTER_STORAGE_KEY = 'btc-contacts-filters';
 
   /** Display status: parent contacts map legacy pre-v3 values to their
    *  ParentStatus equivalents; staff labels go through staffStatusLabel. */
@@ -77,21 +90,75 @@ export class ContactsTable implements OnInit {
   loading: boolean = true;
 
   ngOnInit(): void {
-    // Case-insensitive search across the visible columns.
-    this.dataSource.filterPredicate = (contact, filter) => {
+    // Text search + service/status selects combine (all must match). The
+    // predicate reads component state; dataSource.filter only re-triggers it.
+    this.dataSource.filterPredicate = (contact) => {
+      if (this.serviceFilter.length && !this.serviceFilter.includes(contact.service ?? '')) {
+        return false;
+      }
+      // Status matches on the DISPLAY label so legacy parent values and the
+      // 'Staff'→'Active Staff' label behave the way the chips read.
+      if (this.statusFilter.length && !this.statusFilter.includes(this.statusLabel(contact))) {
+        return false;
+      }
+      if (!this.filterText) {
+        return true;
+      }
       const haystack = [
         contact.first_name, contact.last_name, contact.email,
         contact.phone_number, contact.service,
         contact.status, this.statusLabel(contact),
       ].join(' ').toLowerCase();
-      return haystack.includes(filter);
+      return haystack.includes(this.filterText);
     };
+    this.restoreFilters();
     this.updateClientData();
   }
 
   applyFilter(value: string): void {
-    this.dataSource.filter = value.trim().toLowerCase();
+    this.filterText = value.trim().toLowerCase();
+    this.refilter();
+  }
+
+  onServiceFilterChange(selected: string[]): void {
+    this.serviceFilter = selected;
+    this.refilter();
+  }
+
+  onStatusFilterChange(selected: string[]): void {
+    this.statusFilter = selected;
+    this.refilter();
+  }
+
+  /** Re-runs the predicate (the filter string only needs to change) and
+   *  persists the criteria for the session. */
+  private refilter(): void {
+    this.dataSource.filter = JSON.stringify({
+      text: this.filterText, services: this.serviceFilter, statuses: this.statusFilter,
+    });
     this.dataSource.paginator?.firstPage();
+    try {
+      sessionStorage.setItem(ContactsTable.FILTER_STORAGE_KEY, this.dataSource.filter);
+    } catch { /* storage unavailable — filters just don't persist */ }
+  }
+
+  private restoreFilters(): void {
+    try {
+      const saved = sessionStorage.getItem(ContactsTable.FILTER_STORAGE_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as {text?: string; services?: string[]; statuses?: string[]};
+      this.filterText = parsed.text ?? '';
+      this.serviceFilter = parsed.services ?? [];
+      this.statusFilter = parsed.statuses ?? [];
+      if (this.filterText || this.serviceFilter.length || this.statusFilter.length) {
+        this.dataSource.filter = saved;
+      }
+    } catch { /* corrupt/unavailable storage — start unfiltered */ }
+  }
+
+  /** The restored search text, for the input's initial value. */
+  protected get searchText(): string {
+    return this.filterText;
   }
 
   private updateClientData(): void {
