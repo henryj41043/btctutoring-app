@@ -140,7 +140,12 @@ export class Payroll implements OnInit {
         this.formatMoney(entry.planning_compensation),
         this.formatMoney(entry.total_compensation),
       ]),
-      foot: [['Grand Total', '', '', '', '', '', '', '', '', '', '', this.formatMoney(this.grandTotalComp)]],
+      foot: [[
+        'Grand Total', '', this.grandTutoringHours, this.grandTrialHours,
+        this.grandAdminTime, this.grandHoursSubtotal, '',
+        this.formatMoney(this.grandTutoringComp), this.grandPlanningTime, '',
+        this.formatMoney(this.grandPlanningComp), this.formatMoney(this.grandTotalComp),
+      ]],
       showFoot: 'lastPage',
       styles: { fontSize: 8 },
       headStyles: { fillColor: [17, 138, 178] },
@@ -162,10 +167,44 @@ export class Payroll implements OnInit {
     doc.save(`payroll-${startStr}-${endStr}.pdf`);
   }
 
+  /** Rounded column sum across all rows (missing values count as zero). */
+  private sumOf(pick: (e: PayrollEntry) => number | undefined): number {
+    return round2(this.dataSource.data.reduce((sum, e) => sum + (pick(e) ?? 0), 0));
+  }
+
   /** Sum of Total Comp across all rows. Re-rounded: each entry's
    *  total_compensation is a raw sum of two rounded floats. */
   protected get grandTotalComp(): number {
-    return round2(this.dataSource.data.reduce((sum, e) => sum + (e.total_compensation ?? 0), 0));
+    return this.sumOf(e => e.total_compensation);
+  }
+
+  protected get grandTutoringHours(): number {
+    return this.sumOf(e => e.tutoring_hours);
+  }
+
+  protected get grandTrialHours(): number {
+    return this.sumOf(e => e.trial_hours);
+  }
+
+  protected get grandAdminTime(): number {
+    return this.sumOf(e => e.administrative_time);
+  }
+
+  protected get grandHoursSubtotal(): number {
+    return this.sumOf(e => e.hours_subtotal);
+  }
+
+  /** Planning total includes the extra-planning credits the cells render as '+X'. */
+  protected get grandPlanningTime(): number {
+    return this.sumOf(e => (e.planning_time ?? 0) + (e.extra_planning_time ?? 0));
+  }
+
+  protected get grandTutoringComp(): number {
+    return this.sumOf(e => e.tutoring_compensation);
+  }
+
+  protected get grandPlanningComp(): number {
+    return this.sumOf(e => e.planning_compensation);
   }
 
   /** Planning cell text: base hours plus any extra-planning credit, e.g. "2.33 +0.5". */

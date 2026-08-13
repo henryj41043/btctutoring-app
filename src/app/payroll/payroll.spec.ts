@@ -447,7 +447,9 @@ describe('Payroll', () => {
       expect(tableArgs.body[0]).toContain('0.33 +0.5');
       // Grand total of Total Comp in the last cell of a 12-cell foot, last page only.
       expect(tableArgs.foot).toEqual([
-        ['Grand Total', '', '', '', '', '', '', '', '', '', '', '$124.95'],
+        // hire_type and the two rate columns stay blank; planning hours
+        // include the extra credit (0.33 + 0.5).
+        ['Grand Total', '', 2, 0, 1, 3, '', '$120.00', 0.83, '', '$4.95', '$124.95'],
       ]);
       expect(tableArgs.showFoot).toBe('lastPage');
       expect(tableArgs.footStyles).toEqual({ fillColor: [17, 138, 178] });
@@ -477,6 +479,35 @@ describe('Payroll', () => {
     it('is zero with no rows', () => {
       const p = build();
       expect(totals(p).grandTotalComp).toBe(0);
+    });
+
+    it('sums every hours and comp column, re-rounded', () => {
+      const p = build();
+      (p as unknown as { dataSource: { data: PayrollEntry[] } }).dataSource.data = [
+        {
+          tutoring_hours: 0.1, trial_hours: 1, administrative_time: 0.1,
+          hours_subtotal: 1.2, planning_time: 0.1, extra_planning_time: 0.5,
+          tutoring_compensation: 0.1, planning_compensation: 0.2,
+        } as PayrollEntry,
+        {
+          tutoring_hours: 0.2, administrative_time: 0.2, hours_subtotal: 0.4,
+          planning_time: 0.2, tutoring_compensation: 0.2, planning_compensation: 0.1,
+        } as PayrollEntry,
+        {} as PayrollEntry, // every `?? 0` fallback
+      ];
+      const t = p as unknown as {
+        grandTutoringHours: number; grandTrialHours: number; grandAdminTime: number;
+        grandHoursSubtotal: number; grandPlanningTime: number;
+        grandTutoringComp: number; grandPlanningComp: number;
+      };
+      // 0.1 + 0.2 is 0.30000000000000004 unrounded — pins the round2 wrapper.
+      expect(t.grandTutoringHours).toBe(0.3);
+      expect(t.grandTrialHours).toBe(1);
+      expect(t.grandAdminTime).toBe(0.3);
+      expect(t.grandHoursSubtotal).toBe(1.6);
+      expect(t.grandPlanningTime).toBe(0.8); // includes the extra credit
+      expect(t.grandTutoringComp).toBe(0.3);
+      expect(t.grandPlanningComp).toBe(0.3);
     });
   });
 
