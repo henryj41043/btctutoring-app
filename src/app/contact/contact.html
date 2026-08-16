@@ -552,7 +552,13 @@
       } @else if (updateError) {
         <span class="save-status save-status--err"><mat-icon>close</mat-icon> Save failed</span>
       } @else {
-        <span class="save-bar-text">You have unsaved changes</span>
+        @if (updateInvalid) {
+          <span class="save-status save-status--err">
+            <mat-icon>error_outline</mat-icon> Fix the highlighted fields before saving
+          </span>
+        } @else {
+          <span class="save-bar-text">You have unsaved changes</span>
+        }
         <button matButton type="button" (click)="discardContactChanges()">Discard</button>
         <button mat-raised-button color="primary" type="button" (click)="updateContact()">Save</button>
       }

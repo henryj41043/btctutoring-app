@@ -1212,6 +1212,33 @@ describe('Contact', () => {
       expect((c as unknown as { updatedSuccessfully: boolean }).updatedSuccessfully).toBe(false);
     });
 
+    it('surfaces an invalid form instead of silently bailing', () => {
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['phone_number'].setValue('570-236-001'); // 9 digits
+      c.updateContact();
+      expect(contactService.updateContact).not.toHaveBeenCalled();
+      expect((c as unknown as { updateInvalid: boolean }).updateInvalid).toBe(true);
+      // Field errors render because everything is marked touched.
+      expect(form(c).controls['phone_number'].touched).toBe(true);
+      // Fixing the field and saving clears the flag.
+      form(c).controls['phone_number'].setValue('5702360011');
+      contactService.updateContact.mockReturnValue(of({} as ContactModel));
+      c.updateContact();
+      expect((c as unknown as { updateInvalid: boolean }).updateInvalid).toBe(false);
+      expect(contactService.updateContact).toHaveBeenCalled();
+    });
+
+    it('discard clears the invalid-save banner', () => {
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['phone_number'].setValue('123');
+      c.updateContact();
+      expect((c as unknown as { updateInvalid: boolean }).updateInvalid).toBe(true);
+      c.discardContactChanges();
+      expect((c as unknown as { updateInvalid: boolean }).updateInvalid).toBe(false);
+    });
+
     it('flashes an error flag on failure', () => {
       const c = build();
       c.ngOnInit();

@@ -196,6 +196,8 @@ export class Contact implements OnInit {
   protected readonly StudentStatus = StudentStatus;
   protected updatedSuccessfully: boolean = false;
   protected updateError: boolean = false;
+  /** Save was attempted while the form is invalid (highlighted fields shown). */
+  protected updateInvalid: boolean = false;
   // The contact's students (parent/family view). Edited via the Student dialog,
   // reloaded from the backend after every create/edit/delete/schedule change.
   protected students: Student[] = [];
@@ -540,6 +542,7 @@ export class Contact implements OnInit {
     }
     this.contactForm.markAsPristine();
     this.contactForm.markAsUntouched();
+    this.updateInvalid = false;
     this.cdr.markForCheck();
   }
 
@@ -997,8 +1000,14 @@ export class Contact implements OnInit {
 
   updateContact() {
     if (!this.contactForm.valid) {
+      // Never bail silently — legacy records (e.g. 9-digit phones) load
+      // invalid, and the admin needs to see WHY the save is refusing.
+      this.contactForm.markAllAsTouched();
+      this.updateInvalid = true;
+      this.cdr.markForCheck();
       return;
     }
+    this.updateInvalid = false;
     const contact: _Contact = this.contactForm.value as _Contact;
     // If the group changed on a contact that already has an account, Cognito
     // must be updated too. Doing it first means a Cognito failure aborts the
