@@ -42,6 +42,7 @@ describe('Onboarding', () => {
     (c as unknown as { dataSource: MatTableDataSource<OnboardingRow> }).dataSource.data;
 
   beforeEach(() => {
+    sessionStorage.clear();
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     studentService.getOnboardingStudents.mockReturnValue(of([]));

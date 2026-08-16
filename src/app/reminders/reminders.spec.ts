@@ -50,12 +50,24 @@ describe('Reminders', () => {
     (c as unknown as { dataSource: { data: Reminder[] } }).dataSource.data;
 
   beforeEach(() => {
+    sessionStorage.clear();
     afterClosed = undefined;
     router.navigate.mockClear();
     dialog.open.mockClear();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     reminderService.getReminders.mockReturnValue(of([reminder()]));
     contactService.getContactsSummary.mockReturnValue(of([adminContact, tutorContact]));
+  });
+
+  it('restores the saved filter and show-past toggle for the session', () => {
+    sessionStorage.setItem('btc-reminders-view',
+      JSON.stringify({ filter: 'bill', extra: { showPast: true } }));
+    const c = build();
+    c.ngOnInit();
+    expect((c as any).filterText).toBe('bill');
+    expect((c as any).showPast).toBe(true);
+    c.onShowPastChange(false);
+    expect(JSON.parse(sessionStorage.getItem('btc-reminders-view')!).extra.showPast).toBe(false);
   });
 
   it('loads reminders and defaults to upcoming only', () => {

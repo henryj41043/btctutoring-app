@@ -44,11 +44,31 @@ describe('SessionsTable', () => {
   };
 
   beforeEach(() => {
+    sessionStorage.clear();
     isAdmin = true;
     contactId = 'contact-1';
     groups = ['Admins'];
     afterClosed = {} as Session;
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  it('restores the saved month and ignores corrupt saved dates', () => {
+    sessionStorage.setItem('btc-sessions-view',
+      JSON.stringify({ extra: { selectedDate: new Date(2026, 2, 10).toISOString() } }));
+    const c1 = build();
+    c1.ngOnInit();
+    expect((c1 as any).selectedDate.getMonth()).toBe(2); // March restored
+    TestBed.resetTestingModule();
+
+    sessionStorage.setItem('btc-sessions-view', JSON.stringify({ extra: { selectedDate: 'not-a-date' } }));
+    const c2 = build();
+    const before = (c2 as any).selectedDate.getMonth();
+    c2.ngOnInit();
+    expect((c2 as any).selectedDate.getMonth()).toBe(before); // untouched
+
+    c2.onDateChange(new Date(2026, 4, 1));
+    expect(JSON.parse(sessionStorage.getItem('btc-sessions-view')!).extra.selectedDate)
+      .toBe(new Date(2026, 4, 1).toISOString());
   });
 
   it('loads all sessions for an admin and filters out ADMIN-type rows', () => {

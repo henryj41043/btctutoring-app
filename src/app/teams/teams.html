@@ -4,7 +4,8 @@
     <div class="teams-controls">
       <mat-form-field subscriptSizing="dynamic" appearance="outline" class="teams-search">
         <mat-label>Search</mat-label>
-        <input matInput #teamsSearch placeholder="Team, lead, member"
+        <input matInput #teamsSearch [value]="searchText"
+             placeholder="Team, lead, member"
                (input)="applyFilter(teamsSearch.value)">
         <mat-icon matSuffix>search</mat-icon>
       </mat-form-field>

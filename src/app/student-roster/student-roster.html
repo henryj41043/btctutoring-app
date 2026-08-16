@@ -6,7 +6,8 @@
     }
     <mat-form-field subscriptSizing="dynamic" appearance="outline" class="roster-search">
       <mat-label>Search</mat-label>
-      <input matInput #rosterSearch placeholder="Parent, student, package"
+      <input matInput #rosterSearch [value]="searchText"
+             placeholder="Parent, student, package"
              (input)="applyFilter(rosterSearch.value)">
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>

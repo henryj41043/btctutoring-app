@@ -14,6 +14,7 @@ import {StudentService} from '../services/student.service';
 import {Student} from '../models/student.model';
 import {availableMakeupMinutes, MakeupBatchView, unexpiredBatchViews} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {TableStateStore} from '../utils/table-state';
 
 /** One report row: a student holding an available make-up balance. */
 export interface MakeupReportRow {
@@ -55,8 +56,13 @@ export class MakeupReport implements OnInit {
   // Cancels the in-flight load when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
 
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-makeup-view');
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   protected reportColumns: string[] = ['contact_name', 'name', 'available', 'soonest_expiry'];
@@ -67,6 +73,10 @@ export class MakeupReport implements OnInit {
   protected expandedId: string | null = null;
 
   ngOnInit(): void {
+    const savedFilter = this.viewState.load().filter;
+    if (savedFilter) {
+      this.dataSource.filter = savedFilter;
+    }
     this.dataSource.filterPredicate = (row, filter) => {
       const haystack = [row.student.contact_name, row.student.name]
         .join(' ')
@@ -124,6 +134,12 @@ export class MakeupReport implements OnInit {
   applyFilter(value: string): void {
     this.dataSource.filter = value.trim().toLowerCase();
     this.dataSource.paginator?.firstPage();
+    this.viewState.patch({filter: this.dataSource.filter});
+  }
+
+  /** The restored search text, for the input's initial value. */
+  protected get searchText(): string {
+    return this.viewState.load().filter ?? '';
   }
 
   toggleExpanded(row: MakeupReportRow): void {

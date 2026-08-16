@@ -69,12 +69,31 @@ describe('Billing', () => {
   };
 
   beforeEach(() => {
+    sessionStorage.clear();
     isAdmin = true;
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     contactService.getContacts.mockReturnValue(of([contact()]));
     studentService.getStudents.mockReturnValue(of([student()]));
     billingService.getBillingRecordsByMonth.mockReturnValue(of([]));
+  });
+
+  it('restores the saved month and ignores corrupt saved dates', () => {
+    sessionStorage.setItem('btc-billing-view',
+      JSON.stringify({ extra: { selectedDate: new Date(2026, 2, 10).toISOString() } }));
+    const c1 = build();
+    c1.ngOnInit();
+    expect((c1 as any).selectedDate.getMonth()).toBe(2); // March restored
+
+    sessionStorage.setItem('btc-billing-view', JSON.stringify({ extra: { selectedDate: 'not-a-date' } }));
+    const c2 = build();
+    const before = (c2 as any).selectedDate.getMonth();
+    c2.ngOnInit();
+    expect((c2 as any).selectedDate.getMonth()).toBe(before); // untouched
+
+    c2.onDateChange(new Date(2026, 4, 1));
+    expect(JSON.parse(sessionStorage.getItem('btc-billing-view')!).extra.selectedDate)
+      .toBe(new Date(2026, 4, 1).toISOString());
   });
 
   it('fetches only the selected month of billing records', () => {
