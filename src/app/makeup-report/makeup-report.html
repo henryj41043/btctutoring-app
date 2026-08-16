@@ -3,7 +3,8 @@
     <h2>Make-up Report</h2>
     <mat-form-field subscriptSizing="dynamic" appearance="outline" class="report-search">
       <mat-label>Search</mat-label>
-      <input matInput #reportSearch placeholder="Parent, student"
+      <input matInput #reportSearch [value]="searchText"
+             placeholder="Parent, student"
              (input)="applyFilter(reportSearch.value)">
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>

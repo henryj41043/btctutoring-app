@@ -21,6 +21,7 @@ import {catchError, EMPTY} from 'rxjs';
 import {SessionDialog} from '../session-dialog/session-dialog';
 import {Response} from '../models/response.model';
 import {DatePipe} from '@angular/common';
+import {TableStateStore} from '../utils/table-state';
 
 @Component({
   selector: 'app-sessions-table',
@@ -53,11 +54,19 @@ export class SessionsTable implements OnInit {
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
   // once loading finishes.
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-sessions-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   readonly SessionType = SessionType;
@@ -70,6 +79,10 @@ export class SessionsTable implements OnInit {
   constructor(private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
+    const savedDate = this.viewState.load().extra?.['selectedDate'];
+    if (typeof savedDate === 'string' && !isNaN(Date.parse(savedDate))) {
+      this.selectedDate = new Date(savedDate);
+    }
     this.dataSource.sortingDataAccessor = (item, property) => {
       switch (property) {
         case 'date': return item.start_datetime ?? '';
@@ -85,6 +98,7 @@ export class SessionsTable implements OnInit {
   onDateChange(date: Date | null): void {
     if (date) {
       this.selectedDate = date;
+      this.viewState.patch({extra: {selectedDate: date.toISOString()}});
       this.updateSessionsData();
     }
   }

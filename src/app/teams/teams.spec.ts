@@ -47,6 +47,7 @@ describe('Teams', () => {
     (c as unknown as { dataSource: { data: Team[] } }).dataSource.data;
 
   beforeEach(() => {
+    sessionStorage.clear();
     afterClosed = undefined;
     dialog.open.mockClear();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -98,6 +99,14 @@ describe('Teams', () => {
     const c = build();
     c.ngOnInit();
     expect(data(c)).toHaveLength(2);
+  });
+
+  it('restores the saved search filter for the session', () => {
+    sessionStorage.setItem('btc-teams-view', JSON.stringify({ filter: 'tess' }));
+    const c = build();
+    c.ngOnInit();
+    expect((c as any).dataSource.filter).toBe('tess');
+    expect((c as any).searchText).toBe('tess');
   });
 
   it('filters by team, lead, or member name case-insensitively', () => {

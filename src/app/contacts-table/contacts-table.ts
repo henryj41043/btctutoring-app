@@ -25,6 +25,7 @@ import {ContactService} from '../services/contact.service';
 import {Response} from '../models/response.model';
 import {Router} from '@angular/router';
 import {PhonePipe} from '../pipes/phone.pipe';
+import {TableStateStore} from '../utils/table-state';
 
 @Component({
   selector: 'app-contacts-table',
@@ -57,11 +58,19 @@ export class ContactsTable implements OnInit {
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
   // once loading finishes.
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-contacts-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'status', 'actions'];

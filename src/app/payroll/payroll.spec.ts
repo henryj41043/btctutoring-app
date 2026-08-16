@@ -72,12 +72,32 @@ describe('Payroll', () => {
     p as unknown as { startDate?: Date; endDate?: Date; loading: boolean };
 
   beforeEach(() => {
+    sessionStorage.clear();
     isAdmin = false;
     self = staffContact();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     studentService.getStudents.mockReturnValue(of([]));
     studentService.getStudentsByTutor.mockReturnValue(of([]));
     sessionsService.getAllSessions.mockReturnValue(of([]));
+  });
+
+  it('restores the saved month and ignores corrupt saved dates', () => {
+    sessionStorage.setItem('btc-payroll-view',
+      JSON.stringify({ extra: { selectedDate: new Date(2026, 2, 10).toISOString() } }));
+    const c1 = build();
+    c1.ngOnInit();
+    expect((c1 as any).selectedDate.getMonth()).toBe(2); // March restored
+    TestBed.resetTestingModule();
+
+    sessionStorage.setItem('btc-payroll-view', JSON.stringify({ extra: { selectedDate: 'not-a-date' } }));
+    const c2 = build();
+    const before = (c2 as any).selectedDate.getMonth();
+    c2.ngOnInit();
+    expect((c2 as any).selectedDate.getMonth()).toBe(before); // untouched
+
+    c2.onDateChange(new Date(2026, 4, 1));
+    expect(JSON.parse(sessionStorage.getItem('btc-payroll-view')!).extra.selectedDate)
+      .toBe(new Date(2026, 4, 1).toISOString());
   });
 
   it('computes a tutor payroll entry from completed and admin sessions', () => {

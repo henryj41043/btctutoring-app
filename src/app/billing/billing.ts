@@ -31,6 +31,7 @@ import {BillingCycle} from '../enums/billing-cycle.enum';
 import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
+import {TableStateStore} from '../utils/table-state';
 
 @Component({
   selector: 'app-billing',
@@ -65,11 +66,19 @@ export class Billing implements OnInit {
   // Cancels in-flight HTTP work when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
 
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-billing-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   protected billingColumns: string[] = [
@@ -82,12 +91,17 @@ export class Billing implements OnInit {
   protected monthStart: Date = new Date();
 
   ngOnInit(): void {
+    const savedDate = this.viewState.load().extra?.['selectedDate'];
+    if (typeof savedDate === 'string' && !isNaN(Date.parse(savedDate))) {
+      this.selectedDate = new Date(savedDate);
+    }
     this.loadBilling(this.selectedDate);
   }
 
   onDateChange(date: Date | null): void {
     if (date) {
       this.selectedDate = date;
+      this.viewState.patch({extra: {selectedDate: date.toISOString()}});
       this.loadBilling(date);
     }
   }

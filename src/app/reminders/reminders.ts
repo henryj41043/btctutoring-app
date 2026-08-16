@@ -20,6 +20,7 @@ import {Reminder} from '../models/reminder.model';
 import {Contact} from '../models/contact.model';
 import {UserGroup} from '../enums/user-group.enum';
 import {ReminderDialog, ReminderDialogMode} from '../reminder-dialog/reminder-dialog';
+import {TableStateStore} from '../utils/table-state';
 
 /**
  * Admin-only Reminders page: dated reminders emailed to chosen admins the
@@ -54,11 +55,19 @@ export class Reminders implements OnInit {
   private dialog: MatDialog = inject(MatDialog);
   private router: Router = inject(Router);
 
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-reminders-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   protected columns: string[] = ['date', 'title', 'message', 'recipients', 'contact', 'sent', 'actions'];
@@ -73,6 +82,14 @@ export class Reminders implements OnInit {
   private filterText: string = '';
 
   ngOnInit(): void {
+    const saved = this.viewState.load();
+    if (saved.filter) {
+      this.filterText = saved.filter;
+      this.dataSource.filter = saved.filter;
+    }
+    if (typeof saved.extra?.['showPast'] === 'boolean') {
+      this.showPast = saved.extra['showPast'];
+    }
     this.dataSource.filterPredicate = (reminder, filter) => {
       const haystack = [reminder.title, reminder.message, this.recipientNames(reminder), this.contactName(reminder)]
         .join(' ')
@@ -131,6 +148,7 @@ export class Reminders implements OnInit {
   onShowPastChange(showPast: boolean): void {
     this.showPast = showPast;
     this.applyView();
+    this.viewState.patch({extra: {showPast}});
     this.cdr.markForCheck();
   }
 
@@ -138,6 +156,12 @@ export class Reminders implements OnInit {
     this.filterText = value.trim().toLowerCase();
     this.dataSource.filter = this.filterText;
     this.dataSource.paginator?.firstPage();
+    this.viewState.patch({filter: this.filterText});
+  }
+
+  /** The restored search text, for the input's initial value. */
+  protected get searchText(): string {
+    return this.filterText;
   }
 
   recipientNames(reminder: Reminder): string {

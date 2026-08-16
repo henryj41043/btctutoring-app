@@ -32,6 +32,7 @@ describe('MakeupReport', () => {
     (c as unknown as { dataSource: { data: MakeupReportRow[] } }).dataSource.data;
 
   beforeEach(() => {
+    sessionStorage.clear();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     studentService.getStudents.mockReturnValue(of([]));
   });
@@ -99,6 +100,14 @@ describe('MakeupReport', () => {
     expect(rows(c)[0].legacy).toBe(true);
     expect(rows(c)[0].available).toBe(90);
     expect(rows(c)[0].batches).toEqual([]);
+  });
+
+  it('restores the saved search filter for the session', () => {
+    sessionStorage.setItem('btc-makeup-view', JSON.stringify({ filter: 'kai' }));
+    const c = build();
+    c.ngOnInit();
+    expect((c as any).dataSource.filter).toBe('kai');
+    expect((c as any).searchText).toBe('kai');
   });
 
   it('filters by parent or student name', () => {

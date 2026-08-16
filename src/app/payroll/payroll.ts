@@ -29,6 +29,7 @@ import {StaffStatus} from '../enums/staff-status.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {round2} from '../utils/package-config';
+import {TableStateStore} from '../utils/table-state';
 
 @Component({
   selector: 'app-payroll',
@@ -63,11 +64,19 @@ export class Payroll implements OnInit {
 
   // Setter-based ViewChilds: the table renders inside an @if, so these don't
   // exist yet at ngAfterViewInit and must be wired when they appear.
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-payroll-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   protected payrollColumns: string[] = [
@@ -91,12 +100,17 @@ export class Payroll implements OnInit {
   protected loading: boolean = true;
 
   ngOnInit(): void {
+    const savedDate = this.viewState.load().extra?.['selectedDate'];
+    if (typeof savedDate === 'string' && !isNaN(Date.parse(savedDate))) {
+      this.selectedDate = new Date(savedDate);
+    }
     this.loadPayroll(this.selectedDate);
   }
 
   onDateChange(date: Date | null): void {
     if (date) {
       this.selectedDate = date;
+      this.viewState.patch({extra: {selectedDate: date.toISOString()}});
       this.loadPayroll(date);
     }
   }

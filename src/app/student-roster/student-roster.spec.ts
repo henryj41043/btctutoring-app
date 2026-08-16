@@ -41,6 +41,7 @@ describe('StudentRoster', () => {
   };
 
   beforeEach(() => {
+    sessionStorage.clear();
     isAdmin = true;
     contactId = 'contact-1';
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -82,6 +83,16 @@ describe('StudentRoster', () => {
     component.ngOnInit();
     const data = (component as unknown as { dataSource: { data: Student[] } }).dataSource.data;
     expect(data).toEqual([student]);
+  });
+
+  it('restores the saved search filter for the session', () => {
+    sessionStorage.setItem('btc-roster-view', JSON.stringify({ filter: 'pat' }));
+    const c = build();
+    c.ngOnInit();
+    expect((c as any).dataSource.filter).toBe('pat');
+    expect((c as any).searchText).toBe('pat');
+    c.applyFilter('  Sam ');
+    expect(JSON.parse(sessionStorage.getItem('btc-roster-view')!).filter).toBe('sam');
   });
 
   it('filters by parent, student name or package case-insensitively', () => {

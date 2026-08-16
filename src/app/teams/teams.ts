@@ -16,6 +16,7 @@ import {ContactService} from '../services/contact.service';
 import {Team} from '../models/team.model';
 import {Contact} from '../models/contact.model';
 import {TeamDialog, TeamDialogMode} from '../team-dialog/team-dialog';
+import {TableStateStore} from '../utils/table-state';
 
 /**
  * Admin-only Teams page: each team pairs one Lead Tutor with tutor members.
@@ -48,11 +49,19 @@ export class Teams implements OnInit {
   private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
 
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-teams-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   protected columns: string[] = ['name', 'lead', 'members', 'actions'];
@@ -63,6 +72,10 @@ export class Teams implements OnInit {
   private contactNamesById = new Map<string, string>();
 
   ngOnInit(): void {
+    const savedFilter = this.viewState.load().filter;
+    if (savedFilter) {
+      this.dataSource.filter = savedFilter;
+    }
     this.dataSource.filterPredicate = (team, filter) => {
       const haystack = [team.name, this.leadName(team), this.memberNames(team)]
         .join(' ')
@@ -97,6 +110,12 @@ export class Teams implements OnInit {
   applyFilter(value: string): void {
     this.dataSource.filter = value.trim().toLowerCase();
     this.dataSource.paginator?.firstPage();
+    this.viewState.patch({filter: this.dataSource.filter});
+  }
+
+  /** The restored search text, for the input's initial value. */
+  protected get searchText(): string {
+    return this.viewState.load().filter ?? '';
   }
 
   leadName(team: Team): string {

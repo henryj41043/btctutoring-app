@@ -21,6 +21,7 @@ import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions
 import {availableMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
 import {studentStatusChipClass} from '../utils/status-chip';
+import {TableStateStore} from '../utils/table-state';
 
 @Component({
   selector: 'app-student-roster',
@@ -51,11 +52,19 @@ export class StudentRoster implements OnInit {
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
   // once loading finishes.
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-roster-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   protected rosterColumns: string[] = ['contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship', 'actions'];
@@ -65,6 +74,10 @@ export class StudentRoster implements OnInit {
   protected loading: boolean = true;
 
   ngOnInit(): void {
+    const savedFilter = this.viewState.load().filter;
+    if (savedFilter) {
+      this.dataSource.filter = savedFilter;
+    }
     // Case-insensitive search across the visible columns (mirrors the contacts table).
     this.dataSource.filterPredicate = (student, filter) => {
       const haystack = [student.contact_name, student.name, student.status, student.package]
@@ -107,6 +120,12 @@ export class StudentRoster implements OnInit {
   applyFilter(value: string): void {
     this.dataSource.filter = value.trim().toLowerCase();
     this.dataSource.paginator?.firstPage();
+    this.viewState.patch({filter: this.dataSource.filter});
+  }
+
+  /** The restored search text, for the input's initial value. */
+  protected get searchText(): string {
+    return this.viewState.load().filter ?? '';
   }
 
   /** The number of active students on the roster (not parents). */

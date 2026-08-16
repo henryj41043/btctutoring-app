@@ -17,6 +17,7 @@ import {OnboardingRow} from '../models/onboarding-row.model';
 import {Student} from '../models/student.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {studentDisplayName} from '../utils/student-name';
+import {TableStateStore} from '../utils/table-state';
 
 /**
  * Admin-only Onboarding page: every student in Onboarding status, joined to
@@ -53,11 +54,19 @@ export class Onboarding implements OnInit {
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
   // once loading finishes.
+  // Restores the admin's place (page/sort/filters) after navigating away.
+  private readonly viewState = new TableStateStore('btc-onboarding-view');
   @ViewChild(MatSort) set matSort(sort: MatSort) {
-    if (sort) { this.dataSource.sort = sort; }
+    if (sort) {
+      this.viewState.attachSort(sort);
+      this.dataSource.sort = sort;
+    }
   }
   @ViewChild(MatPaginator) set matPaginator(paginator: MatPaginator) {
-    if (paginator) { this.dataSource.paginator = paginator; }
+    if (paginator) {
+      this.viewState.attachPaginator(paginator);
+      this.dataSource.paginator = paginator;
+    }
   }
 
   protected columns: string[] = [

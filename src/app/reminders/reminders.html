@@ -4,7 +4,8 @@
     <div class="reminders-controls">
       <mat-form-field subscriptSizing="dynamic" appearance="outline" class="reminders-search">
         <mat-label>Search</mat-label>
-        <input matInput #remindersSearch placeholder="Title, message, recipient"
+        <input matInput #remindersSearch [value]="searchText"
+               placeholder="Title, message, recipient"
                (input)="applyFilter(remindersSearch.value)">
         <mat-icon matSuffix>search</mat-icon>
       </mat-form-field>
