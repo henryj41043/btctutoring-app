@@ -20,6 +20,8 @@ import {AuthService} from '../services/auth.service';
 import {ContactService} from '../services/contact.service';
 import {StudentService} from '../services/student.service';
 import {BillingService} from '../services/billing.service';
+import {NoteService} from '../services/note.service';
+import {Note} from '../models/note.model';
 import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
 import {BillingRecord} from '../models/billing-record.model';
@@ -62,6 +64,7 @@ export class Billing implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private studentService: StudentService = inject(StudentService);
   private billingService: BillingService = inject(BillingService);
+  private noteService: NoteService = inject(NoteService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   // Cancels in-flight HTTP work when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
@@ -262,8 +265,37 @@ export class Billing implements OnInit {
       catchError(error => { console.log(error); return EMPTY; }),
     ).subscribe(() => {
       if (half === 'first') { entry.paid_first = checked; } else { entry.paid_fifteenth = checked; }
+      if (checked) {
+        // Client request: marking paid files a note on the family's contact
+        // page. Best-effort — a note failure never blocks the paid toggle.
+        this.writePaymentNote(entry, amount, period);
+      }
       this.cdr.markForCheck();
     });
+  }
+
+  /** 'YYYY-MM-DD' period key rendered as e.g. 'Aug 1, 2026' (local wall date). */
+  private formatPeriod(period: string): string {
+    const [y, m, d] = period.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+    });
+  }
+
+  private writePaymentNote(entry: BillingEntry, amount: number, period: string): void {
+    const note: Note = {
+      message: `Payment received: ${this.formatMoney(amount)} for ${this.formatPeriod(period)}`
+        + (entry.packages ? ` (${entry.packages})` : ''),
+      date_time: new Date().toISOString(),
+      author: this.authService.contact().first_name,
+      author_id: this.authService.contact().id,
+      recipient: entry.name,
+      recipient_id: entry.contact_id,
+      type: '',
+    };
+    this.noteService.createNote(note).pipe(
+      catchError(error => { console.log(error); return EMPTY; }),
+    ).subscribe();
   }
 
   private formatMoney(value: number | undefined | null): string {
