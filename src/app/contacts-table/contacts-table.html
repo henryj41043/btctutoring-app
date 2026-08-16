@@ -23,6 +23,11 @@
         }
       </mat-select>
     </mat-form-field>
+    <button matButton type="button" (click)="copyFilteredEmails()"
+            matTooltip="Copy the emails of the contacts currently shown (all filters applied)">
+      <mat-icon>content_copy</mat-icon>
+      Copy Emails
+    </button>
     <button mat-raised-button color="primary" (click)="openContactDialog()">
       <mat-icon>add</mat-icon>
       Create Contact

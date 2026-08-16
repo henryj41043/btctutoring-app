@@ -15,6 +15,8 @@ import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {catchError, EMPTY} from 'rxjs';
 import {ContactDialog} from '../contact-dialog/contact-dialog';
 import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
@@ -40,6 +42,7 @@ import {TableStateStore} from '../utils/table-state';
     MatInputModule,
     MatSelectModule,
     MatProgressSpinnerModule,
+    MatTooltipModule,
     PhonePipe,
   ],
   templateUrl: './contacts-table.html',
@@ -49,6 +52,7 @@ import {TableStateStore} from '../utils/table-state';
 })
 export class ContactsTable implements OnInit {
   readonly contactDialog: MatDialog = inject(MatDialog);
+  private snackBar: MatSnackBar = inject(MatSnackBar);
   private contactService: ContactService = inject(ContactService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
@@ -193,6 +197,41 @@ export class ContactsTable implements OnInit {
       this.loading = false;
       this.cdr.markForCheck();
     });
+  }
+
+  /**
+   * Copies the currently filtered rows' emails to the clipboard — deduped,
+   * blanks skipped, comma-separated so it pastes straight into To/BCC.
+   * (Deliberately not a mailto: link — hundreds of recipients exceed mailto
+   * URL limits, and web-Gmail users often have no mailto handler.)
+   */
+  protected copyFilteredEmails(): void {
+    const rows = this.dataSource.filteredData;
+    const seen = new Set<string>();
+    const emails: string[] = [];
+    let missing = 0;
+    for (const contact of rows) {
+      const email = contact.email?.trim();
+      if (!email) {
+        missing++;
+        continue;
+      }
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      emails.push(email);
+    }
+    if (emails.length === 0) {
+      this.snackBar.open('No emails to copy in the current view.', undefined, {duration: 4000});
+      return;
+    }
+    const missingSuffix = missing > 0 ? ` (${missing} contact${missing === 1 ? '' : 's'} without an email)` : '';
+    navigator.clipboard.writeText(emails.join(', ')).then(
+      () => this.snackBar.open(
+        `${emails.length} email${emails.length === 1 ? '' : 's'} copied${missingSuffix}`,
+        undefined, {duration: 4000}),
+      () => this.snackBar.open('Could not copy to the clipboard.', undefined, {duration: 4000}),
+    );
   }
 
   protected openContactDialog(): void {
