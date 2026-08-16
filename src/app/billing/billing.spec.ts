@@ -8,6 +8,7 @@ import { AuthService } from '../services/auth.service';
 import { ContactService } from '../services/contact.service';
 import { StudentService } from '../services/student.service';
 import { BillingService } from '../services/billing.service';
+import { NoteService } from '../services/note.service';
 import { Contact } from '../models/contact.model';
 import { Student } from '../models/student.model';
 import { BillingRecord } from '../models/billing-record.model';
@@ -50,7 +51,11 @@ describe('Billing', () => {
   const contactService = { getContacts: jest.fn() };
   const studentService = { getStudents: jest.fn() };
   const billingService = { getBillingRecords: jest.fn(), getBillingRecordsByMonth: jest.fn(), upsertBillingRecord: jest.fn() };
-  const authService = { isAdmin: () => isAdmin };
+  const noteService = { createNote: jest.fn() };
+  const authService = {
+    isAdmin: () => isAdmin,
+    contact: () => ({ id: 'c-admin', first_name: 'Ann' }),
+  };
 
   const build = (): Billing => {
     TestBed.resetTestingModule();
@@ -61,6 +66,7 @@ describe('Billing', () => {
         { provide: ContactService, useValue: contactService },
         { provide: StudentService, useValue: studentService },
         { provide: BillingService, useValue: billingService },
+        { provide: NoteService, useValue: noteService },
       ],
     });
     const c = TestBed.createComponent(Billing).componentInstance;
@@ -76,6 +82,7 @@ describe('Billing', () => {
     contactService.getContacts.mockReturnValue(of([contact()]));
     studentService.getStudents.mockReturnValue(of([student()]));
     billingService.getBillingRecordsByMonth.mockReturnValue(of([]));
+    noteService.createNote.mockReturnValue(of({ id: 'n-1' }));
   });
 
   it('restores the saved month and ignores corrupt saved dates', () => {
@@ -290,6 +297,39 @@ describe('Billing', () => {
     expect(entry.paid_first).toBe(true);
   });
 
+  it('files a payment note on the family contact when marked paid', () => {
+    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
+    const c = build();
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    c.togglePaid(entry, 'first', true);
+    const note = noteService.createNote.mock.calls.at(-1)![0];
+    expect(note.message).toBe('Payment received: $362.00 for Jul 1, 2026 (Pat: Succeed)');
+    expect(note.recipient_id).toBe('c-1');
+    expect(note.recipient).toBe('Casey Lee');
+    expect(note.author).toBe('Ann');
+    expect(note.author_id).toBe('c-admin');
+    expect(typeof note.date_time).toBe('string');
+  });
+
+  it('does not file a note when un-marking paid', () => {
+    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
+    const c = build();
+    c.ngOnInit();
+    c.togglePaid((c as any).dataSource.data[0], 'first', false);
+    expect(noteService.createNote).not.toHaveBeenCalled();
+  });
+
+  it('a note failure never blocks the paid toggle', () => {
+    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
+    noteService.createNote.mockReturnValue(throwError(() => new Error('note boom')));
+    const c = build();
+    c.ngOnInit();
+    const entry = (c as any).dataSource.data[0];
+    c.togglePaid(entry, 'first', true);
+    expect(entry.paid_first).toBe(true);
+  });
+
   it('derives an entry with exact name, packages, amount and paid status', () => {
     billingService.getBillingRecordsByMonth.mockReturnValue(
       of([{ contact_id: 'c-1', period_start: '2026-07-01', paid: true } as BillingRecord]),
@@ -481,6 +521,7 @@ describe('Billing', () => {
           { provide: ContactService, useValue: contactService },
           { provide: StudentService, useValue: studentService },
           { provide: BillingService, useValue: billingService },
+          { provide: NoteService, useValue: noteService },
         ],
       });
       const fixture = TestBed.createComponent(Billing);
