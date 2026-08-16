@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort } from '@angular/material/sort';
 import { MatPaginator } from '@angular/material/paginator';
 import { ContactsTable } from './contacts-table';
@@ -22,6 +23,7 @@ describe('ContactsTable', () => {
   const dialog = {
     open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })),
   };
+  const snackBar = { open: jest.fn() };
 
   const build = (): ContactsTable => {
     TestBed.configureTestingModule({
@@ -31,6 +33,7 @@ describe('ContactsTable', () => {
         { provide: AuthService, useValue: authService },
         { provide: Router, useValue: router },
         { provide: MatDialog, useValue: dialog },
+        { provide: MatSnackBar, useValue: snackBar },
       ],
     });
     return TestBed.createComponent(ContactsTable).componentInstance;
@@ -117,6 +120,70 @@ describe('ContactsTable', () => {
     expect((c as any).dataSource.filteredData).toHaveLength(2);
     c.applyFilter('  ');
     expect((c as any).dataSource.filteredData).toHaveLength(2);
+  });
+
+  describe('copy filtered emails', () => {
+    let writeText: jest.Mock;
+
+    beforeEach(() => {
+      writeText = jest.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+      snackBar.open.mockClear();
+    });
+
+    const seed = (rows: Partial<Contact>[]): ContactsTable => {
+      contactService.getContactsSummary.mockReturnValue(of(rows as Contact[]));
+      const c = build();
+      c.ngOnInit();
+      return c;
+    };
+
+    it('copies deduped, comma-separated emails of the filtered rows', async () => {
+      const c = seed([
+        { first_name: 'Ada', email: 'ada@x.com' },
+        { first_name: 'Dupe', email: 'ADA@x.com ' }, // case/space dupe
+        { first_name: 'Sam', email: 'sam@y.com' },
+        { first_name: 'NoMail' },
+      ]);
+      (c as any).copyFilteredEmails();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('ada@x.com, sam@y.com');
+      expect(snackBar.open).toHaveBeenCalledWith(
+        '2 emails copied (1 contact without an email)', undefined, { duration: 4000 });
+    });
+
+    it('respects the active filters (copies filteredData, not all rows)', async () => {
+      const c = seed([
+        { first_name: 'Ada', email: 'ada@x.com', service: 'Tutoring' },
+        { first_name: 'Tess', email: 'tess@y.com', service: 'Hiring' },
+      ]);
+      c.onServiceFilterChange(['Hiring']);
+      (c as any).copyFilteredEmails();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('tess@y.com');
+      expect(snackBar.open).toHaveBeenCalledWith('1 email copied', undefined, { duration: 4000 });
+    });
+
+    it('reports when nothing is copyable without touching the clipboard', () => {
+      const c = seed([{ first_name: 'NoMail' }]);
+      (c as any).copyFilteredEmails();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(snackBar.open).toHaveBeenCalledWith(
+        'No emails to copy in the current view.', undefined, { duration: 4000 });
+    });
+
+    it('surfaces a clipboard failure', async () => {
+      writeText.mockRejectedValue(new Error('denied'));
+      const c = seed([{ first_name: 'Ada', email: 'ada@x.com' }]);
+      (c as any).copyFilteredEmails();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(snackBar.open).toHaveBeenCalledWith(
+        'Could not copy to the clipboard.', undefined, { duration: 4000 });
+    });
   });
 
   describe('service + status filters', () => {
