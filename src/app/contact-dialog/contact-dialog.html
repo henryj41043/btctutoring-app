@@ -31,6 +31,12 @@
         }
       </mat-select>
     </mat-form-field>
+    @if (duplicateMatches.length > 0) {
+      <div class="duplicate-warning">
+        <p><strong>Possible duplicate:</strong> {{duplicateMatches.join('; ')}}</p>
+        <p>This person may already be in the system — click Create Anyway to add them regardless.</p>
+      </div>
+    }
     @if (hasError) {
       <mat-error class="create-error">{{errorMessage}}</mat-error>
     }
@@ -41,7 +47,7 @@
       @if (submitting) {
         <mat-spinner [diameter]="18"></mat-spinner>
       } @else {
-        Create
+        {{duplicateMatches.length > 0 ? 'Create Anyway' : 'Create'}}
       }
     </button>
   </mat-dialog-actions>

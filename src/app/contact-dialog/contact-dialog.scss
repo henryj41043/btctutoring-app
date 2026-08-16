@@ -25,3 +25,15 @@ mat-dialog-actions {
     grid-template-columns: 1fr;
   }
 }
+
+.duplicate-warning {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #f9a825 18%, transparent);
+  border: 1px solid color-mix(in srgb, #f9a825 45%, transparent);
+  font-size: 0.9rem;
+
+  p { margin: 0 0 4px; }
+  p:last-child { margin-bottom: 0; }
+}
