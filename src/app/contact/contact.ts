@@ -55,6 +55,8 @@ import {studentDisplayName} from '../utils/student-name';
 import {studentStatusChipClass} from '../utils/status-chip';
 import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
+import {ReminderService} from '../services/reminder.service';
+import {Reminder} from '../models/reminder.model';
 import {Router} from '@angular/router';
 
 @Component({
@@ -98,6 +100,7 @@ export class Contact implements OnInit {
   private dialog: MatDialog = inject(MatDialog);
   private scheduleService: ScheduleService = inject(ScheduleService);
   private billingService: BillingService = inject(BillingService);
+  private reminderService: ReminderService = inject(ReminderService);
   private router: Router = inject(Router);
 
   @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
@@ -203,6 +206,9 @@ export class Contact implements OnInit {
   protected students: Student[] = [];
   protected rosterDataSource = new MatTableDataSource<Student>([]);
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
+  // Reminders linked to this contact that aren't done yet (admin-only — the
+  // reminders endpoint itself is admin-gated, so this stays empty otherwise).
+  protected outstandingReminders: Reminder[] = [];
 
   ngOnInit() {
     this.loadContact();
@@ -210,6 +216,7 @@ export class Contact implements OnInit {
     // (Hiring) page, where the roster loads via loadContact instead.
     if (this.authService.isAdmin()) {
       this.loadStudents();
+      this.loadOutstandingReminders();
     } else {
       this.studentsLoading = false;
     }
@@ -230,6 +237,27 @@ export class Contact implements OnInit {
       this.rosterDataSource.data = students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT);
       this.cdr.markForCheck();
     });
+  }
+
+  /** Outstanding = not completed; a sent-but-unfinished reminder still shows
+   *  (same semantics as the Reminders page's default view). */
+  private loadOutstandingReminders() {
+    this.reminderService.getReminders().pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(reminders => {
+      this.outstandingReminders = reminders
+        .filter(r => r.contact_id === this.id && !r.completed_at)
+        .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+      this.cdr.markForCheck();
+    });
+  }
+
+  goToReminders(): void {
+    void this.router.navigate(['/reminders']);
   }
 
   private getTutors() {
