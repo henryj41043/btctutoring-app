@@ -4,12 +4,16 @@ import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { MatSort } from '@angular/material/sort';
 import { MatPaginator } from '@angular/material/paginator';
-import { StudentRoster } from './student-roster';
+import { StudentRoster, RosterHistoryRow } from './student-roster';
 import { StudentService } from '../services/student.service';
+import { SessionsService } from '../services/sessions.service';
 import { AuthService } from '../services/auth.service';
 import { StudentSessionsDialog } from '../student-sessions-dialog/student-sessions-dialog';
 import { Student } from '../models/student.model';
+import { Session } from '../models/session.model';
 import { StudentStatus } from '../enums/student-status.enum';
+import { SessionStatus } from '../enums/session-status.enum';
+import { SessionType } from '../enums/session-type.enum';
 
 const student = { id: 's-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT } as Student;
 
@@ -20,6 +24,7 @@ describe('StudentRoster', () => {
     getStudents: jest.fn(),
     getStudentsByTutor: jest.fn(),
   };
+  const sessionsService = { getAllSessions: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
     contact: () => ({ id: contactId }),
@@ -32,6 +37,7 @@ describe('StudentRoster', () => {
       imports: [StudentRoster],
       providers: [
         { provide: StudentService, useValue: studentService },
+        { provide: SessionsService, useValue: sessionsService },
         { provide: AuthService, useValue: authService },
         { provide: MatDialog, useValue: dialog },
         { provide: Router, useValue: router },
@@ -45,6 +51,7 @@ describe('StudentRoster', () => {
     isAdmin = true;
     contactId = 'contact-1';
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    sessionsService.getAllSessions.mockReturnValue(of([]));
   });
 
   it('loads all students (with parent names) for an admin on init', () => {
@@ -222,5 +229,184 @@ describe('StudentRoster', () => {
     component.ngOnInit();
     expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
     expect((component as never as {loading: boolean}).loading).toBe(false);
+  });
+
+  describe('monthly history', () => {
+    const rows = (c: StudentRoster): RosterHistoryRow[] =>
+      (c as unknown as { historyDataSource: { data: RosterHistoryRow[] } }).historyDataSource.data;
+
+    const completed = (over: Partial<Session>): Session => ({
+      type: SessionType.TUTORING,
+      status: SessionStatus.COMPLETED,
+      start_datetime: '2026-07-06T14:00:00.000Z',
+      end_datetime: '2026-07-06T15:00:00.000Z',
+      student_id: 's-1',
+      student_name: 'Pat',
+      tutor_name: 'Tutor A',
+      ...over,
+    } as Session);
+
+    const students = [
+      { id: 's-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, contact_name: 'Lee Family' } as Student,
+      { id: 's-3', name: 'Quinn', status: StudentStatus.PAST_STUDENT } as Student, // inactive, no family
+    ];
+
+    /** Admin component with students loaded and history switched on for July 2026. */
+    const buildHistory = (sessions: Session[]): StudentRoster => {
+      studentService.getStudents.mockReturnValue(of(students));
+      sessionsService.getAllSessions.mockReturnValue(of(sessions));
+      const c = build();
+      c.ngOnInit();
+      (c as unknown as { selectedDate: Date }).selectedDate = new Date(2026, 6, 15);
+      c.onHistoryToggle(true);
+      return c;
+    };
+
+    it('groups the month\'s completed sessions per student with counts, hours, tutors and family', () => {
+      const c = buildHistory([
+        completed({}),                                                                  // 1h, Tutor A
+        completed({ start_datetime: '2026-07-08T14:00:00.000Z', end_datetime: '2026-07-08T15:30:00.000Z', tutor_name: 'Tutor B' }), // 1.5h
+        completed({ type: SessionType.MAKE_UP, start_datetime: '2026-07-10T14:00:00.000Z', end_datetime: '2026-07-10T14:30:00.000Z' }), // 0.5h
+        completed({ type: SessionType.TRIAL, start_datetime: '2026-07-01T14:00:00.000Z', end_datetime: '2026-07-01T14:45:00.000Z' }),   // 0.75h
+        completed({ status: SessionStatus.PENDING }),                                   // not completed
+        completed({ status: SessionStatus.CANCELLED }),                                 // not completed
+        completed({ type: SessionType.ADMIN, student_id: undefined, student_name: undefined }), // staff time
+        completed({ student_id: undefined, student_name: undefined }),                  // nobody to credit
+      ]);
+      expect(rows(c)).toEqual([{
+        family: 'Lee Family',
+        student: 'Pat',
+        tutors: 'Tutor A, Tutor B',
+        sessions: 2,
+        makeups: 1,
+        trials: 1,
+        hours: 3.75,
+      }]);
+    });
+
+    it('falls back per-field: unknown students, missing names, tutors and durations', () => {
+      const c = buildHistory([
+        // Known id but no session name → display name from the student list; no family on record.
+        completed({ student_id: 's-3', student_name: undefined, tutor_name: undefined,
+          start_datetime: undefined, end_datetime: undefined }),
+        // Unknown id, no name anywhere → em-dash row; reversed times count 0 hours.
+        completed({ student_id: 'ghost', student_name: undefined,
+          start_datetime: '2026-07-06T15:00:00.000Z', end_datetime: '2026-07-06T14:00:00.000Z' }),
+        // No id at all → grouped by name.
+        completed({ student_id: undefined, student_name: 'Name Only', end_datetime: undefined }),
+      ]);
+      const r = rows(c);
+      expect(r).toHaveLength(3);
+      expect(r.find(x => x.student === 'Quinn'))
+        .toEqual({ family: '—', student: 'Quinn', tutors: '—', sessions: 1, makeups: 0, trials: 0, hours: 0 });
+      expect(r.find(x => x.student === 'Name Only'))
+        .toEqual({ family: '—', student: 'Name Only', tutors: 'Tutor A', sessions: 1, makeups: 0, trials: 0, hours: 0 });
+      expect(r.find(x => x.student === '—'))
+        .toEqual({ family: '—', student: '—', tutors: 'Tutor A', sessions: 1, makeups: 0, trials: 0, hours: 0 });
+    });
+
+    it('queries the selected calendar month as an inclusive range', () => {
+      buildHistory([]);
+      expect(sessionsService.getAllSessions).toHaveBeenCalledWith({
+        from: new Date(2026, 6, 1).toISOString(),
+        to: new Date(2026, 7, 0, 23, 59, 59, 999).toISOString(),
+      });
+    });
+
+    it('reloads and persists when the month changes; a cleared picker is a no-op', () => {
+      const c = buildHistory([]);
+      sessionsService.getAllSessions.mockClear();
+      c.onDateChange(new Date(2026, 4, 20));
+      expect(sessionsService.getAllSessions).toHaveBeenCalledWith({
+        from: new Date(2026, 4, 1).toISOString(),
+        to: new Date(2026, 5, 0, 23, 59, 59, 999).toISOString(),
+      });
+      const extra = JSON.parse(sessionStorage.getItem('btc-roster-view')!).extra;
+      expect(extra.historyMode).toBe(true);
+      expect(extra.selectedDate).toBe(new Date(2026, 4, 20).toISOString());
+      sessionsService.getAllSessions.mockClear();
+      c.onDateChange(null);
+      expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+    });
+
+    it('restores history mode for an admin once students have loaded', () => {
+      sessionStorage.setItem('btc-roster-view', JSON.stringify({
+        extra: { historyMode: true, selectedDate: new Date(2026, 6, 15).toISOString() },
+      }));
+      studentService.getStudents.mockReturnValue(of(students));
+      const c = build();
+      c.ngOnInit();
+      expect((c as unknown as { historyMode: boolean }).historyMode).toBe(true);
+      expect((c as unknown as { selectedDate: Date }).selectedDate).toEqual(new Date(2026, 6, 15));
+      expect(sessionsService.getAllSessions).toHaveBeenCalled();
+    });
+
+    it('ignores a saved history mode for non-admins', () => {
+      sessionStorage.setItem('btc-roster-view', JSON.stringify({
+        extra: { historyMode: true, selectedDate: new Date(2026, 6, 15).toISOString() },
+      }));
+      isAdmin = false;
+      studentService.getStudentsByTutor.mockReturnValue(of([student]));
+      const c = build();
+      c.ngOnInit();
+      expect((c as unknown as { historyMode: boolean }).historyMode).toBe(false);
+      expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+    });
+
+    it('ignores corrupt saved history values for an admin', () => {
+      sessionStorage.setItem('btc-roster-view', JSON.stringify({
+        extra: { historyMode: 'yes', selectedDate: 'not-a-date' },
+      }));
+      studentService.getStudents.mockReturnValue(of([]));
+      const before = new Date().getFullYear();
+      const c = build();
+      c.ngOnInit();
+      expect((c as unknown as { historyMode: boolean }).historyMode).toBe(false);
+      expect((c as unknown as { selectedDate: Date }).selectedDate.getFullYear()).toBeGreaterThanOrEqual(before);
+    });
+
+    it('toggling off persists without refetching sessions', () => {
+      const c = buildHistory([]);
+      sessionsService.getAllSessions.mockClear();
+      c.onHistoryToggle(false);
+      expect((c as unknown as { historyMode: boolean }).historyMode).toBe(false);
+      expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+      expect(JSON.parse(sessionStorage.getItem('btc-roster-view')!).extra.historyMode).toBe(false);
+    });
+
+    it('swallows a sessions load error and clears the history spinner', () => {
+      studentService.getStudents.mockReturnValue(of(students));
+      sessionsService.getAllSessions.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      c.ngOnInit();
+      c.onHistoryToggle(true);
+      expect(rows(c)).toEqual([]);
+      expect((c as unknown as { historyLoading: boolean }).historyLoading).toBe(false);
+    });
+
+    it('filters history rows by parent, student or tutor', () => {
+      const c = buildHistory([
+        completed({}),
+        completed({ student_id: undefined, student_name: 'Zed', tutor_name: 'Tutor Z' }),
+      ]);
+      const ds = (c as unknown as { historyDataSource: { filteredData: RosterHistoryRow[] } }).historyDataSource;
+      c.applyFilter('tutor z');
+      expect(ds.filteredData.map(r => r.student)).toEqual(['Zed']);
+      c.applyFilter('lee family');
+      expect(ds.filteredData.map(r => r.student)).toEqual(['Pat']);
+      c.applyFilter('');
+      expect(ds.filteredData).toHaveLength(2);
+    });
+
+    it('wires sort and paginator to the history table while in history mode', () => {
+      const c = buildHistory([]);
+      const sort = {} as MatSort;
+      const paginator = {} as MatPaginator;
+      c.matSort = sort;
+      c.matPaginator = paginator;
+      const ds = (c as unknown as { historyDataSource: { sort: MatSort; paginator: MatPaginator } }).historyDataSource;
+      expect(ds.sort).toBe(sort);
+      expect(ds.paginator).toBe(paginator);
+    });
   });
 });

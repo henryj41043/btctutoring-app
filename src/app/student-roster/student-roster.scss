@@ -14,6 +14,29 @@
     cursor: pointer;
   }
 
+  // History rows don't navigate anywhere.
+  .history-row {
+    cursor: default;
+  }
+
+  .roster-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+
+  .history-month {
+    width: 170px;
+  }
+
+  .empty-note {
+    margin: 24px 0;
+    text-align: center;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
   .icon-yes {
     color: #1c7a45;
   }
