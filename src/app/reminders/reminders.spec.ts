@@ -28,7 +28,7 @@ const tutorContact = { id: 't-1', first_name: 'Tess', last_name: 'Coach', user_g
 
 describe('Reminders', () => {
   let afterClosed: unknown;
-  const reminderService = { getReminders: jest.fn() };
+  const reminderService = { getReminders: jest.fn(), completeReminder: jest.fn(), uncompleteReminder: jest.fn() };
   const contactService = { getContactsSummary: jest.fn() };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
   const router = { navigate: jest.fn() };
@@ -61,34 +61,42 @@ describe('Reminders', () => {
 
   it('restores the saved filter and show-past toggle for the session', () => {
     sessionStorage.setItem('btc-reminders-view',
-      JSON.stringify({ filter: 'bill', extra: { showPast: true } }));
+      JSON.stringify({ filter: 'bill', extra: { showCompleted: true } }));
     const c = build();
     c.ngOnInit();
     expect((c as any).filterText).toBe('bill');
-    expect((c as any).showPast).toBe(true);
-    c.onShowPastChange(false);
-    expect(JSON.parse(sessionStorage.getItem('btc-reminders-view')!).extra.showPast).toBe(false);
+    expect((c as any).showCompleted).toBe(true);
+    c.onShowCompletedChange(false);
+    expect(JSON.parse(sessionStorage.getItem('btc-reminders-view')!).extra.showCompleted).toBe(false);
   });
 
-  it('loads reminders and defaults to upcoming only', () => {
+  it('defaults to all uncompleted — overdue reminders stay visible', () => {
     reminderService.getReminders.mockReturnValue(
-      of([reminder(), reminder({ id: 'rem-2', date: PAST, title: 'Old' })]),
+      of([
+        reminder(),
+        reminder({ id: 'rem-2', date: PAST, title: 'Overdue' }),
+        reminder({ id: 'rem-3', date: PAST, completed_at: '2026-08-01T12:00:00Z' }),
+      ]),
     );
     const c = build();
     c.ngOnInit();
-    expect(data(c).map(r => r.id)).toEqual(['rem-1']);
+    // Overdue-but-uncompleted shows (date asc); completed hides.
+    expect(data(c).map(r => r.id)).toEqual(['rem-2', 'rem-1']);
     expect((c as unknown as { loading: boolean }).loading).toBe(false);
   });
 
-  it('shows past reminders when toggled, sorted by date', () => {
+  it('shows completed reminders when toggled, sorted by date', () => {
     reminderService.getReminders.mockReturnValue(
-      of([reminder(), reminder({ id: 'rem-2', date: PAST, title: 'Old' })]),
+      of([
+        reminder(),
+        reminder({ id: 'rem-2', date: PAST, completed_at: '2026-08-01T12:00:00Z' }),
+      ]),
     );
     const c = build();
     c.ngOnInit();
-    c.onShowPastChange(true);
+    c.onShowCompletedChange(true);
     expect(data(c).map(r => r.id)).toEqual(['rem-2', 'rem-1']);
-    c.onShowPastChange(false);
+    c.onShowCompletedChange(false);
     expect(data(c).map(r => r.id)).toEqual(['rem-1']);
   });
 
@@ -172,12 +180,75 @@ describe('Reminders', () => {
     );
     const c = build();
     c.ngOnInit();
-    // Date-less reminders are treated as past (dropped from upcoming)…
-    expect(data(c)).toEqual([]);
-    // …but visible with the toggle, and their recipients render as a dash.
-    c.onShowPastChange(true);
+    // Date-less uncompleted reminders stay visible; recipients render a dash.
     expect(data(c)).toHaveLength(1);
     expect(c.recipientNames(data(c)[0])).toBe('—');
+  });
+
+  it('ignores a non-boolean stored showCompleted and empty filters', () => {
+    sessionStorage.setItem('btc-reminders-view',
+      JSON.stringify({ extra: { showCompleted: 'yes' } }));
+    const c = build();
+    c.ngOnInit();
+    expect((c as unknown as { showCompleted: boolean }).showCompleted).toBe(false);
+    // applyFilter before any paginator exists exercises the ?. branch.
+    c.applyFilter('x');
+    expect((c as unknown as { filterText: string }).filterText).toBe('x');
+  });
+
+  it('sorts date-less reminders and maps name-less admins without crashing', () => {
+    contactService.getContactsSummary.mockReturnValue(of([
+      adminContact,
+      { id: 'a-2', user_group: 'Admins' }, // no names -> '' via the ?? fallbacks
+    ]));
+    reminderService.getReminders.mockReturnValue(of([
+      reminder({ id: 'rem-1', date: undefined }), // no date -> '' in the sort
+      reminder({ id: 'rem-2' }),
+    ]));
+    const c = build();
+    c.ngOnInit();
+    // Date-less sorts first (empty string), both remain visible.
+    expect(data(c).map(r => r.id)).toEqual(['rem-1', 'rem-2']);
+    // The blank mapped name is filtered out of the join -> dash placeholder.
+    expect(c.recipientNames(reminder({ all_admins: false, recipient_ids: ['a-2'] }))).toBe('—');
+  });
+
+  it('done checkbox completes an uncompleted reminder and reloads', () => {
+    reminderService.completeReminder.mockReturnValue(of({ id: 'rem-1' }));
+    const c = build();
+    c.ngOnInit();
+    reminderService.getReminders.mockClear();
+    c.onToggleComplete(reminder());
+    expect(reminderService.completeReminder).toHaveBeenCalledWith('rem-1');
+    expect(reminderService.getReminders).toHaveBeenCalledTimes(1); // reload
+  });
+
+  it('done checkbox reopens a completed reminder', () => {
+    reminderService.uncompleteReminder.mockReturnValue(of({ id: 'rem-1' }));
+    const c = build();
+    c.ngOnInit();
+    c.onToggleComplete(reminder({ completed_at: '2026-08-01T12:00:00Z' }));
+    expect(reminderService.uncompleteReminder).toHaveBeenCalledWith('rem-1');
+    expect(reminderService.completeReminder).not.toHaveBeenCalled();
+  });
+
+  it('a failed toggle leaves the table intact', () => {
+    reminderService.completeReminder.mockReturnValue(throwError(() => new Error('x')));
+    const c = build();
+    c.ngOnInit();
+    const before = data(c).length;
+    reminderService.getReminders.mockClear();
+    c.onToggleComplete(reminder());
+    expect(reminderService.getReminders).not.toHaveBeenCalled();
+    expect(data(c).length).toBe(before);
+  });
+
+  it('createdByName resolves the admin, blank otherwise', () => {
+    const c = build();
+    c.ngOnInit();
+    expect(c.createdByName(reminder({ created_by: 'a-1' }))).not.toBe('');
+    expect(c.createdByName(reminder({ created_by: 'unknown' }))).toBe('');
+    expect(c.createdByName(reminder())).toBe('');
   });
 
   it('resolves and navigates the linked contact', () => {

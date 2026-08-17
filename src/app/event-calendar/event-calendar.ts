@@ -344,7 +344,7 @@ export class EventCalendar implements OnInit {
   /** Reminders render as all-day, non-interactive-drag entries in blue. */
   private buildReminderEvents(reminders: Reminder[]): CalendarEvent<Reminder>[] {
     return reminders
-      .filter(reminder => this.reminderMatchesFilter(reminder))
+      .filter(reminder => !reminder.completed_at && this.reminderMatchesFilter(reminder))
       .map((reminder: Reminder) => {
         const [y, m, d] = (reminder.date ?? '').split('-').map(Number);
         const day = y && m && d ? new Date(y, m - 1, d) : new Date(reminder.date as string);

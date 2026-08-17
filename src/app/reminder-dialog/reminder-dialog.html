@@ -11,6 +11,7 @@
     <p>
       Delete the reminder <strong>{{ data.reminder?.title }}</strong>
       @if (data.reminder?.date) { for {{ data.reminder?.date }} }?
+      @if (data.reminder?.recurrence) { This ends the repeating series. }
       This cannot be undone.
     </p>
   } @else {
@@ -28,6 +29,28 @@
         <input matInput [matDatepicker]="reminderDatePicker" formControlName="date">
         <mat-datepicker-toggle matIconSuffix [for]="reminderDatePicker"></mat-datepicker-toggle>
         <mat-datepicker #reminderDatePicker></mat-datepicker>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Repeats</mat-label>
+        <mat-select formControlName="recurrence">
+          <mat-option [value]="null">Does not repeat</mat-option>
+          <mat-option value="weekly">Weekly</mat-option>
+          <mat-option value="monthly">Monthly</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Due by (optional)</mat-label>
+        <input matInput [matDatepicker]="dueDatePicker" formControlName="due_date">
+        <mat-datepicker-toggle matIconSuffix [for]="dueDatePicker"></mat-datepicker-toggle>
+        <mat-datepicker #dueDatePicker></mat-datepicker>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Created by</mat-label>
+        <mat-select formControlName="created_by">
+          @for (admin of data.admins; track admin.id) {
+            <mat-option [value]="admin.id">{{ admin.first_name }} {{ admin.last_name }}</mat-option>
+          }
+        </mat-select>
       </mat-form-field>
       <mat-checkbox formControlName="all_admins">Send to all admins</mat-checkbox>
       @if (!reminderForm.get('all_admins')?.value) {
@@ -49,7 +72,7 @@
           }
         </mat-select>
       </mat-form-field>
-      <p class="reminder-hint">Recipients get an email the morning of the reminder's date (~9am ET).</p>
+      <p class="reminder-hint">Recipients get an email the morning of the reminder's date (~9am ET). Repeating reminders roll to their next date after each send.</p>
     </form>
   }
 

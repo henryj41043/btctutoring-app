@@ -62,6 +62,19 @@ describe('EventCalendar', () => {
     contactService.getContactsSummary.mockReturnValue(of([]));
   });
 
+
+  it('hides completed reminders from the calendar, keeps uncompleted ones', () => {
+    reminderService.getReminders.mockReturnValue(of([
+      { id: 'r-1', title: 'Open', date: '2026-06-02' },
+      { id: 'r-2', title: 'Done', date: '2026-06-03', completed_at: '2026-06-01T12:00:00Z' },
+    ] as Reminder[]));
+    sessionsService.getAllSessions.mockReturnValue(of([]));
+    const c = build();
+    c.ngOnInit();
+    const titles = c.events.map(e => e.title);
+    expect(titles).toContain('[Reminder] Open');
+    expect(titles).not.toContain('[Reminder] Done');
+  });
   it('themes the body and loads admin sessions on init', () => {
     sessionsService.getAllSessions.mockReturnValue(
       of([

@@ -52,6 +52,19 @@ describe('ReminderService', () => {
     req.flush(reminder);
   });
 
+  it('completes and reopens a reminder via the dedicated routes', () => {
+    service.completeReminder('rem-1').subscribe();
+    const complete = httpMock.expectOne(`${base}/reminders/rem-1/complete`);
+    expect(complete.request.method).toBe('POST');
+    expect(complete.request.body).toEqual({});
+    complete.flush({ id: 'rem-1', message: 'ok' });
+
+    service.uncompleteReminder('rem-1').subscribe();
+    const reopen = httpMock.expectOne(`${base}/reminders/rem-1/uncomplete`);
+    expect(reopen.request.method).toBe('POST');
+    reopen.flush({ id: 'rem-1', message: 'ok' });
+  });
+
   it('deletes a reminder', () => {
     service.deleteReminder('rem-1').subscribe();
     const req = httpMock.expectOne(`${base}/reminders/rem-1`);

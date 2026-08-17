@@ -9,8 +9,8 @@
                (input)="applyFilter(remindersSearch.value)">
         <mat-icon matSuffix>search</mat-icon>
       </mat-form-field>
-      <mat-slide-toggle [checked]="showPast" (change)="onShowPastChange($event.checked)">
-        Show past
+      <mat-slide-toggle [checked]="showCompleted" (change)="onShowCompletedChange($event.checked)">
+        Show completed
       </mat-slide-toggle>
       <button mat-raised-button color="primary" (click)="openCreateDialog()">
         <mat-icon>add</mat-icon>
@@ -29,9 +29,26 @@
       } @else {
         <div class="table-scroll">
           <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
+            <ng-container matColumnDef="done">
+              <th mat-header-cell *matHeaderCellDef>Done</th>
+              <td mat-cell *matCellDef="let row" (click)="$event.stopPropagation()">
+                <mat-checkbox [checked]="!!row.completed_at"
+                              [matTooltip]="row.recurrence ? 'Marks this occurrence done; the series rolls to the next date' : ''"
+                              (change)="onToggleComplete(row)"/>
+              </td>
+            </ng-container>
             <ng-container matColumnDef="date">
               <th mat-header-cell *matHeaderCellDef mat-sort-header>Date</th>
-              <td mat-cell *matCellDef="let row">{{row.date | date:'mediumDate'}}</td>
+              <td mat-cell *matCellDef="let row">
+                {{row.date | date:'mediumDate'}}
+                @if (row.recurrence) {
+                  <mat-icon class="repeat-icon" [matTooltip]="'Repeats ' + row.recurrence">repeat</mat-icon>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="due_date">
+              <th mat-header-cell *matHeaderCellDef>Due by</th>
+              <td mat-cell *matCellDef="let row">{{row.due_date | date:'mediumDate'}}</td>
             </ng-container>
             <ng-container matColumnDef="title">
               <th mat-header-cell *matHeaderCellDef mat-sort-header>Title</th>
@@ -44,6 +61,10 @@
             <ng-container matColumnDef="recipients">
               <th mat-header-cell *matHeaderCellDef>Recipients</th>
               <td mat-cell *matCellDef="let row">{{recipientNames(row)}}</td>
+            </ng-container>
+            <ng-container matColumnDef="created_by">
+              <th mat-header-cell *matHeaderCellDef>Created by</th>
+              <td mat-cell *matCellDef="let row">{{createdByName(row)}}</td>
             </ng-container>
             <ng-container matColumnDef="contact">
               <th mat-header-cell *matHeaderCellDef>Contact</th>
