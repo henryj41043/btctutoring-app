@@ -115,6 +115,10 @@ export class SessionDialog implements OnInit {
   private pendingSession: Session | null = null;
   private pendingStudentUpdate: Student | null = null;
 
+  // Deleting a CANCELLED session leaves its banked make-up minutes on the
+  // student (un-banking retroactively could go negative) — warn first.
+  showCancelledDeleteWarning: boolean = false;
+  private cancelledDeleteConfirmed: boolean = false;
   // Series edit/delete scope ("this occurrence" vs "this and future")
   showSeriesScopePrompt: boolean = false;
   private seriesScope: 'single' | 'future' | null = null;
@@ -655,6 +659,15 @@ export class SessionDialog implements OnInit {
       this.deleteSeriesFuture();
       return;
     }
+    // Single delete of a cancelled session: the minutes it banked stay on the
+    // student's balance with no source session left to trace them to.
+    if (
+      this.dialogData.session.status === SessionStatus.CANCELLED &&
+      !this.cancelledDeleteConfirmed
+    ) {
+      this.showCancelledDeleteWarning = true;
+      return;
+    }
     const id: string = this.dialogData.session.id as string;
     this.submitting = true;
     this.sessionsService.deleteSession(id).pipe(
@@ -763,6 +776,19 @@ export class SessionDialog implements OnInit {
         this.dialogRef.close({ deleted: targets.length });
       });
     });
+  }
+
+  confirmCancelledDelete(): void {
+    this.cancelledDeleteConfirmed = true;
+    this.showCancelledDeleteWarning = false;
+    this.deleteSession();
+  }
+
+  cancelCancelledDelete(): void {
+    this.showCancelledDeleteWarning = false;
+    // Reset the series choice too so a re-attempt starts from the beginning.
+    this.seriesScope = null;
+    this.seriesAction = null;
   }
 
   chooseSeriesScope(scope: 'single' | 'future'): void {
