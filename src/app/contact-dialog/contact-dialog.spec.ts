@@ -7,7 +7,7 @@ import { ContactService } from '../services/contact.service';
 
 describe('ContactDialog', () => {
   const dialogRef = { close: jest.fn() };
-  const contactService = { createContact: jest.fn() };
+  const contactService = { createContact: jest.fn(), getContactsSummary: jest.fn() };
   let component: ContactDialog;
 
   const form = (): FormGroup =>
@@ -15,6 +15,7 @@ describe('ContactDialog', () => {
 
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    contactService.getContactsSummary.mockReturnValue(of([]));
     TestBed.configureTestingModule({
       imports: [ContactDialog],
       providers: [
@@ -145,4 +146,102 @@ describe('ContactDialog', () => {
     expect((component as unknown as { submitting: boolean }).submitting).toBe(false);
   });
 
+  describe('possible-duplicate name warning', () => {
+    const existing = [
+      { id: 'c-1', first_name: 'Ada', last_name: 'Lovelace', service: 'Tutoring', status: 'Past Student' },
+      { id: 'c-2', first_name: 'Sam', last_name: 'Roe', service: 'Hiring', status: 'Staff' },
+    ];
+
+    const withExisting = () => {
+      contactService.getContactsSummary.mockReturnValue(of(existing));
+      component.ngOnInit();
+    };
+
+    it('warns on a name match and only creates on the second click', () => {
+      withExisting();
+      contactService.createContact.mockReturnValue(of({ id: 'new' }));
+      fillValid(); // Ada Lovelace — matches c-1
+      component.createContact();
+      expect(contactService.createContact).not.toHaveBeenCalled();
+      const c = component as unknown as { duplicateMatches: string[] };
+      // Legacy parent status displays mapped, like the chips.
+      expect(c.duplicateMatches).toEqual(['Ada Lovelace (Tutoring, Former Client)']);
+      component.createContact(); // Create Anyway
+      expect(contactService.createContact).toHaveBeenCalled();
+    });
+
+    it('matches case- and whitespace-insensitively incl. staff labels', () => {
+      withExisting();
+      contactService.createContact.mockReturnValue(of({ id: 'new' }));
+      fillValid();
+      form().patchValue({ first_name: '  sam ', last_name: 'ROE' });
+      component.createContact();
+      expect((component as unknown as { duplicateMatches: string[] }).duplicateMatches)
+        .toEqual(['Sam Roe (Hiring, Active Staff)']);
+    });
+
+    it('editing the name re-arms the warning', () => {
+      withExisting();
+      contactService.createContact.mockReturnValue(of({ id: 'new' }));
+      fillValid();
+      component.createContact(); // warned + armed
+      form().controls['first_name'].setValue('Adaline'); // re-arms
+      component.createContact(); // no match now -> creates directly
+      expect(contactService.createContact).toHaveBeenCalledTimes(1);
+      expect((component as unknown as { duplicateMatches: string[] }).duplicateMatches).toEqual([]);
+    });
+
+    it('creates straight through when no name matches', () => {
+      withExisting();
+      contactService.createContact.mockReturnValue(of({ id: 'new' }));
+      fillValid();
+      form().patchValue({ first_name: 'Unique', last_name: 'Person' });
+      component.createContact();
+      expect(contactService.createContact).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles sparse existing records (no service/status/names, ?? branches)', () => {
+      contactService.getContactsSummary.mockReturnValue(of([
+        { id: 'c-3', first_name: 'Solo' }, // no last name, no service, no status
+      ]));
+      component.ngOnInit();
+      fillValid();
+      form().patchValue({ first_name: 'solo', last_name: '' });
+      component.createContact();
+      // Bare name, no detail parens.
+      expect((component as unknown as { duplicateMatches: string[] }).duplicateMatches)
+        .toEqual(['Solo']);
+    });
+
+    it('caps the warning at three matches', () => {
+      contactService.getContactsSummary.mockReturnValue(of([1, 2, 3, 4].map(n => (
+        { id: `c-${n}`, first_name: 'Ada', last_name: 'Lovelace', service: 'Tutoring', status: 'MIA' }
+      ))));
+      component.ngOnInit();
+      fillValid();
+      component.createContact();
+      expect((component as unknown as { duplicateMatches: string[] }).duplicateMatches)
+        .toHaveLength(3);
+    });
+
+    it('skips the check entirely when the first name is blank-ish', () => {
+      contactService.getContactsSummary.mockReturnValue(of([
+        { id: 'c-4', first_name: '', last_name: '' },
+      ]));
+      component.ngOnInit();
+      // Bypass form validity by calling the matcher directly — the branch
+      // guards against pathological summary data, not user input.
+      const matches = (component as unknown as { findNameMatches(): string[] }).findNameMatches();
+      expect(matches).toEqual([]);
+    });
+
+    it('fails open when the summary cannot load', () => {
+      contactService.getContactsSummary.mockReturnValue(throwError(() => new Error('x')));
+      component.ngOnInit();
+      contactService.createContact.mockReturnValue(of({ id: 'new' }));
+      fillValid();
+      component.createContact();
+      expect(contactService.createContact).toHaveBeenCalledTimes(1);
+    });
+  });
 });
