@@ -67,6 +67,10 @@ export class ToolBar {
     void this.router.navigate(['/makeup-report']);
   }
 
+  unmatchedEmailsNav(): void {
+    void this.router.navigate(['/unmatched-emails']);
+  }
+
   teamsNav(): void {
     void this.router.navigate(['/teams']);
   }

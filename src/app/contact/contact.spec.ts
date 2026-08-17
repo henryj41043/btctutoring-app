@@ -23,6 +23,8 @@ import { Package } from '../enums/package.enum';
 import { ScheduleService } from '../services/schedule.service';
 import { ReminderService } from '../services/reminder.service';
 import { Reminder } from '../models/reminder.model';
+import { EmailService } from '../services/email.service';
+import { EmailEntry } from '../models/email-entry.model';
 
 const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
   ({
@@ -76,6 +78,7 @@ describe('Contact', () => {
     upsertBillingRecord: jest.fn(),
   };
   const reminderService = { getReminders: jest.fn() };
+  const emailService = { getEmailsForContact: jest.fn(), getOriginalUrl: jest.fn() };
 
   const defaults = () => {
     contactService.getContact.mockReturnValue(of([fullContact()]));
@@ -88,6 +91,8 @@ describe('Contact', () => {
     billingService.getBillingRecordsByContact.mockReturnValue(of([]));
     billingService.upsertBillingRecord.mockReturnValue(of({}));
     reminderService.getReminders.mockReturnValue(of([]));
+    emailService.getEmailsForContact.mockReturnValue(of([]));
+    emailService.getOriginalUrl.mockReturnValue(of({ url: 'https://signed' }));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -103,6 +108,7 @@ describe('Contact', () => {
         { provide: ScheduleService, useValue: scheduleService },
         { provide: BillingService, useValue: billingService },
         { provide: ReminderService, useValue: reminderService },
+        { provide: EmailService, useValue: emailService },
       ],
     });
     const c = TestBed.createComponent(Contact).componentInstance;
@@ -1648,6 +1654,75 @@ describe('Contact', () => {
       const c = build();
       c.goToReminders();
       expect(router.navigate).toHaveBeenCalledWith(['/reminders']);
+    });
+  });
+
+  describe('contact emails', () => {
+    const emails = (c: Contact): EmailEntry[] =>
+      (c as unknown as { contactEmails: EmailEntry[] }).contactEmails;
+
+    const emailEntry: EmailEntry = {
+      id: 'hash-1',
+      subject: 'Schedule change',
+      from_email: 'jane@example.com',
+      body_text: 'Can we move to Friday?',
+    };
+
+    it('loads the filed emails for an admin', () => {
+      emailService.getEmailsForContact.mockReturnValue(of([emailEntry]));
+      const c = build();
+      c.ngOnInit();
+      expect(emailService.getEmailsForContact).toHaveBeenCalledWith('c-1');
+      expect(emails(c)).toEqual([emailEntry]);
+    });
+
+    it('does not fetch emails for non-admins', () => {
+      isAdmin = false;
+      const c = build();
+      c.ngOnInit();
+      expect(emailService.getEmailsForContact).not.toHaveBeenCalled();
+      expect(emails(c)).toEqual([]);
+    });
+
+    it('swallows an emails load error', () => {
+      emailService.getEmailsForContact.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      expect(() => c.ngOnInit()).not.toThrow();
+      expect(emails(c)).toEqual([]);
+    });
+
+    it('toggles a row open and closed', () => {
+      const c = build();
+      c.toggleEmail(emailEntry);
+      expect((c as unknown as { expandedEmailId: string | null }).expandedEmailId).toBe('hash-1');
+      c.toggleEmail(emailEntry);
+      expect((c as unknown as { expandedEmailId: string | null }).expandedEmailId).toBeNull();
+      c.toggleEmail({ ...emailEntry, id: undefined });
+      expect((c as unknown as { expandedEmailId: string | null }).expandedEmailId).toBeNull();
+    });
+
+    it('view original opens the presigned url in a new tab', () => {
+      const open = jest.spyOn(window, 'open').mockImplementation(() => null);
+      const c = build();
+      const event = { stopPropagation: jest.fn() } as unknown as Event;
+      c.viewOriginalEmail(emailEntry, event);
+      expect(event.stopPropagation).toHaveBeenCalled();
+      expect(emailService.getOriginalUrl).toHaveBeenCalledWith('hash-1');
+      expect(open).toHaveBeenCalledWith('https://signed', '_blank');
+      open.mockRestore();
+    });
+
+    it('view original is a no-op without an id and swallows errors', () => {
+      const open = jest.spyOn(window, 'open').mockImplementation(() => null);
+      const c = build();
+      c.viewOriginalEmail({ ...emailEntry, id: undefined }, { stopPropagation: jest.fn() } as unknown as Event);
+      expect(emailService.getOriginalUrl).not.toHaveBeenCalled();
+      emailService.getOriginalUrl.mockReturnValue(throwError(() => new Error('x')));
+      expect(() =>
+        c.viewOriginalEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event),
+      ).not.toThrow();
+      expect(open).not.toHaveBeenCalled();
+      open.mockRestore();
     });
   });
 });

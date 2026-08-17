@@ -57,6 +57,8 @@ import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
 import {ReminderService} from '../services/reminder.service';
 import {Reminder} from '../models/reminder.model';
+import {EmailService} from '../services/email.service';
+import {EmailEntry} from '../models/email-entry.model';
 import {Router} from '@angular/router';
 
 @Component({
@@ -101,6 +103,7 @@ export class Contact implements OnInit {
   private scheduleService: ScheduleService = inject(ScheduleService);
   private billingService: BillingService = inject(BillingService);
   private reminderService: ReminderService = inject(ReminderService);
+  private emailService: EmailService = inject(EmailService);
   private router: Router = inject(Router);
 
   @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
@@ -209,6 +212,10 @@ export class Contact implements OnInit {
   // Reminders linked to this contact that aren't done yet (admin-only — the
   // reminders endpoint itself is admin-gated, so this stays empty otherwise).
   protected outstandingReminders: Reminder[] = [];
+  // Forwarded parent emails filed on this contact (admin-only, read-only).
+  protected contactEmails: EmailEntry[] = [];
+  /** The email entry whose full body is expanded. */
+  protected expandedEmailId: string | null = null;
 
   ngOnInit() {
     this.loadContact();
@@ -217,6 +224,7 @@ export class Contact implements OnInit {
     if (this.authService.isAdmin()) {
       this.loadStudents();
       this.loadOutstandingReminders();
+      this.loadContactEmails();
     } else {
       this.studentsLoading = false;
     }
@@ -258,6 +266,42 @@ export class Contact implements OnInit {
 
   goToReminders(): void {
     void this.router.navigate(['/reminders']);
+  }
+
+  /** Emails the pipeline filed on this contact, already newest-first. */
+  private loadContactEmails() {
+    this.emailService.getEmailsForContact(this.id).pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(emails => {
+      this.contactEmails = emails;
+      this.cdr.markForCheck();
+    });
+  }
+
+  toggleEmail(entry: EmailEntry): void {
+    this.expandedEmailId = this.expandedEmailId === entry.id ? null : (entry.id ?? null);
+    this.cdr.markForCheck();
+  }
+
+  /** Opens the raw original via a short-lived presigned link (fetched on click). */
+  viewOriginalEmail(entry: EmailEntry, event: Event): void {
+    event.stopPropagation();
+    if (!entry.id) {
+      return;
+    }
+    this.emailService.getOriginalUrl(entry.id).pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(({url}) => {
+      window.open(url, '_blank');
+    });
   }
 
   private getTutors() {
