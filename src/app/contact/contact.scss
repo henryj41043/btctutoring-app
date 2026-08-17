@@ -201,6 +201,60 @@
   }
 }
 
+/* Outstanding Reminders: compact clickable rows that jump to the Reminders page */
+.contact-reminders .reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reminder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--btc-sky) 45%, transparent);
+  border-radius: var(--btc-radius-sm);
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--btc-sky) 18%, transparent);
+  }
+
+  .reminder-date {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--btc-teal-deep);
+  }
+
+  .reminder-repeat {
+    flex: 0 0 auto;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: var(--btc-teal-deep);
+  }
+
+  .reminder-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .reminder-due {
+    flex: 0 0 auto;
+    font-size: .85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
 /* Single sticky save bar for the whole contact form (replaces per-section save buttons) */
 .contact-save-bar {
   grid-column: 1 / -1;

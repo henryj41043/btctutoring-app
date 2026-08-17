@@ -21,6 +21,8 @@ import { StudentStatus } from '../enums/student-status.enum';
 import { StaffStatus } from '../enums/staff-status.enum';
 import { Package } from '../enums/package.enum';
 import { ScheduleService } from '../services/schedule.service';
+import { ReminderService } from '../services/reminder.service';
+import { Reminder } from '../models/reminder.model';
 
 const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
   ({
@@ -73,6 +75,7 @@ describe('Contact', () => {
     getBillingRecordsByContact: jest.fn(),
     upsertBillingRecord: jest.fn(),
   };
+  const reminderService = { getReminders: jest.fn() };
 
   const defaults = () => {
     contactService.getContact.mockReturnValue(of([fullContact()]));
@@ -84,6 +87,7 @@ describe('Contact', () => {
     contactService.updateContact.mockReturnValue(of({} as ContactModel));
     billingService.getBillingRecordsByContact.mockReturnValue(of([]));
     billingService.upsertBillingRecord.mockReturnValue(of({}));
+    reminderService.getReminders.mockReturnValue(of([]));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -98,6 +102,7 @@ describe('Contact', () => {
         { provide: Router, useValue: router },
         { provide: ScheduleService, useValue: scheduleService },
         { provide: BillingService, useValue: billingService },
+        { provide: ReminderService, useValue: reminderService },
       ],
     });
     const c = TestBed.createComponent(Contact).componentInstance;
@@ -1604,6 +1609,45 @@ describe('Contact', () => {
       const c = build(); // form starts invalid (required fields empty)
       c.updateContact();
       expect(contactService.updateContact).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('outstanding reminders', () => {
+    const outstanding = (c: Contact): Reminder[] =>
+      (c as unknown as { outstandingReminders: Reminder[] }).outstandingReminders;
+
+    it('keeps only this contact\'s uncompleted reminders, date-ascending', () => {
+      reminderService.getReminders.mockReturnValue(of([
+        { id: 'r-later', contact_id: 'c-1', date: '2026-09-01', title: 'Later' },
+        { id: 'r-other', contact_id: 'c-2', date: '2026-08-01', title: 'Other contact' },
+        { id: 'r-done', contact_id: 'c-1', date: '2026-08-02', completed_at: '2026-08-02T12:00:00Z' },
+        { id: 'r-soon', contact_id: 'c-1', date: '2026-08-20', title: 'Soon' },
+        { id: 'r-dateless', contact_id: 'c-1', title: 'No date yet' },
+      ] as Reminder[]));
+      const c = build();
+      c.ngOnInit();
+      expect(outstanding(c).map(r => r.id)).toEqual(['r-dateless', 'r-soon', 'r-later']);
+    });
+
+    it('does not fetch reminders for non-admins', () => {
+      isAdmin = false;
+      const c = build();
+      c.ngOnInit();
+      expect(reminderService.getReminders).not.toHaveBeenCalled();
+      expect(outstanding(c)).toEqual([]);
+    });
+
+    it('swallows a reminders load error', () => {
+      reminderService.getReminders.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      expect(() => c.ngOnInit()).not.toThrow();
+      expect(outstanding(c)).toEqual([]);
+    });
+
+    it('navigates to the Reminders page on row click', () => {
+      const c = build();
+      c.goToReminders();
+      expect(router.navigate).toHaveBeenCalledWith(['/reminders']);
     });
   });
 });
