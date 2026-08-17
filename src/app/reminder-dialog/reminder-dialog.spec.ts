@@ -3,6 +3,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ReminderDialog, ReminderDialogData } from './reminder-dialog';
 import { ReminderService } from '../services/reminder.service';
+import { AuthService } from '../services/auth.service';
 import { Reminder } from '../models/reminder.model';
 import { Contact } from '../models/contact.model';
 
@@ -34,6 +35,7 @@ describe('ReminderDialog', () => {
         { provide: MatDialogRef, useValue: dialogRef },
         { provide: MAT_DIALOG_DATA, useValue: { admins, ...data } },
         { provide: ReminderService, useValue: reminderService },
+        { provide: AuthService, useValue: { contact: () => ({ id: 'admin-me' }) } },
       ],
     });
     const c = TestBed.createComponent(ReminderDialog).componentInstance;
@@ -211,5 +213,80 @@ describe('ReminderDialog', () => {
     priv(c).submitting = false;
     c.cancel();
     expect(dialogRef.close).toHaveBeenCalledWith();
+  });
+
+  describe('v2 fields', () => {
+    it('defaults created_by to the acting admin on create', () => {
+      reminderService.createReminder.mockReturnValue(of({ id: 'rem-1' }));
+      const c = build({ mode: 'create' });
+      form(c).get('title').setValue('t');
+      form(c).get('date').setValue(new Date(2026, 7, 20));
+      c.save();
+      expect(reminderService.createReminder).toHaveBeenCalledWith(
+        expect.objectContaining({ created_by: 'admin-me' }),
+      );
+    });
+
+    it('preserves the stored creator and recurrence on edit', () => {
+      reminderService.updateReminder.mockReturnValue(of({ id: 'rem-1' }));
+      const c = build({
+        mode: 'edit',
+        reminder: {
+          id: 'rem-1', title: 't', message: '', date: '2026-08-20',
+          created_by: 'a-2', recurrence: 'monthly', due_date: '2026-08-25',
+        },
+      });
+      c.save();
+      expect(reminderService.updateReminder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          created_by: 'a-2', recurrence: 'monthly', due_date: '2026-08-25',
+        }),
+      );
+    });
+
+    it('sends undefined for no recurrence and a blank due date', () => {
+      reminderService.createReminder.mockReturnValue(of({ id: 'rem-1' }));
+      const c = build({ mode: 'create' });
+      form(c).get('title').setValue('t');
+      form(c).get('date').setValue(new Date(2026, 7, 20));
+      c.save();
+      const sent = reminderService.createReminder.mock.calls.at(-1)![0];
+      expect(sent.recurrence).toBeUndefined();
+      expect(sent.due_date).toBeUndefined();
+    });
+
+    it('leaves created_by unset when the acting admin has no contact id', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        imports: [ReminderDialog],
+        providers: [
+          { provide: MatDialogRef, useValue: dialogRef },
+          { provide: MAT_DIALOG_DATA, useValue: { mode: 'create', admins } },
+          { provide: ReminderService, useValue: reminderService },
+          { provide: AuthService, useValue: { contact: () => ({}) } },
+        ],
+      });
+      const c = TestBed.createComponent(ReminderDialog).componentInstance;
+      c.ngOnInit();
+      reminderService.createReminder.mockReturnValue(of({ id: 'rem-1' }));
+      form(c).get('title').setValue('t');
+      form(c).get('date').setValue(new Date(2026, 7, 20));
+      c.save();
+      expect(reminderService.createReminder.mock.calls.at(-1)![0].created_by)
+        .toBeUndefined();
+    });
+
+    it('round-trips a picked recurrence and due date', () => {
+      reminderService.createReminder.mockReturnValue(of({ id: 'rem-1' }));
+      const c = build({ mode: 'create' });
+      form(c).get('title').setValue('t');
+      form(c).get('date').setValue(new Date(2026, 7, 20));
+      form(c).get('recurrence').setValue('weekly');
+      form(c).get('due_date').setValue(new Date(2026, 7, 25));
+      c.save();
+      expect(reminderService.createReminder).toHaveBeenCalledWith(
+        expect.objectContaining({ recurrence: 'weekly', due_date: '2026-08-25' }),
+      );
+    });
   });
 });

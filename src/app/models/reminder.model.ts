@@ -13,6 +13,12 @@ export class Reminder {
   /** Set by the backend cron once the morning-of email has fired. */
   sent_at?: string;
   created_by?: string;
+  /** Optional 'due by' wall date 'YYYY-MM-DD' (display-only). */
+  due_date?: string;
+  /** Absent = one-time. Recurring reminders roll forward after each send. */
+  recurrence?: 'weekly' | 'monthly';
+  /** ISO completion stamp — one-time reminders only. */
+  completed_at?: string;
   /** Calendar meta discriminator — stamped client-side, never persisted. */
   entry_type?: 'reminder';
 }

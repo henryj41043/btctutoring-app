@@ -8,6 +8,8 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {MatCheckboxModule} from '@angular/material/checkbox';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -24,7 +26,8 @@ import {TableStateStore} from '../utils/table-state';
 
 /**
  * Admin-only Reminders page: dated reminders emailed to chosen admins the
- * morning of. Defaults to upcoming reminders; "Show past" reveals fired ones.
+ * morning of. Defaults to all uncompleted reminders (overdue stays visible);
+ * "Show completed" reveals finished ones.
  */
 @Component({
   selector: 'app-reminders',
@@ -37,6 +40,8 @@ import {TableStateStore} from '../utils/table-state';
     MatFormFieldModule,
     MatInputModule,
     MatSlideToggleModule,
+    MatCheckboxModule,
+    MatTooltipModule,
     MatSortModule,
     MatPaginatorModule,
     MatProgressSpinnerModule,
@@ -70,10 +75,10 @@ export class Reminders implements OnInit {
     }
   }
 
-  protected columns: string[] = ['date', 'title', 'message', 'recipients', 'contact', 'sent', 'actions'];
+  protected columns: string[] = ['done', 'date', 'due_date', 'title', 'message', 'recipients', 'created_by', 'contact', 'sent', 'actions'];
   protected dataSource = new MatTableDataSource<Reminder>([]);
   protected loading: boolean = true;
-  protected showPast: boolean = false;
+  protected showCompleted: boolean = false;
   protected admins: Contact[] = [];
   private contacts: Contact[] = [];
   private allReminders: Reminder[] = [];
@@ -87,11 +92,11 @@ export class Reminders implements OnInit {
       this.filterText = saved.filter;
       this.dataSource.filter = saved.filter;
     }
-    if (typeof saved.extra?.['showPast'] === 'boolean') {
-      this.showPast = saved.extra['showPast'];
+    if (typeof saved.extra?.['showCompleted'] === 'boolean') {
+      this.showCompleted = saved.extra['showCompleted'];
     }
     this.dataSource.filterPredicate = (reminder, filter) => {
-      const haystack = [reminder.title, reminder.message, this.recipientNames(reminder), this.contactName(reminder)]
+      const haystack = [reminder.title, reminder.message, this.recipientNames(reminder), this.contactName(reminder), this.createdByName(reminder)]
         .join(' ')
         .toLowerCase();
       return haystack.includes(filter);
@@ -129,27 +134,40 @@ export class Reminders implements OnInit {
     this.load();
   }
 
-  /** Today's local wall date 'YYYY-MM-DD' for the upcoming/past split. */
-  private today(): string {
-    const now = new Date();
-    const m = (now.getMonth() + 1).toString().padStart(2, '0');
-    const d = now.getDate().toString().padStart(2, '0');
-    return `${now.getFullYear()}-${m}-${d}`;
-  }
-
   private applyView(): void {
-    const today = this.today();
-    const visible = this.showPast
+    // Outstanding-first: overdue uncompleted reminders stay visible so
+    // nothing un-actioned ever silently ages out.
+    const visible = this.showCompleted
       ? this.allReminders
-      : this.allReminders.filter(r => (r.date ?? '') >= today);
+      : this.allReminders.filter(r => !r.completed_at);
     this.dataSource.data = [...visible].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
   }
 
-  onShowPastChange(showPast: boolean): void {
-    this.showPast = showPast;
+  onShowCompletedChange(showCompleted: boolean): void {
+    this.showCompleted = showCompleted;
     this.applyView();
-    this.viewState.patch({extra: {showPast}});
+    this.viewState.patch({extra: {showCompleted}});
     this.cdr.markForCheck();
+  }
+
+  /** Done checkbox: one-time toggles complete/reopen; recurring rows always
+   *  complete (their date jump to the next occurrence is the feedback). */
+  onToggleComplete(reminder: Reminder): void {
+    const request$ = reminder.completed_at
+      ? this.reminderService.uncompleteReminder(reminder.id!)
+      : this.reminderService.completeReminder(reminder.id!);
+    request$.pipe(
+      catchError(error => { console.log(error); return EMPTY; }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(() => this.reload());
+  }
+
+  /** The creating admin's display name, or empty when unset/unknown. */
+  createdByName(reminder: Reminder): string {
+    if (!reminder.created_by) {
+      return '';
+    }
+    return this.adminNamesById.get(reminder.created_by) ?? '';
   }
 
   applyFilter(value: string): void {

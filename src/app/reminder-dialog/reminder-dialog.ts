@@ -11,6 +11,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {catchError, EMPTY, Observable} from 'rxjs';
 import {ReminderService} from '../services/reminder.service';
+import {AuthService} from '../services/auth.service';
 import {Reminder} from '../models/reminder.model';
 import {Contact} from '../models/contact.model';
 
@@ -49,6 +50,7 @@ export class ReminderDialog implements OnInit {
   protected data: ReminderDialogData = inject<ReminderDialogData>(MAT_DIALOG_DATA);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private reminderService: ReminderService = inject(ReminderService);
+  private authService: AuthService = inject(AuthService);
 
   protected mode: ReminderDialogMode = 'create';
   protected reminderForm!: FormGroup;
@@ -67,6 +69,10 @@ export class ReminderDialog implements OnInit {
       all_admins: [reminder.all_admins ?? true],
       recipient_ids: [reminder.recipient_ids ?? []],
       contact_id: [reminder.contact_id ?? null],
+      due_date: [this.toDate(reminder.due_date)],
+      recurrence: [reminder.recurrence ?? null],
+      // Defaults to the acting admin; editing keeps the stored creator.
+      created_by: [reminder.created_by ?? this.authService.contact().id ?? null],
     });
   }
 
@@ -94,6 +100,9 @@ export class ReminderDialog implements OnInit {
       all_admins: raw.all_admins,
       recipient_ids: raw.all_admins ? [] : raw.recipient_ids,
       contact_id: raw.contact_id ?? undefined,
+      due_date: this.toDateString(raw.due_date),
+      recurrence: raw.recurrence ?? undefined,
+      created_by: raw.created_by ?? undefined,
     };
     if (!reminder.all_admins && (reminder.recipient_ids ?? []).length === 0) {
       this.fail('Pick at least one admin, or select All admins.');

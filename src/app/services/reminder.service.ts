@@ -24,6 +24,14 @@ export class ReminderService {
     return this.httpClient.put<Reminder>(`${this.baseUrl}/reminders`, reminder);
   }
 
+  completeReminder(id: string): Observable<Response> {
+    return this.httpClient.post<Response>(`${this.baseUrl}/reminders/${id}/complete`, {});
+  }
+
+  uncompleteReminder(id: string): Observable<Response> {
+    return this.httpClient.post<Response>(`${this.baseUrl}/reminders/${id}/uncomplete`, {});
+  }
+
   deleteReminder(id: string): Observable<Response> {
     return this.httpClient.delete<Response>(`${this.baseUrl}/reminders/${id}`);
   }
