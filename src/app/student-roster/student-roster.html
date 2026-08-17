@@ -1,21 +1,84 @@
 <div class="student-roster">
   <div class="btc-page-header">
     <h2>Student Roster</h2>
-    @if (!loading) {
+    @if (!historyMode && !loading) {
       <span class="btc-chip btc-chip--ok roster-count">{{activeCount}} active students</span>
     }
-    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="roster-search">
-      <mat-label>Search</mat-label>
-      <input matInput #rosterSearch [value]="searchText"
-             placeholder="Parent, student, package"
-             (input)="applyFilter(rosterSearch.value)">
-      <mat-icon matSuffix>search</mat-icon>
-    </mat-form-field>
+    @if (historyMode && !historyLoading) {
+      <span class="btc-chip btc-chip--info roster-count">{{historyCount}} students · {{selectedDate | date:'MMMM y'}}</span>
+    }
+    <div class="roster-controls">
+      @if (authService.isAdmin()) {
+        <mat-slide-toggle [checked]="historyMode" (change)="onHistoryToggle($event.checked)">
+          Monthly history
+        </mat-slide-toggle>
+        @if (historyMode) {
+          <mat-form-field subscriptSizing="dynamic" appearance="outline" class="history-month">
+            <mat-label>Month</mat-label>
+            <input matInput [matDatepicker]="historyDatepicker" [(ngModel)]="selectedDate" (dateChange)="onDateChange($event.value)">
+            <mat-datepicker-toggle [for]="historyDatepicker" matSuffix/>
+            <mat-datepicker #historyDatepicker/>
+          </mat-form-field>
+        }
+      }
+      <mat-form-field subscriptSizing="dynamic" appearance="outline" class="roster-search">
+        <mat-label>Search</mat-label>
+        <input matInput #rosterSearch [value]="searchText"
+               [placeholder]="historyMode ? 'Parent, student, tutor' : 'Parent, student, package'"
+               (input)="applyFilter(rosterSearch.value)">
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+    </div>
   </div>
 
   <mat-card appearance="outlined">
     <mat-card-content>
-      @if (loading) {
+      @if (historyMode) {
+        @if (historyLoading || loading) {
+          <div class="table-spinner">
+            <mat-spinner [diameter]="48"></mat-spinner>
+            <span class="table-spinner-label">Loading monthly roster…</span>
+          </div>
+        } @else if (historyDataSource.data.length === 0) {
+          <p class="empty-note">No completed sessions in {{selectedDate | date:'MMMM y'}}.</p>
+        } @else {
+          <div class="table-scroll">
+          <table mat-table [dataSource]="historyDataSource" matSort class="mat-elevation-z8">
+            <ng-container matColumnDef="family">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Parent</th>
+              <td mat-cell *matCellDef="let row">{{row.family}}</td>
+            </ng-container>
+            <ng-container matColumnDef="student">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Student</th>
+              <td mat-cell *matCellDef="let row">{{row.student}}</td>
+            </ng-container>
+            <ng-container matColumnDef="tutors">
+              <th mat-header-cell *matHeaderCellDef>Tutor(s)</th>
+              <td mat-cell *matCellDef="let row">{{row.tutors}}</td>
+            </ng-container>
+            <ng-container matColumnDef="sessions">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Sessions</th>
+              <td mat-cell *matCellDef="let row">{{row.sessions}}</td>
+            </ng-container>
+            <ng-container matColumnDef="makeups">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Make-ups</th>
+              <td mat-cell *matCellDef="let row">{{row.makeups}}</td>
+            </ng-container>
+            <ng-container matColumnDef="trials">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Trials</th>
+              <td mat-cell *matCellDef="let row">{{row.trials}}</td>
+            </ng-container>
+            <ng-container matColumnDef="hours">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Total Hours</th>
+              <td mat-cell *matCellDef="let row">{{row.hours}}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="historyColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: historyColumns;" class="history-row"></tr>
+          </table>
+          </div>
+          <mat-paginator [pageSize]="50" [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+        }
+      } @else if (loading) {
         <div class="table-spinner">
           <mat-spinner [diameter]="48"></mat-spinner>
           <span class="table-spinner-label">Loading students…</span>
