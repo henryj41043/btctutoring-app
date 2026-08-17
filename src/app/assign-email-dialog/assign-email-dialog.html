@@ -1,0 +1,48 @@
+<h2 mat-dialog-title>
+  @if (data.mode === 'assign') {
+    Assign email to a contact
+  } @else {
+    Discard this email?
+  }
+</h2>
+<mat-dialog-content>
+  <p class="entry-summary">
+    <strong>{{data.entry.subject || '(no subject)'}}</strong>
+    @if (data.entry.from_email) {
+      <span class="entry-from">from {{data.entry.from_email}}</span>
+    }
+  </p>
+
+  @if (data.mode === 'assign') {
+    <mat-form-field appearance="outline" class="contact-select">
+      <mat-label>Contact</mat-label>
+      <mat-select [(ngModel)]="selectedContactId" name="contact">
+        @for (contact of sortedContacts; track contact.id) {
+          <mat-option [value]="contact.id">{{contactName(contact)}}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  } @else {
+    <p class="discard-hint">
+      It leaves the review queue for good — re-forwarding the same email will
+      not bring it back.
+    </p>
+  }
+
+  @if (failed) {
+    <p class="dialog-error">Something went wrong. Please try again.</p>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button matButton type="button" (click)="cancel()">Cancel</button>
+  <button mat-raised-button color="primary" type="button" (click)="confirm()"
+          [disabled]="working || (data.mode === 'assign' && !selectedContactId)">
+    @if (working) {
+      <mat-spinner [diameter]="20"></mat-spinner>
+    } @else if (data.mode === 'assign') {
+      Assign
+    } @else {
+      Discard
+    }
+  </button>
+</mat-dialog-actions>

@@ -66,6 +66,14 @@ export const routes: Routes = [
     canActivate: [AuthGuard, AdminGuard],
   },
   {
+    path: 'unmatched-emails',
+    // Lazy: an occasional admin review surface — keeps it (and its dialog)
+    // out of the initial bundle, which sits right at the size budget.
+    loadComponent: () =>
+      import('./unmatched-emails/unmatched-emails').then(m => m.UnmatchedEmails),
+    canActivate: [AuthGuard, AdminGuard],
+  },
+  {
     path: 'teams',
     component: Teams,
     canActivate: [AuthGuard, AdminGuard],

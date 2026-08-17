@@ -1,0 +1,86 @@
+.unmatched-emails {
+  padding: 16px;
+
+  .queue-count {
+    margin-left: 12px;
+    align-self: center;
+  }
+
+  .queue-search {
+    margin-left: auto;
+    min-width: 260px;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+
+    table {
+      width: 100%;
+      min-width: 640px;
+    }
+  }
+
+  .subject-cell {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .actions-cell {
+    white-space: nowrap;
+  }
+
+  .queue-row {
+    cursor: pointer;
+
+    &.expanded {
+      background: rgba(0, 0, 0, 0.03);
+    }
+  }
+
+  .detail-row {
+    height: 0;
+
+    &.collapsed td {
+      border-bottom-width: 0;
+      padding: 0;
+    }
+  }
+
+  .email-detail {
+    padding: 8px 16px 16px;
+  }
+
+  .email-text {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 20em;
+    overflow-y: auto;
+  }
+
+  .email-text--empty {
+    font-style: italic;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .empty-note {
+    margin: 24px 0;
+    text-align: center;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.table-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 56px 0;
+}
+
+.table-spinner-label {
+  color: var(--btc-teal-deep);
+  font-weight: 700;
+}

@@ -1,0 +1,24 @@
+.entry-summary {
+  margin: 0 0 14px;
+
+  .entry-from {
+    display: block;
+    font-size: .85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.contact-select {
+  width: 100%;
+}
+
+.discard-hint {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.dialog-error {
+  margin: 8px 0 0;
+  color: var(--mat-sys-error);
+  font-size: .875rem;
+}

@@ -1,0 +1,87 @@
+<div class="unmatched-emails">
+  <div class="btc-page-header">
+    <h2>Unmatched Emails</h2>
+    @if (!loading) {
+      <span class="btc-chip btc-chip--info queue-count">{{dataSource.data.length}} awaiting review</span>
+    }
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="queue-search">
+      <mat-label>Search</mat-label>
+      <input matInput #queueSearch [value]="searchText"
+             placeholder="Sender, subject, text"
+             (input)="applyFilter(queueSearch.value)">
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+  </div>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      @if (loading) {
+        <div class="table-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="table-spinner-label">Loading emails…</span>
+        </div>
+      } @else if (dataSource.data.length === 0) {
+        <p class="empty-note">No emails waiting for review.</p>
+      } @else {
+      <div class="table-scroll">
+      <table mat-table [dataSource]="dataSource" multiTemplateDataRows class="mat-elevation-z8">
+        <ng-container matColumnDef="received">
+          <th mat-header-cell *matHeaderCellDef>Received</th>
+          <td mat-cell *matCellDef="let row">{{row.received_at | date:'MMM d, y, h:mm a'}}</td>
+        </ng-container>
+        <ng-container matColumnDef="from">
+          <th mat-header-cell *matHeaderCellDef>From</th>
+          <td mat-cell *matCellDef="let row">{{fromDisplay(row)}}</td>
+        </ng-container>
+        <ng-container matColumnDef="subject">
+          <th mat-header-cell *matHeaderCellDef>Subject</th>
+          <td mat-cell *matCellDef="let row" class="subject-cell">{{row.subject || '(no subject)'}}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let row" class="actions-cell">
+            <button matButton (click)="openAssignDialog(row, $event)">
+              <mat-icon>person_add</mat-icon>
+              Assign
+            </button>
+            <button matIconButton aria-label="View original email" matTooltip="View original"
+                    (click)="viewOriginal(row, $event)">
+              <mat-icon>open_in_new</mat-icon>
+            </button>
+            <button matIconButton aria-label="Discard email" matTooltip="Discard"
+                    (click)="openDiscardDialog(row, $event)">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <!-- Expanded detail: the stripped newest-message body. -->
+        <ng-container matColumnDef="expandedDetail">
+          <td mat-cell *matCellDef="let row" [attr.colspan]="columns.length">
+            @if (isExpanded(row)) {
+              <div class="email-detail">
+                @if (row.body_text) {
+                  <p class="email-text">{{row.body_text}}</p>
+                } @else {
+                  <p class="email-text email-text--empty">
+                    No text could be extracted — use View original to read the raw email.
+                  </p>
+                }
+              </div>
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns;"
+            class="queue-row" [class.expanded]="isExpanded(row)"
+            (click)="toggleExpanded(row)"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['expandedDetail']"
+            class="detail-row" [class.collapsed]="!isExpanded(row)"></tr>
+      </table>
+      </div>
+      <mat-paginator [pageSize]="25" [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>
