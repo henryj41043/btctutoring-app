@@ -896,6 +896,62 @@ describe('SessionDialog', () => {
       c.deleteSession();
       expect(c.hasError).toBe(true);
     });
+
+    it('warns before deleting a cancelled session; confirm proceeds', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1', status: SessionStatus.CANCELLED } as Session,
+      } as SessionDialogData);
+      sessionsService.deleteSession.mockReturnValue(of({ message: 'ok' }));
+      c.deleteSession();
+      // Warned, nothing deleted yet — the banked make-up minutes will persist.
+      expect(c.showCancelledDeleteWarning).toBe(true);
+      expect(sessionsService.deleteSession).not.toHaveBeenCalled();
+      c.confirmCancelledDelete();
+      expect(c.showCancelledDeleteWarning).toBe(false);
+      expect(sessionsService.deleteSession).toHaveBeenCalledWith('sess-1');
+      expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    it('Go Back on the cancelled-delete warning aborts the delete', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1', status: SessionStatus.CANCELLED } as Session,
+      } as SessionDialogData);
+      c.deleteSession();
+      c.cancelCancelledDelete();
+      expect(c.showCancelledDeleteWarning).toBe(false);
+      expect(sessionsService.deleteSession).not.toHaveBeenCalled();
+      // A second attempt warns again (the confirmation is not sticky).
+      c.deleteSession();
+      expect(c.showCancelledDeleteWarning).toBe(true);
+    });
+
+    it('does not warn when deleting a non-cancelled session', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1', status: SessionStatus.PENDING } as Session,
+      } as SessionDialogData);
+      sessionsService.deleteSession.mockReturnValue(of({ message: 'ok' }));
+      c.deleteSession();
+      expect(c.showCancelledDeleteWarning).toBe(false);
+      expect(sessionsService.deleteSession).toHaveBeenCalledWith('sess-1');
+    });
+
+    it('a cancelled series occurrence warns after the scope prompt (single path)', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1', series_id: 'series-1', status: SessionStatus.CANCELLED } as Session,
+      } as SessionDialogData);
+      sessionsService.deleteSession.mockReturnValue(of({ message: 'ok' }));
+      c.deleteSession();
+      expect(c.showSeriesScopePrompt).toBe(true);
+      c.chooseSeriesScope('single');
+      expect(c.showCancelledDeleteWarning).toBe(true);
+      expect(sessionsService.deleteSession).not.toHaveBeenCalled();
+      c.confirmCancelledDelete();
+      expect(sessionsService.deleteSession).toHaveBeenCalledWith('sess-1');
+    });
   });
 
   describe('series scope flows', () => {

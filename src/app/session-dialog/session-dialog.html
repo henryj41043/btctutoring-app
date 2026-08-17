@@ -135,6 +135,12 @@
       <p>Apply this {{seriesActionLabel}} to just this occurrence, or to this and all future pending occurrences?</p>
     </div>
   }
+  @if (showCancelledDeleteWarning) {
+    <div class="status-confirm-warning">
+      <p><strong>⚠ Banked make-up minutes will persist.</strong></p>
+      <p>This cancelled session banked make-up minutes on the student when it was cancelled. Deleting the session does <strong>not</strong> remove those minutes — the balance will remain, with no session left to trace it to. Delete anyway?</p>
+    </div>
+  }
   @if (hasError) {
     <mat-error>{{errorMessage}}</mat-error>
   }
@@ -152,6 +158,9 @@
   } @else if (showScheduleWarning) {
     <button matButton (click)="cancelScheduleWarning()">Go Back</button>
     <button matButton color="warn" (click)="confirmScheduleWarning()">Save Anyway</button>
+  } @else if (showCancelledDeleteWarning) {
+    <button matButton (click)="cancelCancelledDelete()">Go Back</button>
+    <button matButton color="warn" (click)="confirmCancelledDelete()">Delete Anyway</button>
   } @else if (showStatusConfirm) {
     <button matButton (click)="cancelStatusChange()">Go Back</button>
     <button matButton color="warn" (click)="confirmStatusChange()">Confirm Update</button>
