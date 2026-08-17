@@ -200,6 +200,41 @@ describe('ContactDialog', () => {
       expect(contactService.createContact).toHaveBeenCalledTimes(1);
     });
 
+    it('handles sparse existing records (no service/status/names, ?? branches)', () => {
+      contactService.getContactsSummary.mockReturnValue(of([
+        { id: 'c-3', first_name: 'Solo' }, // no last name, no service, no status
+      ]));
+      component.ngOnInit();
+      fillValid();
+      form().patchValue({ first_name: 'solo', last_name: '' });
+      component.createContact();
+      // Bare name, no detail parens.
+      expect((component as unknown as { duplicateMatches: string[] }).duplicateMatches)
+        .toEqual(['Solo']);
+    });
+
+    it('caps the warning at three matches', () => {
+      contactService.getContactsSummary.mockReturnValue(of([1, 2, 3, 4].map(n => (
+        { id: `c-${n}`, first_name: 'Ada', last_name: 'Lovelace', service: 'Tutoring', status: 'MIA' }
+      ))));
+      component.ngOnInit();
+      fillValid();
+      component.createContact();
+      expect((component as unknown as { duplicateMatches: string[] }).duplicateMatches)
+        .toHaveLength(3);
+    });
+
+    it('skips the check entirely when the first name is blank-ish', () => {
+      contactService.getContactsSummary.mockReturnValue(of([
+        { id: 'c-4', first_name: '', last_name: '' },
+      ]));
+      component.ngOnInit();
+      // Bypass form validity by calling the matcher directly — the branch
+      // guards against pathological summary data, not user input.
+      const matches = (component as unknown as { findNameMatches(): string[] }).findNameMatches();
+      expect(matches).toEqual([]);
+    });
+
     it('fails open when the summary cannot load', () => {
       contactService.getContactsSummary.mockReturnValue(throwError(() => new Error('x')));
       component.ngOnInit();
