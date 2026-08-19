@@ -213,6 +213,18 @@ describe('Reminders', () => {
     expect(c.recipientNames(reminder({ all_admins: false, recipient_ids: ['a-2'] }))).toBe('—');
   });
 
+  it('name-less contacts with an email display as the email', () => {
+    contactService.getContactsSummary.mockReturnValue(of([
+      adminContact,
+      { id: 'a-3', user_group: 'Admins', email: 'third.admin@example.com' },
+    ]));
+    reminderService.getReminders.mockReturnValue(of([]));
+    const c = build();
+    c.ngOnInit();
+    expect(c.recipientNames(reminder({ all_admins: false, recipient_ids: ['a-3'] })))
+      .toBe('third.admin@example.com');
+  });
+
   it('done checkbox completes an uncompleted reminder and reloads', () => {
     reminderService.completeReminder.mockReturnValue(of({ id: 'rem-1' }));
     const c = build();

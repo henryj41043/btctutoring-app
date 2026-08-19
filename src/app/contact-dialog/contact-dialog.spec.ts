@@ -50,8 +50,9 @@ describe('ContactDialog', () => {
     expect(c.errorMessage).toBe('');
     expect(c.serviceOptions.length).toBeGreaterThan(0);
 
-    // Validators: required on first_name, email, service; none on last_name.
-    expect(f.controls['first_name'].hasError('required')).toBe(true);
+    // Validators: required on email + service only — names are optional
+    // (newsletter signups arrive with just an address).
+    expect(f.controls['first_name'].valid).toBe(true);
     f.controls['first_name'].setValue('Ada');
     expect(f.controls['first_name'].valid).toBe(true);
     expect(f.controls['last_name'].valid).toBe(true);
@@ -84,6 +85,18 @@ describe('ContactDialog', () => {
     component.createContact();
     expect(contactService.createContact).toHaveBeenCalled();
     expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-1' });
+  });
+
+  it('creates a name-less contact from just an email + service (newsletter signup)', () => {
+    const f = form();
+    f.controls['email'].setValue('subscriber@example.com');
+    f.controls['service'].setValue('Newsletter');
+    contactService.createContact.mockReturnValue(of({ id: 'c-news' }));
+    component.createContact();
+    expect(contactService.createContact).toHaveBeenCalledWith(
+      expect.objectContaining({ first_name: '', email: 'subscriber@example.com' }),
+    );
+    expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-news' });
   });
 
   it('shows a duplicate-contact message on a 409 conflict', () => {
