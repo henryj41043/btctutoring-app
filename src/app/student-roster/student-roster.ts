@@ -14,6 +14,8 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatButtonModule} from '@angular/material/button';
 import {Router} from '@angular/router';
 import {catchError, EMPTY, of} from 'rxjs';
@@ -60,6 +62,7 @@ export interface RosterHistoryRow {
     MatInputModule,
     MatDatepickerModule,
     MatSlideToggleModule,
+    MatTooltipModule,
     MatButtonModule,
   ],
   templateUrl: './student-roster.html',
@@ -75,6 +78,7 @@ export class StudentRoster implements OnInit {
   // Cancels in-flight HTTP work when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
+  private snackBar: MatSnackBar = inject(MatSnackBar);
   private router: Router = inject(Router);
 
   // Setter form: the table is inside an @if, so sort/paginator only exist
@@ -334,5 +338,40 @@ export class StudentRoster implements OnInit {
   /** A student's currently-available make-up minutes (expired batches excluded). */
   protected availableMakeup(student: Student): number {
     return availableMakeupMinutes(student);
+  }
+
+  /**
+   * Copies the filtered rows' parent emails — deduped (siblings share one),
+   * blanks skipped, comma-separated for pasting into To/BCC. For tutors the
+   * rows are their caseload by construction; admins get the whole roster.
+   * (Contacts-table copy-emails precedent: clipboard over mailto.)
+   */
+  protected copyParentEmails(): void {
+    const rows = this.dataSource.filteredData;
+    const seen = new Set<string>();
+    const emails: string[] = [];
+    let missing = 0;
+    for (const student of rows) {
+      const email = student.contact_email?.trim();
+      if (!email) {
+        missing++;
+        continue;
+      }
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      emails.push(email);
+    }
+    if (emails.length === 0) {
+      this.snackBar.open('No parent emails to copy in the current view.', undefined, {duration: 4000});
+      return;
+    }
+    const missingSuffix = missing > 0 ? ` (${missing} student${missing === 1 ? '' : 's'} without one)` : '';
+    navigator.clipboard.writeText(emails.join(', ')).then(
+      () => this.snackBar.open(
+        `${emails.length} parent email${emails.length === 1 ? '' : 's'} copied${missingSuffix}`,
+        undefined, {duration: 4000}),
+      () => this.snackBar.open('Could not copy to the clipboard.', undefined, {duration: 4000}),
+    );
   }
 }
