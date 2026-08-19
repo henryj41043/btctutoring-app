@@ -188,7 +188,7 @@ describe('ContactsTable', () => {
 
   describe('service + status filters', () => {
     const rows = [
-      { first_name: 'Ada', service: 'Tutoring', status: 'Active Client' },
+      { first_name: 'Ada', service: 'Tutoring', status: 'Active Client', scholarship_student: true },
       { first_name: 'Legacy', service: 'Tutoring', status: 'Past Student' },
       { first_name: 'Tess', service: 'Hiring', status: 'Staff' },
       { first_name: 'Newsy', service: 'Newsletter' },
@@ -233,6 +233,23 @@ describe('ContactsTable', () => {
       expect(names(c)).toEqual([]); // Ada is Active Client
     });
 
+    it('filters scholarship families in or out (tri-state)', () => {
+      const c = seeded();
+      c.onScholarshipFilterChange('yes');
+      expect(names(c)).toEqual(['Ada']);
+      c.onScholarshipFilterChange('no');
+      expect(names(c)).toEqual(['Legacy', 'Tess', 'Newsy']);
+      c.onScholarshipFilterChange('');
+      expect(names(c)).toHaveLength(4);
+    });
+
+    it('scholarship combines with the other filters', () => {
+      const c = seeded();
+      c.onServiceFilterChange(['Tutoring']);
+      c.onScholarshipFilterChange('no');
+      expect(names(c)).toEqual(['Legacy']);
+    });
+
     it('persists filters for the session and restores them on rebuild', () => {
       const c = seeded();
       c.onServiceFilterChange(['Hiring']);
@@ -243,6 +260,22 @@ describe('ContactsTable', () => {
       expect((c2 as any).serviceFilter).toEqual(['Hiring']);
       expect((c2 as any).searchText).toBe('tess');
       expect(names(c2)).toEqual(['Tess']);
+    });
+
+    it('persists and restores the scholarship filter (invalid values reset to All)', () => {
+      const c = seeded();
+      c.onScholarshipFilterChange('yes');
+
+      TestBed.resetTestingModule();
+      const c2 = seeded();
+      expect((c2 as any).scholarshipFilter).toBe('yes');
+      expect(names(c2)).toEqual(['Ada']);
+
+      sessionStorage.setItem('btc-contacts-filters', JSON.stringify({ scholarship: 'bogus' }));
+      TestBed.resetTestingModule();
+      const c3 = seeded();
+      expect((c3 as any).scholarshipFilter).toBe('');
+      expect(names(c3)).toHaveLength(4);
     });
 
     it('starts unfiltered when saved state is corrupt', () => {

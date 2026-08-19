@@ -23,6 +23,14 @@
         }
       </mat-select>
     </mat-form-field>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="contacts-filter">
+      <mat-label>Scholarship</mat-label>
+      <mat-select [value]="scholarshipFilter" (selectionChange)="onScholarshipFilterChange($event.value)">
+        <mat-option value="">All</mat-option>
+        <mat-option value="yes">Scholarship</mat-option>
+        <mat-option value="no">Non-scholarship</mat-option>
+      </mat-select>
+    </mat-form-field>
     <button matButton type="button" (click)="copyFilteredEmails()"
             matTooltip="Copy the emails of the contacts currently shown (all filters applied)">
       <mat-icon>content_copy</mat-icon>

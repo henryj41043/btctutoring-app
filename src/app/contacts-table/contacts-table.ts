@@ -89,6 +89,8 @@ export class ContactsTable implements OnInit {
   ];
   protected serviceFilter: string[] = [];
   protected statusFilter: string[] = [];
+  /** '' = everyone, 'yes' = scholarship families only, 'no' = the rest. */
+  protected scholarshipFilter: '' | 'yes' | 'no' = '';
   private filterText: string = '';
   /** Survives navigation within the tab (matches the roster-filter precedent). */
   private static readonly FILTER_STORAGE_KEY = 'btc-contacts-filters';
@@ -113,6 +115,12 @@ export class ContactsTable implements OnInit {
       // Status matches on the DISPLAY label so legacy parent values and the
       // 'Staff'→'Active Staff' label behave the way the chips read.
       if (this.statusFilter.length && !this.statusFilter.includes(this.statusLabel(contact))) {
+        return false;
+      }
+      if (this.scholarshipFilter === 'yes' && !contact.scholarship_student) {
+        return false;
+      }
+      if (this.scholarshipFilter === 'no' && contact.scholarship_student) {
         return false;
       }
       if (!this.filterText) {
@@ -144,11 +152,17 @@ export class ContactsTable implements OnInit {
     this.refilter();
   }
 
+  onScholarshipFilterChange(selected: '' | 'yes' | 'no'): void {
+    this.scholarshipFilter = selected;
+    this.refilter();
+  }
+
   /** Re-runs the predicate (the filter string only needs to change) and
    *  persists the criteria for the session. */
   private refilter(): void {
     this.dataSource.filter = JSON.stringify({
       text: this.filterText, services: this.serviceFilter, statuses: this.statusFilter,
+      scholarship: this.scholarshipFilter,
     });
     this.dataSource.paginator?.firstPage();
     try {
@@ -160,11 +174,16 @@ export class ContactsTable implements OnInit {
     try {
       const saved = sessionStorage.getItem(ContactsTable.FILTER_STORAGE_KEY);
       if (!saved) return;
-      const parsed = JSON.parse(saved) as {text?: string; services?: string[]; statuses?: string[]};
+      const parsed = JSON.parse(saved) as {
+        text?: string; services?: string[]; statuses?: string[]; scholarship?: '' | 'yes' | 'no';
+      };
       this.filterText = parsed.text ?? '';
       this.serviceFilter = parsed.services ?? [];
       this.statusFilter = parsed.statuses ?? [];
-      if (this.filterText || this.serviceFilter.length || this.statusFilter.length) {
+      this.scholarshipFilter = parsed.scholarship === 'yes' || parsed.scholarship === 'no'
+        ? parsed.scholarship
+        : '';
+      if (this.filterText || this.serviceFilter.length || this.statusFilter.length || this.scholarshipFilter) {
         this.dataSource.filter = saved;
       }
     } catch { /* corrupt/unavailable storage — start unfiltered */ }
