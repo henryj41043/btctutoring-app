@@ -335,6 +335,11 @@
     max-height: 20em;
     overflow-y: auto;
   }
+
+  .email-remove-button {
+    margin-left: 8px;
+    color: var(--mat-sys-error);
+  }
 }
 
 /* Single sticky save bar for the whole contact form (replaces per-section save buttons) */

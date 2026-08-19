@@ -59,6 +59,7 @@ import {ReminderService} from '../services/reminder.service';
 import {Reminder} from '../models/reminder.model';
 import {EmailService} from '../services/email.service';
 import {EmailEntry} from '../models/email-entry.model';
+import {AssignEmailDialog} from '../assign-email-dialog/assign-email-dialog';
 import {Router} from '@angular/router';
 
 @Component({
@@ -285,6 +286,20 @@ export class Contact implements OnInit {
   toggleEmail(entry: EmailEntry): void {
     this.expandedEmailId = this.expandedEmailId === entry.id ? null : (entry.id ?? null);
     this.cdr.markForCheck();
+  }
+
+  /** Removes a filed email from this contact (discard — it can't resurface). */
+  removeEmail(entry: EmailEntry, event: Event): void {
+    event.stopPropagation();
+    const ref = this.dialog.open(AssignEmailDialog, {
+      data: {mode: 'discard', entry, contacts: []},
+      width: '440px',
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result) {
+        this.loadContactEmails();
+      }
+    });
   }
 
   /** Opens the raw original via a short-lived presigned link (fetched on click). */
