@@ -1712,6 +1712,30 @@ describe('Contact', () => {
       open.mockRestore();
     });
 
+    it('remove opens the discard dialog and reloads the section on confirm', () => {
+      afterClosed = true;
+      const c = build();
+      c.ngOnInit();
+      emailService.getEmailsForContact.mockClear();
+      const event = { stopPropagation: jest.fn() } as unknown as Event;
+      c.removeEmail(emailEntry, event);
+      expect(event.stopPropagation).toHaveBeenCalled();
+      expect(dialog.open).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ data: expect.objectContaining({ mode: 'discard', entry: emailEntry }) }),
+      );
+      expect(emailService.getEmailsForContact).toHaveBeenCalledWith('c-1');
+    });
+
+    it('a cancelled remove dialog does not reload', () => {
+      afterClosed = false;
+      const c = build();
+      c.ngOnInit();
+      emailService.getEmailsForContact.mockClear();
+      c.removeEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event);
+      expect(emailService.getEmailsForContact).not.toHaveBeenCalled();
+    });
+
     it('view original is a no-op without an id and swallows errors', () => {
       const open = jest.spyOn(window, 'open').mockImplementation(() => null);
       const c = build();
