@@ -16,6 +16,7 @@ import {ContactService} from '../services/contact.service';
 import {StudentService} from '../services/student.service';
 import {NoteService} from '../services/note.service';
 import {AuthService} from '../services/auth.service';
+import {contactDisplayName} from '../utils/contact-name';
 
 @Component({
   selector: 'app-delete-contact-dialog',
@@ -44,6 +45,9 @@ export class DeleteContactDialog {
 
   protected deleting = false;
   protected error: string | null = null;
+
+  /** Name-less (newsletter) contacts read as their email address. */
+  protected readonly displayName = contactDisplayName(this.contact);
 
   /** True when the contact being deleted is the currently logged-in user. */
   protected readonly isSelf = this.contact.id === this.authService.contact().id;

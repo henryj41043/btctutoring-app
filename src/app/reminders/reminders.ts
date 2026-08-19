@@ -23,6 +23,7 @@ import {Contact} from '../models/contact.model';
 import {UserGroup} from '../enums/user-group.enum';
 import {ReminderDialog, ReminderDialogMode} from '../reminder-dialog/reminder-dialog';
 import {TableStateStore} from '../utils/table-state';
+import {contactDisplayName} from '../utils/contact-name';
 
 /**
  * Admin-only Reminders page: dated reminders emailed to chosen admins the
@@ -116,12 +117,13 @@ export class Reminders implements OnInit {
     }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({reminders, contacts}) => {
       this.contacts = contacts;
       this.admins = contacts.filter(c => c.user_group === UserGroup.ADMINS);
+      // Name-less (newsletter) contacts fall back to their email address.
       this.adminNamesById = new Map(this.admins
         .filter(a => !!a.id)
-        .map(a => [a.id!, `${a.first_name ?? ''} ${a.last_name ?? ''}`.trim()]));
+        .map(a => [a.id!, contactDisplayName(a)]));
       this.contactNamesById = new Map(contacts
         .filter(c => !!c.id)
-        .map(c => [c.id!, `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim()]));
+        .map(c => [c.id!, contactDisplayName(c)]));
       this.allReminders = reminders;
       this.applyView();
       this.loading = false;

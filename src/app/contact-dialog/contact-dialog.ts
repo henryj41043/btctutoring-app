@@ -48,7 +48,8 @@ export class ContactDialog implements OnInit {
   private destroyRef: DestroyRef = inject(DestroyRef);
 
   protected contactForm: FormGroup = this.formBuilder.group({
-    first_name: ['', Validators.required],
+    // Optional: newsletter signups arrive with only an email address.
+    first_name: [''],
     last_name: [''],
     email: ['', [Validators.required, Validators.email]],
     phone_number: ['', phoneValidator],

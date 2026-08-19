@@ -35,6 +35,14 @@ describe('DeleteContactDialog', () => {
     expect((component as unknown as { isSelf: boolean }).isSelf).toBe(true);
   });
 
+  it('shows the name, or the email for a name-less (newsletter) contact', () => {
+    const named = build({ id: 'c-1', first_name: 'Ada', last_name: 'Lovelace' });
+    expect((named as unknown as { displayName: string }).displayName).toBe('Ada Lovelace');
+    TestBed.resetTestingModule();
+    const nameless = build({ id: 'c-2', email: 'subscriber@example.com' });
+    expect((nameless as unknown as { displayName: string }).displayName).toBe('subscriber@example.com');
+  });
+
   it('deletes a contact with no user account, students, or notes', () => {
     studentService.getStudentsByContact.mockReturnValue(of([]));
     noteService.getNotesByRecipient.mockReturnValue(of([]));

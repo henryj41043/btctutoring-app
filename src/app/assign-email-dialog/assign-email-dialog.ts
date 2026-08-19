@@ -9,6 +9,7 @@ import {catchError, EMPTY} from 'rxjs';
 import {EmailService} from '../services/email.service';
 import {EmailEntry} from '../models/email-entry.model';
 import {Contact} from '../models/contact.model';
+import {contactDisplayName} from '../utils/contact-name';
 
 export type AssignEmailDialogMode = 'assign' | 'discard';
 
@@ -57,7 +58,7 @@ export class AssignEmailDialog {
   }
 
   protected contactName(contact: Contact): string {
-    return `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim() || (contact.email ?? '');
+    return contactDisplayName(contact);
   }
 
   confirm(): void {

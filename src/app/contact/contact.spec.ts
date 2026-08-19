@@ -315,7 +315,8 @@ describe('Contact', () => {
     f.controls['first_name'].setValue('');
     f.controls['service'].setValue('');
     expect(f.controls['id'].hasError('required')).toBe(true);
-    expect(f.controls['first_name'].hasError('required')).toBe(true);
+    // Names are optional — newsletter signups have only an email address.
+    expect(f.controls['first_name'].valid).toBe(true);
     expect(f.controls['service'].hasError('required')).toBe(true);
     f.controls['email'].setValue('');
     expect(f.controls['email'].hasError('required')).toBe(true);

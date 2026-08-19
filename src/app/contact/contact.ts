@@ -140,7 +140,9 @@ export class Contact implements OnInit {
   protected accountLoading: boolean = false;
   protected contactForm: FormGroup = this.formBuilder.group({
     id: ['', Validators.required],
-    first_name: ['', Validators.required],
+    // Optional (kept symmetric with the create dialog): newsletter signups
+    // have only an email address.
+    first_name: [''],
     last_name: [''],
     email: ['', [Validators.required, Validators.email]],
     phone_number: ['', phoneValidator],
