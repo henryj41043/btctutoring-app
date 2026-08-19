@@ -28,6 +28,13 @@
                (input)="applyFilter(rosterSearch.value)">
         <mat-icon matSuffix>search</mat-icon>
       </mat-form-field>
+      @if (!historyMode) {
+        <button matButton type="button" (click)="copyParentEmails()"
+                matTooltip="Copy the parent emails of the students currently shown">
+          <mat-icon>content_copy</mat-icon>
+          Copy Emails
+        </button>
+      }
     </div>
   </div>
 

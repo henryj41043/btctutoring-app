@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { MatSort } from '@angular/material/sort';
 import { MatPaginator } from '@angular/material/paginator';
@@ -30,6 +31,7 @@ describe('StudentRoster', () => {
     contact: () => ({ id: contactId }),
   };
   const dialog = { open: jest.fn() };
+  const snackBar = { open: jest.fn() };
   const router = { navigate: jest.fn() };
 
   const build = (): StudentRoster => {
@@ -40,6 +42,7 @@ describe('StudentRoster', () => {
         { provide: SessionsService, useValue: sessionsService },
         { provide: AuthService, useValue: authService },
         { provide: MatDialog, useValue: dialog },
+        { provide: MatSnackBar, useValue: snackBar },
         { provide: Router, useValue: router },
       ],
     });
@@ -229,6 +232,70 @@ describe('StudentRoster', () => {
     component.ngOnInit();
     expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
     expect((component as never as {loading: boolean}).loading).toBe(false);
+  });
+
+  describe('copy parent emails', () => {
+    let writeText: jest.Mock;
+
+    beforeEach(() => {
+      writeText = jest.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+    });
+
+    const seed = (students: Partial<Student>[]): StudentRoster => {
+      studentService.getStudents.mockReturnValue(of(students.map(s => ({
+        status: StudentStatus.ACTIVE_STUDENT, ...s,
+      })) as Student[]));
+      const c = build();
+      c.ngOnInit();
+      return c;
+    };
+
+    it('copies deduped parent emails of the filtered rows (siblings share one)', async () => {
+      const c = seed([
+        { id: 's1', name: 'Kid One', contact_email: 'lee@x.com' },
+        { id: 's2', name: 'Kid Two', contact_email: 'LEE@x.com ' }, // sibling — dupe
+        { id: 's3', name: 'Solo', contact_email: 'roe@y.com' },
+        { id: 's4', name: 'NoMail' },
+      ]);
+      (c as any).copyParentEmails();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('lee@x.com, roe@y.com');
+      expect(snackBar.open).toHaveBeenCalledWith(
+        '2 parent emails copied (1 student without one)', undefined, { duration: 4000 });
+    });
+
+    it('respects the search filter (copies filteredData only)', async () => {
+      const c = seed([
+        { id: 's1', name: 'Pat', contact_name: 'Lee', contact_email: 'lee@x.com' },
+        { id: 's2', name: 'Sam', contact_name: 'Roe', contact_email: 'roe@y.com' },
+      ]);
+      c.applyFilter('roe');
+      (c as any).copyParentEmails();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('roe@y.com');
+    });
+
+    it('reports when nothing is copyable', () => {
+      const c = seed([{ id: 's1', name: 'NoMail' }]);
+      (c as any).copyParentEmails();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(snackBar.open).toHaveBeenCalledWith(
+        'No parent emails to copy in the current view.', undefined, { duration: 4000 });
+    });
+
+    it('reports a clipboard failure', async () => {
+      writeText.mockRejectedValue(new Error('denied'));
+      const c = seed([{ id: 's1', name: 'Pat', contact_email: 'lee@x.com' }]);
+      (c as any).copyParentEmails();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(snackBar.open).toHaveBeenCalledWith(
+        'Could not copy to the clipboard.', undefined, { duration: 4000 });
+    });
   });
 
   describe('monthly history', () => {

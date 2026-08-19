@@ -46,4 +46,6 @@ export class Student {
   available_minutes?: number;
   /** Family display name — present only on `?include=contact_name` listings (read-only). */
   contact_name?: string;
+  /** Family email — present only on `?include=contact_name` listings (read-only). */
+  contact_email?: string;
 }
