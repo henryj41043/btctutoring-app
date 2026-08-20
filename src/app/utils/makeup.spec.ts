@@ -3,7 +3,8 @@ import {
   bankMakeupMinutes,
   consumeMakeupMinutes,
   pruneExpiredBatches,
-, unexpiredBatchViews} from './makeup';
+  unexpiredBatchViews,
+} from './makeup';
 import {Student} from '../models/student.model';
 
 const DAY = 24 * 60 * 60 * 1000;

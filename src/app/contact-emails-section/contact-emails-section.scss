@@ -1,0 +1,104 @@
+/* The host carries the page's .contact-section card classes; this file owns
+   the section's internals (the parent's scoped styles can't reach them). */
+:host {
+  display: block;
+}
+
+h2 {
+  margin: 0 0 18px;
+  padding-bottom: 10px;
+  font-size: 1.4rem;
+  color: var(--btc-ink);
+  border-bottom: 2px solid color-mix(in srgb, var(--btc-sky) 60%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Read-only filed correspondence: collapsed rows that expand in place */
+.email-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.email-entry {
+  border: 1px solid color-mix(in srgb, var(--btc-sky) 45%, transparent);
+  border-radius: var(--btc-radius-sm);
+  overflow: hidden;
+
+  &.email-entry--open {
+    border-color: color-mix(in srgb, var(--btc-teal) 55%, transparent);
+  }
+}
+
+.email-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--btc-sky) 18%, transparent);
+  }
+
+  .email-date {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--btc-teal-deep);
+  }
+
+  .email-subject {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .email-from {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .email-chevron {
+    flex: 0 0 auto;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.email-body {
+  padding: 0 12px 12px;
+
+  .email-meta {
+    margin: 0 0 8px;
+    font-size: .85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .email-text {
+    margin: 0 0 10px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 20em;
+    overflow-y: auto;
+  }
+
+  .email-remove-button {
+    margin-left: 8px;
+    color: var(--mat-sys-error);
+  }
+}
