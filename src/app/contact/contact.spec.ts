@@ -22,9 +22,7 @@ import { StaffStatus } from '../enums/staff-status.enum';
 import { Package } from '../enums/package.enum';
 import { ScheduleService } from '../services/schedule.service';
 import { ReminderService } from '../services/reminder.service';
-import { Reminder } from '../models/reminder.model';
 import { EmailService } from '../services/email.service';
-import { EmailEntry } from '../models/email-entry.model';
 
 const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
   ({
@@ -77,8 +75,10 @@ describe('Contact', () => {
     getBillingRecordsByContact: jest.fn(),
     upsertBillingRecord: jest.fn(),
   };
-  const reminderService = { getReminders: jest.fn() };
-  const emailService = { getEmailsForContact: jest.fn(), getOriginalUrl: jest.fn() };
+  // The template's section child components inject these at construction —
+  // TestBed.createComponent instantiates children even without detectChanges.
+  const reminderService = { getReminders: jest.fn(() => of([])) };
+  const emailService = { getEmailsForContact: jest.fn(() => of([])), getOriginalUrl: jest.fn(() => of({ url: '' })) };
 
   const defaults = () => {
     contactService.getContact.mockReturnValue(of([fullContact()]));
@@ -90,9 +90,6 @@ describe('Contact', () => {
     contactService.updateContact.mockReturnValue(of({} as ContactModel));
     billingService.getBillingRecordsByContact.mockReturnValue(of([]));
     billingService.upsertBillingRecord.mockReturnValue(of({}));
-    reminderService.getReminders.mockReturnValue(of([]));
-    emailService.getEmailsForContact.mockReturnValue(of([]));
-    emailService.getOriginalUrl.mockReturnValue(of({ url: 'https://signed' }));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -1619,135 +1616,4 @@ describe('Contact', () => {
     });
   });
 
-  describe('outstanding reminders', () => {
-    const outstanding = (c: Contact): Reminder[] =>
-      (c as unknown as { outstandingReminders: Reminder[] }).outstandingReminders;
-
-    it('keeps only this contact\'s uncompleted reminders, date-ascending', () => {
-      reminderService.getReminders.mockReturnValue(of([
-        { id: 'r-later', contact_id: 'c-1', date: '2026-09-01', title: 'Later' },
-        { id: 'r-other', contact_id: 'c-2', date: '2026-08-01', title: 'Other contact' },
-        { id: 'r-done', contact_id: 'c-1', date: '2026-08-02', completed_at: '2026-08-02T12:00:00Z' },
-        { id: 'r-soon', contact_id: 'c-1', date: '2026-08-20', title: 'Soon' },
-        { id: 'r-dateless', contact_id: 'c-1', title: 'No date yet' },
-      ] as Reminder[]));
-      const c = build();
-      c.ngOnInit();
-      expect(outstanding(c).map(r => r.id)).toEqual(['r-dateless', 'r-soon', 'r-later']);
-    });
-
-    it('does not fetch reminders for non-admins', () => {
-      isAdmin = false;
-      const c = build();
-      c.ngOnInit();
-      expect(reminderService.getReminders).not.toHaveBeenCalled();
-      expect(outstanding(c)).toEqual([]);
-    });
-
-    it('swallows a reminders load error', () => {
-      reminderService.getReminders.mockReturnValue(throwError(() => new Error('x')));
-      const c = build();
-      expect(() => c.ngOnInit()).not.toThrow();
-      expect(outstanding(c)).toEqual([]);
-    });
-
-    it('navigates to the Reminders page on row click', () => {
-      const c = build();
-      c.goToReminders();
-      expect(router.navigate).toHaveBeenCalledWith(['/reminders']);
-    });
-  });
-
-  describe('contact emails', () => {
-    const emails = (c: Contact): EmailEntry[] =>
-      (c as unknown as { contactEmails: EmailEntry[] }).contactEmails;
-
-    const emailEntry: EmailEntry = {
-      id: 'hash-1',
-      subject: 'Schedule change',
-      from_email: 'jane@example.com',
-      body_text: 'Can we move to Friday?',
-    };
-
-    it('loads the filed emails for an admin', () => {
-      emailService.getEmailsForContact.mockReturnValue(of([emailEntry]));
-      const c = build();
-      c.ngOnInit();
-      expect(emailService.getEmailsForContact).toHaveBeenCalledWith('c-1');
-      expect(emails(c)).toEqual([emailEntry]);
-    });
-
-    it('does not fetch emails for non-admins', () => {
-      isAdmin = false;
-      const c = build();
-      c.ngOnInit();
-      expect(emailService.getEmailsForContact).not.toHaveBeenCalled();
-      expect(emails(c)).toEqual([]);
-    });
-
-    it('swallows an emails load error', () => {
-      emailService.getEmailsForContact.mockReturnValue(throwError(() => new Error('x')));
-      const c = build();
-      expect(() => c.ngOnInit()).not.toThrow();
-      expect(emails(c)).toEqual([]);
-    });
-
-    it('toggles a row open and closed', () => {
-      const c = build();
-      c.toggleEmail(emailEntry);
-      expect((c as unknown as { expandedEmailId: string | null }).expandedEmailId).toBe('hash-1');
-      c.toggleEmail(emailEntry);
-      expect((c as unknown as { expandedEmailId: string | null }).expandedEmailId).toBeNull();
-      c.toggleEmail({ ...emailEntry, id: undefined });
-      expect((c as unknown as { expandedEmailId: string | null }).expandedEmailId).toBeNull();
-    });
-
-    it('view original opens the presigned url in a new tab', () => {
-      const open = jest.spyOn(window, 'open').mockImplementation(() => null);
-      const c = build();
-      const event = { stopPropagation: jest.fn() } as unknown as Event;
-      c.viewOriginalEmail(emailEntry, event);
-      expect(event.stopPropagation).toHaveBeenCalled();
-      expect(emailService.getOriginalUrl).toHaveBeenCalledWith('hash-1');
-      expect(open).toHaveBeenCalledWith('https://signed', '_blank');
-      open.mockRestore();
-    });
-
-    it('remove opens the discard dialog and reloads the section on confirm', () => {
-      afterClosed = true;
-      const c = build();
-      c.ngOnInit();
-      emailService.getEmailsForContact.mockClear();
-      const event = { stopPropagation: jest.fn() } as unknown as Event;
-      c.removeEmail(emailEntry, event);
-      expect(event.stopPropagation).toHaveBeenCalled();
-      expect(dialog.open).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ data: expect.objectContaining({ mode: 'discard', entry: emailEntry }) }),
-      );
-      expect(emailService.getEmailsForContact).toHaveBeenCalledWith('c-1');
-    });
-
-    it('a cancelled remove dialog does not reload', () => {
-      afterClosed = false;
-      const c = build();
-      c.ngOnInit();
-      emailService.getEmailsForContact.mockClear();
-      c.removeEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event);
-      expect(emailService.getEmailsForContact).not.toHaveBeenCalled();
-    });
-
-    it('view original is a no-op without an id and swallows errors', () => {
-      const open = jest.spyOn(window, 'open').mockImplementation(() => null);
-      const c = build();
-      c.viewOriginalEmail({ ...emailEntry, id: undefined }, { stopPropagation: jest.fn() } as unknown as Event);
-      expect(emailService.getOriginalUrl).not.toHaveBeenCalled();
-      emailService.getOriginalUrl.mockReturnValue(throwError(() => new Error('x')));
-      expect(() =>
-        c.viewOriginalEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event),
-      ).not.toThrow();
-      expect(open).not.toHaveBeenCalled();
-      open.mockRestore();
-    });
-  });
 });

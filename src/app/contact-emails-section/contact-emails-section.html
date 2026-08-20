@@ -1,0 +1,29 @@
+<h2>Emails</h2>
+<div class="email-list">
+  @for (entry of contactEmails; track entry.id) {
+    <div class="email-entry" [class.email-entry--open]="expandedEmailId === entry.id">
+      <button type="button" class="email-row" (click)="toggleEmail(entry)">
+        <span class="email-date">{{(entry.sent_at ?? entry.received_at) | date:'mediumDate'}}</span>
+        <span class="email-subject">{{entry.subject || '(no subject)'}}</span>
+        <span class="email-from">{{entry.from_name || entry.from_email || '—'}}</span>
+        <mat-icon class="email-chevron">{{expandedEmailId === entry.id ? 'expand_less' : 'expand_more'}}</mat-icon>
+      </button>
+      @if (expandedEmailId === entry.id) {
+        <div class="email-body">
+          @if (entry.from_email) {
+            <p class="email-meta">From {{entry.from_name ? entry.from_name + ' <' + entry.from_email + '>' : entry.from_email}}</p>
+          }
+          <p class="email-text">{{entry.body_text || '(no text captured — use View original)'}}</p>
+          <button matButton type="button" (click)="viewOriginalEmail(entry, $event)">
+            <mat-icon>open_in_new</mat-icon>
+            View original
+          </button>
+          <button matButton type="button" class="email-remove-button" (click)="removeEmail(entry, $event)">
+            <mat-icon>delete</mat-icon>
+            Remove
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

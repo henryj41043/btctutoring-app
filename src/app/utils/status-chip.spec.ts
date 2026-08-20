@@ -35,3 +35,4 @@ describe('contactStatusChipClass', () => {
     expect(contactStatusChipClass('Something Else')).toBe('');
     expect(contactStatusChipClass(undefined)).toBe('');
   });
+});

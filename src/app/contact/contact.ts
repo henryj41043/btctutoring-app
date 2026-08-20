@@ -4,7 +4,6 @@ import {ContactService} from '../services/contact.service';
 import {catchError, EMPTY, forkJoin, of, switchMap} from 'rxjs';
 import {FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Contact as _Contact} from '../models/contact.model';
-import {AvailabilityBlock} from '../models/availability-block.model';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {PhoneFormatDirective} from '../directives/phone-format.directive';
 import {phoneValidator} from '../utils/phone.util';
@@ -48,18 +47,16 @@ import {StudentDialog, StudentDialogMode, StudentDialogResult} from '../student-
 import {TrialSessionDialog} from '../trial-session-dialog/trial-session-dialog';
 import {BillingService} from '../services/billing.service';
 import {BillingRecord} from '../models/billing-record.model';
-import {studentMonthlyCharge, studentSemiMonthlyCharge, siblingDiscountedTotal} from '../utils/billing-amount';
-import {round2} from '../utils/package-config';
+import {currentPeriodAmounts, recomputedBillingRecords} from '../utils/billing-recompute';
+import {minNoteOrder, noteDateIso, noteGroup, sortNotes} from '../utils/note-forms';
+import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-forms';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
 import {studentStatusChipClass} from '../utils/status-chip';
 import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
-import {ReminderService} from '../services/reminder.service';
-import {Reminder} from '../models/reminder.model';
-import {EmailService} from '../services/email.service';
-import {EmailEntry} from '../models/email-entry.model';
-import {AssignEmailDialog} from '../assign-email-dialog/assign-email-dialog';
+import {ContactRemindersSection} from '../contact-reminders-section/contact-reminders-section';
+import {ContactEmailsSection} from '../contact-emails-section/contact-emails-section';
 import {Router} from '@angular/router';
 
 @Component({
@@ -84,6 +81,8 @@ import {Router} from '@angular/router';
     MatSortModule,
     MatPaginatorModule,
     PhoneFormatDirective,
+    ContactRemindersSection,
+    ContactEmailsSection,
   ],
   templateUrl: './contact.html',
   styleUrl: './contact.scss',
@@ -103,8 +102,6 @@ export class Contact implements OnInit {
   private dialog: MatDialog = inject(MatDialog);
   private scheduleService: ScheduleService = inject(ScheduleService);
   private billingService: BillingService = inject(BillingService);
-  private reminderService: ReminderService = inject(ReminderService);
-  private emailService: EmailService = inject(EmailService);
   private router: Router = inject(Router);
 
   @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
@@ -212,22 +209,14 @@ export class Contact implements OnInit {
   protected students: Student[] = [];
   protected rosterDataSource = new MatTableDataSource<Student>([]);
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
-  // Reminders linked to this contact that aren't done yet (admin-only — the
-  // reminders endpoint itself is admin-gated, so this stays empty otherwise).
-  protected outstandingReminders: Reminder[] = [];
-  // Forwarded parent emails filed on this contact (admin-only, read-only).
-  protected contactEmails: EmailEntry[] = [];
-  /** The email entry whose full body is expanded. */
-  protected expandedEmailId: string | null = null;
-
   ngOnInit() {
     this.loadContact();
     // Family students are an admin view — tutors only ever see their own
-    // (Hiring) page, where the roster loads via loadContact instead.
+    // (Hiring) page, where the roster loads via loadContact instead. The
+    // Outstanding Reminders and Emails sections are child components that
+    // load (and admin-gate) themselves.
     if (this.authService.isAdmin()) {
       this.loadStudents();
-      this.loadOutstandingReminders();
-      this.loadContactEmails();
     } else {
       this.studentsLoading = false;
     }
@@ -247,77 +236,6 @@ export class Contact implements OnInit {
       // students who are no longer active stay off it.
       this.rosterDataSource.data = students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT);
       this.cdr.markForCheck();
-    });
-  }
-
-  /** Outstanding = not completed; a sent-but-unfinished reminder still shows
-   *  (same semantics as the Reminders page's default view). */
-  private loadOutstandingReminders() {
-    this.reminderService.getReminders().pipe(
-      catchError(error => {
-        console.log(error);
-        return EMPTY;
-      }),
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe(reminders => {
-      this.outstandingReminders = reminders
-        .filter(r => r.contact_id === this.id && !r.completed_at)
-        .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
-      this.cdr.markForCheck();
-    });
-  }
-
-  goToReminders(): void {
-    void this.router.navigate(['/reminders']);
-  }
-
-  /** Emails the pipeline filed on this contact, already newest-first. */
-  private loadContactEmails() {
-    this.emailService.getEmailsForContact(this.id).pipe(
-      catchError(error => {
-        console.log(error);
-        return EMPTY;
-      }),
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe(emails => {
-      this.contactEmails = emails;
-      this.cdr.markForCheck();
-    });
-  }
-
-  toggleEmail(entry: EmailEntry): void {
-    this.expandedEmailId = this.expandedEmailId === entry.id ? null : (entry.id ?? null);
-    this.cdr.markForCheck();
-  }
-
-  /** Removes a filed email from this contact (discard — it can't resurface). */
-  removeEmail(entry: EmailEntry, event: Event): void {
-    event.stopPropagation();
-    const ref = this.dialog.open(AssignEmailDialog, {
-      data: {mode: 'discard', entry, contacts: []},
-      width: '440px',
-    });
-    ref.afterClosed().subscribe(result => {
-      if (result) {
-        this.loadContactEmails();
-      }
-    });
-  }
-
-  /** Opens the raw original via a short-lived presigned link (fetched on click). */
-  viewOriginalEmail(entry: EmailEntry, event: Event): void {
-    event.stopPropagation();
-    if (!entry.id) {
-      return;
-    }
-    this.emailService.getOriginalUrl(entry.id).pipe(
-      catchError(error => {
-        console.log(error);
-        return EMPTY;
-      }),
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe(({url}) => {
-      window.open(url, '_blank');
     });
   }
 
@@ -380,42 +298,20 @@ export class Contact implements OnInit {
   protected readonly weekdayOptions: Weekday[] = Object.values(Weekday);
   protected readonly weekdayLabels = WEEKDAY_LABELS;
   /** 30-min increments from 6:00 AM to 9:00 PM as { value: 'HH:mm', label: '1:00 PM' }. */
-  protected readonly timeOptions: { value: string; label: string }[] = this.buildTimeOptions();
+  protected readonly timeOptions: { value: string; label: string }[] = buildTimeOptions();
 
   get availabilityBlocks(): FormArray {
     return this.contactForm.controls['availability'] as FormArray;
   }
 
-  private createAvailabilityGroup(block?: AvailabilityBlock): FormGroup {
-    return this.formBuilder.group({
-      days: [block?.days ?? [], Validators.required],
-      start_time: [block?.start_time ?? '', Validators.required],
-      end_time: [block?.end_time ?? '', Validators.required],
-    });
-  }
-
   addAvailabilityBlock(): void {
-    this.availabilityBlocks.push(this.createAvailabilityGroup());
+    this.availabilityBlocks.push(createAvailabilityGroup(this.formBuilder));
     this.contactForm.markAsDirty();
   }
 
   removeAvailabilityBlockAt(index: number): void {
     this.availabilityBlocks.removeAt(index);
     this.contactForm.markAsDirty();
-  }
-
-  private buildTimeOptions(): { value: string; label: string }[] {
-    const options: { value: string; label: string }[] = [];
-    for (let minutes = 6 * 60; minutes <= 21 * 60; minutes += 30) {
-      const h24 = Math.floor(minutes / 60);
-      const m = minutes % 60;
-      const value = `${h24.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      const period = h24 < 12 ? 'AM' : 'PM';
-      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-      const label = `${h12}:${m.toString().padStart(2, '0')} ${period}`;
-      options.push({ value, label });
-    }
-    return options;
   }
 
   private loadContact() {
@@ -482,7 +378,7 @@ export class Contact implements OnInit {
     this.contactForm.controls['is_tutor'].setValue(contact.is_tutor !== false);
     this.availabilityBlocks.clear();
     (contact.availability ?? []).forEach(block =>
-      this.availabilityBlocks.push(this.createAvailabilityGroup(block)),
+      this.availabilityBlocks.push(createAvailabilityGroup(this.formBuilder, block)),
     );
     this.contactForm.controls['zoom_link'].setValue(contact.zoom_link);
     this.contactForm.controls['hourly_rate'].setValue(contact.hourly_rate);
@@ -546,54 +442,13 @@ export class Contact implements OnInit {
   }
 
   private buildNotesFormArray(notes: Note[]) {
-    this.sortNotes(notes).forEach(note => this.notes.push(this.noteGroup(note)));
+    sortNotes(notes).forEach(note => this.notes.push(noteGroup(this.formBuilder, note)));
     this.notes.updateValueAndValidity();
-  }
-
-  /** A note card's form group. date_time is held as a Date for the pickers. */
-  private noteGroup(note: Note): FormGroup {
-    return this.formBuilder.group({
-      id: [note.id, Validators.required],
-      message: note.message,
-      date_time: this.noteDate(note.date_time),
-      author: note.author,
-      author_id: note.author_id,
-      recipient: note.recipient,
-      recipient_id: note.recipient_id,
-      type: note.type ?? '',
-      order: note.order ?? null,
-    });
-  }
-
-  /** Manual order when every note has one; otherwise newest-first by date. */
-  private sortNotes(notes: Note[]): Note[] {
-    const manual = notes.length > 0 && notes.every(n => n.order != null);
-    return [...notes].sort(manual
-      ? (a, b) => (a.order! - b.order!)
-      : (a, b) => new Date(b.date_time ?? 0).getTime() - new Date(a.date_time ?? 0).getTime());
-  }
-
-  private noteDate(value?: string): Date | null {
-    return value ? new Date(value) : null;
-  }
-
-  /** Serializes the date_time control (a Date) back to an ISO string for the API. */
-  private noteDateIso(value: unknown): string {
-    if (value instanceof Date) return value.toISOString();
-    if (typeof value === 'string' && value) return value;
-    return new Date().toISOString();
   }
 
   /** True once every note carries a manual order (i.e. the user has dragged). */
   get notesHaveManualOrder(): boolean {
     return this.notes.length > 0 && this.notes.controls.every(c => c.get('order')?.value != null);
-  }
-
-  private minNoteOrder(): number {
-    const orders = this.notes.controls
-      .map(c => c.get('order')?.value as number)
-      .filter(o => o != null);
-    return orders.length ? Math.min(...orders) : 0;
   }
 
   setNotesEditIndex(index: number) {
@@ -767,30 +622,9 @@ export class Contact implements OnInit {
     const year = now.getFullYear();
     const month = now.getMonth();
     const enrolled = this.students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT && !!s.package);
-    if (enrolled.length === 0) {
+    const computed = currentPeriodAmounts(contact, enrolled, year, month);
+    if (!computed) {
       return;
-    }
-    const semi =
-      contact.billing_cycle === BillingCycle.SEMI_MONTHLY ||
-      (contact.billing_cycle as string) === 'biweekly';
-    const cycle = semi ? BillingCycle.SEMI_MONTHLY : BillingCycle.MONTHLY;
-    const pct = contact.sibling_discount;
-    const count = enrolled.length;
-
-    const amounts: {day: number; amount: number}[] = [];
-    if (semi) {
-      let first = 0;
-      let fifteenth = 0;
-      for (const s of enrolled) {
-        const charge = studentSemiMonthlyCharge(s, year, month);
-        first += charge.first;
-        fifteenth += charge.fifteenth;
-      }
-      amounts.push({day: 1, amount: siblingDiscountedTotal(round2(first), pct, count)});
-      amounts.push({day: 15, amount: siblingDiscountedTotal(round2(fifteenth), pct, count)});
-    } else {
-      const total = round2(enrolled.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
-      amounts.push({day: 1, amount: siblingDiscountedTotal(total, pct, count)});
     }
 
     this.billingService.getBillingRecordsByContact(contact.id).pipe(
@@ -799,22 +633,7 @@ export class Contact implements OnInit {
         return of([] as BillingRecord[]);
       })
     ).subscribe(existing => {
-      const m = (month + 1).toString().padStart(2, '0');
-      for (const {day, amount} of amounts) {
-        const period = `${year}-${m}-${day.toString().padStart(2, '0')}`;
-        const prior = existing.find(r => r.period_start === period);
-        if (!prior) {
-          continue; // only adjust records that already exist
-        }
-        const record: BillingRecord = {
-          contact_id: contact.id!,
-          period_start: period,
-          cycle,
-          amount,
-          paid: prior.paid,
-          paid_date: prior.paid_date,
-          invoice_number: prior.invoice_number,
-        };
+      for (const record of recomputedBillingRecords(existing, contact.id!, computed, year, month)) {
         this.billingService.upsertBillingRecord(record).pipe(
           catchError(error => {
             console.log(error);
@@ -878,7 +697,7 @@ export class Contact implements OnInit {
   saveNoteAt(index: number) {
     const group = this.notes.controls.at(index)!;
     const raw = group.getRawValue() as Record<string, unknown>;
-    const noteToSave: Note = {...raw, date_time: this.noteDateIso(raw['date_time'])} as Note;
+    const noteToSave: Note = {...raw, date_time: noteDateIso(raw['date_time'])} as Note;
     // Empty notes are never persisted — they'd render as blank cards forever.
     if (!(noteToSave.message ?? '').trim()) {
       this.noteEmptyError = true;
@@ -890,7 +709,7 @@ export class Contact implements OnInit {
     // snaps the whole list back to newest-date-first — manual drag order is
     // a between-saves arrangement only (client decision 2026-08).
     const previousIso = this.noteEditSnapshot
-      ? this.noteDateIso(this.noteEditSnapshot['date_time'])
+      ? noteDateIso(this.noteEditSnapshot['date_time'])
       : null;
     const dateChanged = previousIso !== null && previousIso !== noteToSave.date_time;
     const isNew = this.newNoteIds.has(noteToSave.id!);
@@ -970,7 +789,7 @@ export class Contact implements OnInit {
   private persistNoteOrder(): void {
     this.notes.controls.forEach(control => {
       const raw = control.getRawValue() as Record<string, unknown>;
-      const note: Note = {...raw, date_time: this.noteDateIso(raw['date_time'])} as Note;
+      const note: Note = {...raw, date_time: noteDateIso(raw['date_time'])} as Note;
       if (this.newNoteIds.has(note.id!)) {
         // An unsaved local note must never be PUT — it doesn't exist server-side.
         return;
@@ -994,7 +813,9 @@ export class Contact implements OnInit {
     const recipientId = this.contactForm.controls['id'].value;
     // In manual-order mode a new note goes to the top (lowest order); otherwise
     // its default "now" date_time already sorts it to the top.
-    const order = this.notesHaveManualOrder ? this.minNoteOrder() - 1 : undefined;
+    const order = this.notesHaveManualOrder
+      ? minNoteOrder(this.notes.controls.map(c => c.get('order')?.value as number)) - 1
+      : undefined;
     const localId = `local-${crypto.randomUUID()}`;
     const note: Note = {
       id: localId,
@@ -1006,7 +827,7 @@ export class Contact implements OnInit {
       type: '',
       order,
     };
-    this.notes.insert(0, this.noteGroup(note));
+    this.notes.insert(0, noteGroup(this.formBuilder, note));
     this.notes.updateValueAndValidity();
     this.newNoteIds.add(localId);
     this.setNotesEditIndex(0);

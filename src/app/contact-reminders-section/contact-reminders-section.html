@@ -1,0 +1,21 @@
+<h2>
+  Outstanding Reminders
+  <button matIconButton type="button" (click)="goToReminders()"
+          matTooltip="Open Reminders" aria-label="Open Reminders page">
+    <mat-icon>open_in_new</mat-icon>
+  </button>
+</h2>
+<div class="reminder-list">
+  @for (reminder of outstandingReminders; track reminder.id) {
+    <button type="button" class="reminder-row" (click)="goToReminders()">
+      <span class="reminder-date">{{reminder.date | date:'mediumDate'}}</span>
+      @if (reminder.recurrence) {
+        <mat-icon class="reminder-repeat" [matTooltip]="'Repeats ' + reminder.recurrence">repeat</mat-icon>
+      }
+      <span class="reminder-title">{{reminder.title}}</span>
+      @if (reminder.due_date) {
+        <span class="reminder-due">due {{reminder.due_date | date:'mediumDate'}}</span>
+      }
+    </button>
+  }
+</div>
