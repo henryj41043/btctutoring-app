@@ -1,0 +1,17 @@
+<h2 mat-dialog-title>Add a note to {{data.count}} contact{{data.count === 1 ? '' : 's'}}</h2>
+<mat-dialog-content>
+  <p class="batch-note-hint">
+    The same note will be added to every contact currently shown
+    (all filters applied), authored by you.
+  </p>
+  <mat-form-field appearance="outline" class="batch-note-field">
+    <mat-label>Note</mat-label>
+    <textarea matInput rows="5" [(ngModel)]="message" name="message"></textarea>
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button matButton type="button" (click)="cancel()">Cancel</button>
+  <button mat-raised-button color="primary" type="button" [disabled]="!trimmed" (click)="save()">
+    Add to {{data.count}} contact{{data.count === 1 ? '' : 's'}}
+  </button>
+</mat-dialog-actions>
