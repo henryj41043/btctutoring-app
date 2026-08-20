@@ -72,6 +72,11 @@
           }
         </mat-select>
       </mat-form-field>
+      <mat-form-field>
+        <mat-label>Note (optional)</mat-label>
+        <textarea matInput rows="2" formControlName="note"></textarea>
+        <mat-hint>Shown only on the Reminders page</mat-hint>
+      </mat-form-field>
       <p class="reminder-hint">Recipients get an email the morning of the reminder's date (~9am ET). Repeating reminders roll to their next date after each send.</p>
     </form>
   }

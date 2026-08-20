@@ -128,6 +128,30 @@ describe('ReminderDialog', () => {
     });
   });
 
+  describe('note field', () => {
+    it('trims and carries the note through create', () => {
+      reminderService.createReminder.mockReturnValue(of({ id: 'rem-9', message: 'ok' }));
+      const c = build({ mode: 'create' });
+      form(c).get('title').setValue('New reminder');
+      form(c).get('date').setValue(new Date(2026, 7, 15));
+      form(c).get('note').setValue('  waiting on parent  ');
+      c.save();
+      expect(reminderService.createReminder).toHaveBeenCalledWith(
+        expect.objectContaining({ note: 'waiting on parent' }),
+      );
+    });
+
+    it('prefills the stored note on edit and omits it when cleared', () => {
+      reminderService.updateReminder.mockReturnValue(of(existing));
+      const c = build({ mode: 'edit', reminder: { ...existing, note: 'call back' } });
+      expect(form(c).get('note').value).toBe('call back');
+      form(c).get('note').setValue('   ');
+      c.save();
+      const payload = reminderService.updateReminder.mock.calls[0][0];
+      expect(payload.note).toBeUndefined();
+    });
+  });
+
   describe('delete', () => {
     it('deletes by id and closes with true', () => {
       reminderService.deleteReminder.mockReturnValue(of({ id: 'rem-1', message: 'ok' }));

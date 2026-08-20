@@ -21,6 +21,22 @@
     text-overflow: ellipsis;
   }
 
+  .ack-cell {
+    white-space: nowrap;
+  }
+
+  .ack-chip {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--btc-teal-deep, #0b6e79);
+    color: #fff;
+    cursor: default;
+  }
+
   .contact-link {
     color: var(--btc-teal-deep, #0b6e79);
     text-decoration: underline;

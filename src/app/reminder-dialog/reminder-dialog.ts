@@ -73,6 +73,7 @@ export class ReminderDialog implements OnInit {
       recurrence: [reminder.recurrence ?? null],
       // Defaults to the acting admin; editing keeps the stored creator.
       created_by: [reminder.created_by ?? this.authService.contact().id ?? null],
+      note: [reminder.note ?? ''],
     });
   }
 
@@ -103,6 +104,7 @@ export class ReminderDialog implements OnInit {
       due_date: this.toDateString(raw.due_date),
       recurrence: raw.recurrence ?? undefined,
       created_by: raw.created_by ?? undefined,
+      note: (raw.note ?? '').trim() || undefined,
     };
     if (!reminder.all_admins && (reminder.recipient_ids ?? []).length === 0) {
       this.fail('Pick at least one admin, or select All admins.');
