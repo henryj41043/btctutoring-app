@@ -65,6 +65,19 @@ describe('ReminderService', () => {
     reopen.flush({ id: 'rem-1', message: 'ok' });
   });
 
+  it('acks and unacks a reminder via the dedicated routes', () => {
+    service.ackReminder('rem-1').subscribe();
+    const ack = httpMock.expectOne(`${base}/reminders/rem-1/ack`);
+    expect(ack.request.method).toBe('POST');
+    expect(ack.request.body).toEqual({});
+    ack.flush({ id: 'rem-1', message: 'ok' });
+
+    service.unackReminder('rem-1').subscribe();
+    const unack = httpMock.expectOne(`${base}/reminders/rem-1/unack`);
+    expect(unack.request.method).toBe('POST');
+    unack.flush({ id: 'rem-1', message: 'ok' });
+  });
+
   it('deletes a reminder', () => {
     service.deleteReminder('rem-1').subscribe();
     const req = httpMock.expectOne(`${base}/reminders/rem-1`);

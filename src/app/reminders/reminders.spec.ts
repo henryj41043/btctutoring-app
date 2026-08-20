@@ -7,6 +7,7 @@ import { MatPaginator } from '@angular/material/paginator';
 import { Reminders } from './reminders';
 import { ReminderService } from '../services/reminder.service';
 import { ContactService } from '../services/contact.service';
+import { AuthService } from '../services/auth.service';
 import { Reminder } from '../models/reminder.model';
 import { ReminderDialog } from '../reminder-dialog/reminder-dialog';
 
@@ -28,8 +29,9 @@ const tutorContact = { id: 't-1', first_name: 'Tess', last_name: 'Coach', user_g
 
 describe('Reminders', () => {
   let afterClosed: unknown;
-  const reminderService = { getReminders: jest.fn(), completeReminder: jest.fn(), uncompleteReminder: jest.fn() };
+  const reminderService = { getReminders: jest.fn(), completeReminder: jest.fn(), uncompleteReminder: jest.fn(), ackReminder: jest.fn(), unackReminder: jest.fn() };
   const contactService = { getContactsSummary: jest.fn() };
+  const authService = { contact: jest.fn(() => ({ id: 'a-1' })) };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
   const router = { navigate: jest.fn() };
 
@@ -39,6 +41,7 @@ describe('Reminders', () => {
       providers: [
         { provide: ReminderService, useValue: reminderService },
         { provide: ContactService, useValue: contactService },
+        { provide: AuthService, useValue: authService },
         { provide: MatDialog, useValue: dialog },
         { provide: Router, useValue: router },
       ],
@@ -253,6 +256,88 @@ describe('Reminders', () => {
     c.onToggleComplete(reminder());
     expect(reminderService.getReminders).not.toHaveBeenCalled();
     expect(data(c).length).toBe(before);
+  });
+
+  it('hasMyAck reflects only the signed-in admin', () => {
+    const c = build();
+    c.ngOnInit();
+    expect(c.hasMyAck(reminder({ acked_by: ['a-1', 't-1'] }))).toBe(true);
+    expect(c.hasMyAck(reminder({ acked_by: ['t-1'] }))).toBe(false);
+    expect(c.hasMyAck(reminder())).toBe(false);
+  });
+
+  it('ack checkbox acks an unacked reminder and reloads', () => {
+    reminderService.ackReminder.mockReturnValue(of({ id: 'rem-1' }));
+    const c = build();
+    c.ngOnInit();
+    reminderService.getReminders.mockClear();
+    c.onToggleAck(reminder());
+    expect(reminderService.ackReminder).toHaveBeenCalledWith('rem-1');
+    expect(reminderService.getReminders).toHaveBeenCalledTimes(1); // reload
+  });
+
+  it('ack checkbox withdraws an existing ack', () => {
+    reminderService.unackReminder.mockReturnValue(of({ id: 'rem-1' }));
+    const c = build();
+    c.ngOnInit();
+    c.onToggleAck(reminder({ acked_by: ['a-1'] }));
+    expect(reminderService.unackReminder).toHaveBeenCalledWith('rem-1');
+    expect(reminderService.ackReminder).not.toHaveBeenCalled();
+  });
+
+  it('a failed ack toggle leaves the table intact', () => {
+    reminderService.ackReminder.mockReturnValue(throwError(() => new Error('x')));
+    const c = build();
+    c.ngOnInit();
+    reminderService.getReminders.mockClear();
+    c.onToggleAck(reminder());
+    expect(reminderService.getReminders).not.toHaveBeenCalled();
+  });
+
+  it('handles a signed-in admin without a contact id', () => {
+    authService.contact.mockReturnValueOnce({} as { id: string });
+    const c = build();
+    c.ngOnInit();
+    expect(c.hasMyAck(reminder({ acked_by: ['a-1'] }))).toBe(false);
+  });
+
+  it('renders ack chips with initials and full-name tooltips', () => {
+    const c = build();
+    c.ngOnInit();
+    expect(c.ackChips(reminder({ acked_by: ['a-1', 't-1'] }))).toEqual([
+      { initials: 'AA', name: 'Amy Adams' },
+      { initials: 'TC', name: 'Tess Coach' },
+    ]);
+    expect(c.ackChips(reminder())).toEqual([]);
+  });
+
+  it('ack chips degrade for unknown, single-token, and blank names', () => {
+    contactService.getContactsSummary.mockReturnValue(of([
+      adminContact,
+      { id: 'a-4', user_group: 'Admins', first_name: 'Cher' },
+      { id: 'a-5', user_group: 'Admins', email: 'x@y.z' },
+    ]));
+    const c = build();
+    c.ngOnInit();
+    expect(c.ackChips(reminder({ acked_by: ['ghost'] })))
+      .toEqual([{ initials: '?', name: 'Unknown admin' }]);
+    expect(c.ackChips(reminder({ acked_by: ['a-4'] })))
+      .toEqual([{ initials: 'CH', name: 'Cher' }]);
+    // Email-fallback display names take first-two-chars initials too.
+    expect(c.ackChips(reminder({ acked_by: ['a-5'] })))
+      .toEqual([{ initials: 'X@', name: 'x@y.z' }]);
+  });
+
+  it('filters match the note text', () => {
+    reminderService.getReminders.mockReturnValue(of([
+      reminder({ note: 'waiting on parent' }),
+      reminder({ id: 'rem-2', title: 'Other', message: 'Different' }),
+    ]));
+    const c = build();
+    c.ngOnInit();
+    const ds = (c as unknown as { dataSource: { filteredData: Reminder[] } }).dataSource;
+    c.applyFilter('waiting');
+    expect(ds.filteredData.map(r => r.id)).toEqual(['rem-1']);
   });
 
   it('createdByName resolves the admin, blank otherwise', () => {

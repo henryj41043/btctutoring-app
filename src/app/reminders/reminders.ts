@@ -18,6 +18,7 @@ import {Router} from '@angular/router';
 import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {ReminderService} from '../services/reminder.service';
 import {ContactService} from '../services/contact.service';
+import {AuthService} from '../services/auth.service';
 import {Reminder} from '../models/reminder.model';
 import {Contact} from '../models/contact.model';
 import {UserGroup} from '../enums/user-group.enum';
@@ -55,6 +56,7 @@ import {contactDisplayName} from '../utils/contact-name';
 export class Reminders implements OnInit {
   private reminderService: ReminderService = inject(ReminderService);
   private contactService: ContactService = inject(ContactService);
+  private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   // Cancels in-flight HTTP work when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
@@ -76,7 +78,7 @@ export class Reminders implements OnInit {
     }
   }
 
-  protected columns: string[] = ['done', 'date', 'due_date', 'title', 'message', 'recipients', 'created_by', 'contact', 'sent', 'actions'];
+  protected columns: string[] = ['done', 'ack', 'date', 'due_date', 'title', 'message', 'note', 'recipients', 'created_by', 'contact', 'sent', 'actions'];
   protected dataSource = new MatTableDataSource<Reminder>([]);
   protected loading: boolean = true;
   protected showCompleted: boolean = false;
@@ -97,7 +99,7 @@ export class Reminders implements OnInit {
       this.showCompleted = saved.extra['showCompleted'];
     }
     this.dataSource.filterPredicate = (reminder, filter) => {
-      const haystack = [reminder.title, reminder.message, this.recipientNames(reminder), this.contactName(reminder), this.createdByName(reminder)]
+      const haystack = [reminder.title, reminder.message, reminder.note, this.recipientNames(reminder), this.contactName(reminder), this.createdByName(reminder)]
         .join(' ')
         .toLowerCase();
       return haystack.includes(filter);
@@ -162,6 +164,47 @@ export class Reminders implements OnInit {
       catchError(error => { console.log(error); return EMPTY; }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(() => this.reload());
+  }
+
+  /** The signed-in admin's contact id — the only ack they can toggle. */
+  private get myContactId(): string {
+    return this.authService.contact().id ?? '';
+  }
+
+  /** Whether the signed-in admin has acked this reminder. */
+  hasMyAck(reminder: Reminder): boolean {
+    return (reminder.acked_by ?? []).includes(this.myContactId);
+  }
+
+  /** Toggles the signed-in admin's own ack (the backend pins it to the JWT). */
+  onToggleAck(reminder: Reminder): void {
+    const request$ = this.hasMyAck(reminder)
+      ? this.reminderService.unackReminder(reminder.id!)
+      : this.reminderService.ackReminder(reminder.id!);
+    request$.pipe(
+      catchError(error => { console.log(error); return EMPTY; }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(() => this.reload());
+  }
+
+  /** Initials chips for everyone who has acked, with full names for tooltips. */
+  ackChips(reminder: Reminder): {initials: string; name: string}[] {
+    return (reminder.acked_by ?? []).map(id => {
+      const name = this.contactNamesById.get(id) ?? '';
+      return {initials: this.initialsOf(name), name: name || 'Unknown admin'};
+    });
+  }
+
+  /** 'Melissa Barto' → 'MB'; single-token fallback takes the first two chars. */
+  private initialsOf(name: string): string {
+    const parts = name.trim().split(/\s+/).filter(part => !!part);
+    if (parts.length === 0) {
+      return '?';
+    }
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
   /** The creating admin's display name, or empty when unset/unknown. */

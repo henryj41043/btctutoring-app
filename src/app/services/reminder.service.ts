@@ -32,6 +32,15 @@ export class ReminderService {
     return this.httpClient.post<Response>(`${this.baseUrl}/reminders/${id}/uncomplete`, {});
   }
 
+  /** Records the caller's own ack (the backend pins it to their JWT contact). */
+  ackReminder(id: string): Observable<Response> {
+    return this.httpClient.post<Response>(`${this.baseUrl}/reminders/${id}/ack`, {});
+  }
+
+  unackReminder(id: string): Observable<Response> {
+    return this.httpClient.post<Response>(`${this.baseUrl}/reminders/${id}/unack`, {});
+  }
+
   deleteReminder(id: string): Observable<Response> {
     return this.httpClient.delete<Response>(`${this.baseUrl}/reminders/${id}`);
   }
