@@ -13,7 +13,7 @@
   @if (dialogData.type !== 'delete') {
     <mat-form-field>
       <mat-label>Session Type</mat-label>
-      <mat-select [(ngModel)]="selectedType" [disabled]="isReadOnly">
+      <mat-select [(ngModel)]="selectedType" [disabled]="isReadOnly || isMakeupLocked">
         @for (type of sessionTypeOptions; track type) {
           <mat-option [value]="type">{{typeLabels[type]}}</mat-option>
         }
@@ -38,7 +38,7 @@
     <mat-form-field>
       <!-- Admin time is loggable by any staff member; tutoring/make-up only by tutors. -->
       <mat-label>{{selectedType === SessionType.ADMIN ? 'Select Staff' : 'Select Tutor'}}</mat-label>
-      <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)">
+      <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)" [disabled]="isMakeupLocked">
         @for (tutor of tutors; track tutor) {
           <mat-option [value]="tutor.id">{{tutor.first_name}}</mat-option>
         }

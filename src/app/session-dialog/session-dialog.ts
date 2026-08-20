@@ -85,6 +85,12 @@ export class SessionDialog implements OnInit {
   // by accepting tutors.
   private allStaff: Contact[] = [];
   get tutors(): Contact[] {
+    // Locked self-service mode: only the tutor themselves — even when they're
+    // at capacity (not currently accepting), their own name must render.
+    if (this.isMakeupLocked) {
+      const ownId = this.authService.contact().id;
+      return this.allStaff.filter(c => c.id === ownId);
+    }
     if (this.selectedType === SessionType.ADMIN) {
       return this.allStaff;
     }
@@ -176,6 +182,12 @@ export class SessionDialog implements OnInit {
     return this.dialogData.type === 'view';
   }
 
+  /** Tutor self-service create: type + tutor are pinned (make-up, self). */
+  get isMakeupLocked(): boolean {
+    // Optional-chained: some unit specs drive getters on a bare instance.
+    return !!this.dialogData?.lockToMakeup;
+  }
+
   private get sessionDurationMinutes(): number {
     if (!this.startTime || !this.endTime) return 0;
     return Math.round((this.endTime.getTime() - this.startTime.getTime()) / 60000);
@@ -248,6 +260,13 @@ export class SessionDialog implements OnInit {
   }
 
   ngOnInit(): void {
+    if (this.dialogData.type === 'create' && this.isMakeupLocked) {
+      // Tutor self-service: make-up only, assigned to themselves. Set BEFORE
+      // getStudents so the caseload pre-filter sees the selected tutor.
+      this.selectedType = SessionType.MAKE_UP;
+      this.sessionTypeOptions = [SessionType.MAKE_UP];
+      this.selectedTutor = this.authService.contact().id;
+    }
     if(this.dialogData.type !== 'create') {
       this.selectedType = this.dialogData.session.type ?? SessionType.TUTORING;
       if (this.selectedType === SessionType.TRIAL) {

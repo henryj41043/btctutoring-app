@@ -23,7 +23,9 @@
              (input)="applyFilter(calSearch.value)">
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
-    @if (authService.loggedIn() && authService.isAdmin()) {
+    <!-- Admins create any session; tutors get the same button locked to
+         their own make-ups (they do their own make-up scheduling). -->
+    @if (authService.loggedIn()) {
       <button mat-raised-button color="primary" (click)="openCreateSessionDialog()" class="cal-add-btn">
         <mat-icon>add</mat-icon>
         Add Session
