@@ -37,6 +37,14 @@ import {ScheduleService} from '../services/schedule.service';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
 import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {
+  combineDateTime,
+  durationMinutes,
+  futureSeriesTargets,
+  retimeSeriesOccurrences,
+  scheduleFieldsUnchanged,
+} from '../utils/session-times';
+import {mutatesStudent, validateMakeupPendingBalance, validateSessionLength} from '../utils/session-rules';
 
 @Component({
   selector: 'app-session-dialog',
@@ -208,75 +216,32 @@ export class SessionDialog implements OnInit {
       && this.selectedAttendance === SessionStatus.COMPLETED;
   }
 
+  /** Duration of the currently-entered time range (validation + banking live in utils). */
   private get sessionDurationMinutes(): number {
-    if (!this.startTime || !this.endTime) return 0;
-    return Math.round((this.endTime.getTime() - this.startTime.getTime()) / 60000);
+    return durationMinutes(this.startTime, this.endTime);
   }
 
-  /**
-   * Returns an error if a tutoring session's duration exceeds the length the
-   * student's package allows per session. Only applies to TUTORING sessions with
-   * a configured package; ADMIN/MAKE_UP and unconfigured packages aren't
-   * constrained (make-up is already bounded by the make-up minutes bank).
-   */
-  private validateSessionLength(durationMinutes: number): string | null {
-    // Trials are fixed-length by policy.
-    if (this.selectedType === SessionType.TRIAL) {
-      return durationMinutes === 45
-        ? null
-        : 'Trial sessions are always exactly 45 minutes.';
-    }
-    if (this.selectedType !== SessionType.TUTORING) return null;
-    const def = this.selectedPackageDef;
-    if (!def) return null;
-    if (durationMinutes > def.sessionLengthMin) {
-      const student = this.selectedStudentObj;
-      return `This session is ${durationMinutes} min, but ${student?.name ?? 'this student'}'s `
-        + `${student?.package} package allows up to ${def.sessionLengthMin} min per session.`;
-    }
-    return null;
-  }
-
-  /** Duration in minutes of a persisted session from its start/end datetimes. */
-  private durationOf(session: Session): number {
-    if (!session.start_datetime || !session.end_datetime) return 0;
-    return Math.round(
-      (new Date(session.end_datetime).getTime() - new Date(session.start_datetime).getTime()) / 60000,
+  /** The length-rule error for the entered range, from the pure rules util. */
+  private lengthError(): string | null {
+    return validateSessionLength(
+      this.selectedType,
+      this.sessionDurationMinutes,
+      this.selectedPackageDef,
+      this.selectedStudentObj,
     );
   }
 
-  /**
-   * Total existing PENDING make-up minutes already committed for a student,
-   * excluding any session ids handled by the current operation.
-   */
-  private pendingMakeupMinutesFor(studentId: string | undefined, excludeIds: Set<string>): number {
-    const existing = this.dialogData.existingSessions ?? [];
-    return existing
-      .filter(s =>
-        s.student_id === studentId &&
-        s.type === SessionType.MAKE_UP &&
-        s.status === SessionStatus.PENDING &&
-        !excludeIds.has(s.id ?? ''),
-      )
-      .reduce((sum, s) => sum + this.durationOf(s), 0);
-  }
-
-  /**
-   * Validates that a student's total pending make-up minutes stay within their
-   * make-up balance after adding `addMinutes`. Returns an error message or null.
-   */
-  private validateMakeupPendingBalance(
+  /** The pending-balance error for a make-up commit, from the pure rules util. */
+  private makeupBalanceError(
     student: Student,
-    addMinutes: number,
     excludeIds: Set<string> = new Set(),
   ): string | null {
-    const balance = availableMakeupMinutes(student);
-    const projected = this.pendingMakeupMinutesFor(student.id, excludeIds) + addMinutes;
-    if (projected > balance) {
-      return `Not enough make-up minutes. ${student.name} has ${balance} min `
-        + `but this would commit ${projected} pending min.`;
-    }
-    return null;
+    return validateMakeupPendingBalance(
+      student,
+      this.sessionDurationMinutes,
+      this.dialogData.existingSessions ?? [],
+      excludeIds,
+    );
   }
 
   ngOnInit(): void {
@@ -377,28 +342,15 @@ export class SessionDialog implements OnInit {
     return false;
   }
 
-  /**
-   * True when the schedule-relevant fields (date/time/tutor/student) would save
-   * exactly what the original session already holds — e.g. the admin is only
-   * taking attendance or editing notes. Rebuilds the datetimes the same way
-   * updateSession does so the comparison mirrors what would be persisted.
-   */
+  /** True when only attendance/notes changed — delegates to the pure comparator. */
   private scheduleFieldsUnchanged(): boolean {
-    const original = this.dialogData.session;
-    if (!this.date || !this.startTime || !this.endTime) {
-      return false;
-    }
-    const start = new Date(this.date);
-    start.setHours(this.startTime.getHours());
-    start.setMinutes(this.startTime.getMinutes());
-    const end = new Date(this.date);
-    end.setHours(this.endTime.getHours());
-    end.setMinutes(this.endTime.getMinutes());
-    return (
-      start.toISOString() === original.start_datetime
-      && end.toISOString() === original.end_datetime
-      && this.selectedTutor === original.tutor_id
-      && this.selectedStudent === original.student_id
+    return scheduleFieldsUnchanged(
+      this.dialogData.session,
+      this.date,
+      this.startTime,
+      this.endTime,
+      this.selectedTutor,
+      this.selectedStudent,
     );
   }
 
@@ -491,7 +443,7 @@ export class SessionDialog implements OnInit {
         this.hasError = true;
         return;
       }
-      const lengthError = this.validateSessionLength(this.sessionDurationMinutes);
+      const lengthError = this.lengthError();
       if (lengthError) {
         this.errorMessage = lengthError;
         this.hasError = true;
@@ -507,7 +459,7 @@ export class SessionDialog implements OnInit {
       if (this.selectedType === SessionType.MAKE_UP) {
         const student = this.selectedStudentObj;
         if (student) {
-          const error = this.validateMakeupPendingBalance(student, this.sessionDurationMinutes);
+          const error = this.makeupBalanceError(student);
           if (error) {
             this.errorMessage = error;
             this.hasError = true;
@@ -515,12 +467,8 @@ export class SessionDialog implements OnInit {
           }
         }
       }
-      let submitStartDate: Date = new Date(this.date);
-      submitStartDate.setHours(this.startTime.getHours());
-      submitStartDate.setMinutes(this.startTime.getMinutes());
-      let submitEndDate: Date = new Date(this.date);
-      submitEndDate.setHours(this.endTime.getHours());
-      submitEndDate.setMinutes(this.endTime.getMinutes());
+      const submitStartDate = combineDateTime(this.date, this.startTime);
+      const submitEndDate = combineDateTime(this.date, this.endTime);
       let tutor: Contact = this.tutors.find(tutor => tutor.id === this.selectedTutor)!;
       let session: Session = new Session();
       session.type = this.selectedType;
@@ -564,7 +512,7 @@ export class SessionDialog implements OnInit {
       }
       // Enforce the package's per-session length for single edits and for the
       // "this & future" series path (which reuses this time range).
-      const lengthError = this.validateSessionLength(this.sessionDurationMinutes);
+      const lengthError = this.lengthError();
       if (lengthError) {
         this.errorMessage = lengthError;
         this.hasError = true;
@@ -593,12 +541,8 @@ export class SessionDialog implements OnInit {
       if (!this.passesScheduleGate(() => this.updateSession())) {
         return;
       }
-      let submitStartDate: Date = new Date(this.date);
-      submitStartDate.setHours(this.startTime.getHours());
-      submitStartDate.setMinutes(this.startTime.getMinutes());
-      let submitEndDate: Date = new Date(this.date);
-      submitEndDate.setHours(this.endTime.getHours());
-      submitEndDate.setMinutes(this.endTime.getMinutes());
+      const submitStartDate = combineDateTime(this.date, this.startTime);
+      const submitEndDate = combineDateTime(this.date, this.endTime);
       // Tutor-role users get a names-only staff projection (no accepting
       // flag), so the accepting-filtered `tutors` getter can be empty for
       // them — fall back to the stored session's values rather than
@@ -644,7 +588,7 @@ export class SessionDialog implements OnInit {
           }
           // Only cancelled tutoring (banks minutes) and finalized make-up (deducts
           // minutes) mutate the student; completing a tutoring session does not.
-          if (this.mutatesStudent(this.selectedType, newStatus)) {
+          if (mutatesStudent(this.selectedType, newStatus)) {
             this.pendingStudentUpdate = this.selectedType === SessionType.MAKE_UP
               ? consumeMakeupMinutes({ ...student }, duration)
               : bankMakeupMinutes({ ...student }, duration, session.start_datetime as string);
@@ -653,7 +597,7 @@ export class SessionDialog implements OnInit {
           // Editing a still-pending make-up session (e.g. lengthening it): the
           // student's total pending make-up minutes must still fit their balance.
           const exclude = new Set<string>([this.dialogData.session.id ?? '']);
-          const error = this.validateMakeupPendingBalance(student, this.sessionDurationMinutes, exclude);
+          const error = this.makeupBalanceError(student, exclude);
           if (error) {
             this.errorMessage = error;
             this.hasError = true;
@@ -734,11 +678,7 @@ export class SessionDialog implements OnInit {
     this.sessionsService.getSessionsBySeries(current.series_id).pipe(
       catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; this.submitting = false; return of([]); })
     ).subscribe(sessions => {
-      const allSessions = sessions as Session[];
-      const targets = allSessions.filter(s =>
-        s.status === SessionStatus.PENDING &&
-        new Date(s.start_datetime!) >= new Date(current.start_datetime!),
-      );
+      const targets = futureSeriesTargets(sessions as Session[], current);
       if (targets.length === 0) {
         this.dialogRef.close({ updated: 0 });
         return;
@@ -766,19 +706,7 @@ export class SessionDialog implements OnInit {
           }
         }
       }
-      const updates = targets.map(s => {
-        const start = new Date(s.start_datetime!);
-        start.setHours(this.startTime!.getHours(), this.startTime!.getMinutes(), 0, 0);
-        const end = new Date(s.start_datetime!);
-        end.setHours(this.endTime!.getHours(), this.endTime!.getMinutes(), 0, 0);
-        const upd: Session = { ...s };
-        upd.tutor_id = tutor.id;
-        upd.tutor_name = tutor.first_name;
-        upd.start_datetime = start.toISOString();
-        upd.end_datetime = end.toISOString();
-        upd.notes = this.notes;
-        return upd;
-      });
+      const updates = retimeSeriesOccurrences(targets, this.startTime!, this.endTime!, tutor, this.notes);
       this.submitting = true;
       forkJoin(updates.map(u => this.sessionsService.updateSession(u))).pipe(
         catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; this.submitting = false; return EMPTY; })
@@ -800,10 +728,7 @@ export class SessionDialog implements OnInit {
     this.sessionsService.getSessionsBySeries(current.series_id).pipe(
       catchError(err => { this.errorMessage = 'Delete session series failed'; this.hasError = true; this.submitting = false; return of([]); })
     ).subscribe(sessions => {
-      const targets = (sessions as Session[]).filter(s =>
-        s.status === SessionStatus.PENDING &&
-        new Date(s.start_datetime!) >= new Date(current.start_datetime!),
-      );
+      const targets = futureSeriesTargets(sessions as Session[], current);
       if (targets.length === 0) {
         this.dialogRef.close({ deleted: 0 });
         return;
@@ -909,19 +834,6 @@ export class SessionDialog implements OnInit {
         return EMPTY;
       }),
     ).subscribe();
-  }
-
-  /** Whether finalizing a session of this type/status changes the student's minute banks. */
-  private mutatesStudent(type: SessionType, status: SessionStatus): boolean {
-    // Trials never touch the make-up bank — a cancelled trial banks nothing.
-    if (type === SessionType.TRIAL) {
-      return false;
-    }
-    if (type === SessionType.MAKE_UP) {
-      return status === SessionStatus.COMPLETED || status === SessionStatus.NO_CALL_NO_SHOW;
-    }
-    // Regular tutoring only mutates the student when cancelled (minutes are banked).
-    return status === SessionStatus.CANCELLED;
   }
 
   /** The student's currently-available make-up minutes (expired batches excluded). */
