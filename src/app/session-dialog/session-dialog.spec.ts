@@ -52,6 +52,7 @@ describe('SessionDialog', () => {
     createSessions: jest.fn(),
     updateSession: jest.fn(),
     deleteSession: jest.fn(),
+    emailSessionNotes: jest.fn(),
     getSessionsBySeries: jest.fn(),
   };
   const contactService = { getContacts: jest.fn(), getStaff: jest.fn() };
@@ -862,6 +863,101 @@ describe('SessionDialog', () => {
       c.createSession();
       c.cancelAvailabilityOverride();
       expect(c.showAvailabilityConfirm).toBe(false);
+    });
+  });
+
+  describe('email notes to parent', () => {
+    const completedEdit = (over: Partial<Session> = {}): SessionDialog => {
+      const c = build({
+        type: 'edit',
+        session: {
+          id: 'sess-1',
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-06-01T10:00:00Z',
+          ...over,
+        } as Session,
+        existingSessions: [],
+      } as SessionDialogData);
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
+      c.students = [student()];
+      c.selectedTutor = 't-1';
+      c.selectedStudent = 's-1';
+      c.selectedType = SessionType.TUTORING;
+      c.date = new Date(2026, 5, 1);
+      c.startTime = new Date(2026, 5, 1, 10, 0);
+      c.endTime = new Date(2026, 5, 1, 11, 0);
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      c.notes = 'Worked on fractions.';
+      return c;
+    };
+
+    it('offers the checkbox only when completing a student session in edit mode', () => {
+      const c = completedEdit();
+      expect(c.canEmailNotes).toBe(true);
+      c.selectedAttendance = SessionStatus.PENDING;
+      expect(c.canEmailNotes).toBe(false);
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      c.selectedType = SessionType.ADMIN; // no student -> nobody to email
+      expect(c.canEmailNotes).toBe(false);
+    });
+
+    it('no checkbox in create mode', () => {
+      const c = build({
+        type: 'create',
+        session: new Session(),
+        existingSessions: [],
+      } as SessionDialogData);
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      expect(c.canEmailNotes).toBe(false);
+    });
+
+    it('checked: saves first, then emails the notes, then closes', () => {
+      const c = completedEdit();
+      c.emailNotesToParent = true;
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      sessionsService.emailSessionNotes.mockReturnValue(of({ message: 'ok' }));
+      c.updateSession();
+      expect(sessionsService.updateSession).toHaveBeenCalled();
+      expect(sessionsService.emailSessionNotes).toHaveBeenCalledWith('sess-1');
+      expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    it('unchecked: closes after the save without emailing', () => {
+      const c = completedEdit();
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.updateSession();
+      expect(sessionsService.emailSessionNotes).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    it('a failed email keeps the dialog open; Retry re-sends WITHOUT re-saving', () => {
+      const c = completedEdit();
+      c.emailNotesToParent = true;
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      sessionsService.emailSessionNotes.mockReturnValue(throwError(() => new Error('ses down')));
+      c.updateSession();
+      expect(c.emailNotesFailed).toBe(true);
+      expect(c.submitting).toBe(false);
+      expect(dialogRef.close).not.toHaveBeenCalled();
+
+      // Retry succeeds — the session update must NOT run again (its status
+      // side effects like make-up banking must never double-apply).
+      sessionsService.updateSession.mockClear();
+      sessionsService.emailSessionNotes.mockReturnValue(of({ message: 'ok' }));
+      c.retryEmailNotes();
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+      expect(sessionsService.emailSessionNotes).toHaveBeenCalledTimes(2);
+      expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    it('Close Without Emailing closes with the saved response', () => {
+      const c = completedEdit();
+      c.emailNotesToParent = true;
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      sessionsService.emailSessionNotes.mockReturnValue(throwError(() => new Error('x')));
+      c.updateSession();
+      c.closeWithoutEmail();
+      expect(dialogRef.close).toHaveBeenCalledWith({ id: 'sess-1' });
     });
   });
 

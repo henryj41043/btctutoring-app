@@ -17,6 +17,8 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSelectModule} from '@angular/material/select';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatCheckboxModule} from '@angular/material/checkbox';
+import {DatePipe} from '@angular/common';
 import {SessionsService} from '../services/sessions.service';
 import {Session} from '../models/session.model';
 import {Response} from '../models/response.model';
@@ -51,6 +53,8 @@ import {studentDisplayName} from '../utils/student-name';
     MatDatepickerModule,
     MatSelectModule,
     MatProgressSpinnerModule,
+    MatCheckboxModule,
+    DatePipe,
   ],
   templateUrl: './session-dialog.html',
   standalone: true,
@@ -186,6 +190,22 @@ export class SessionDialog implements OnInit {
   get isMakeupLocked(): boolean {
     // Optional-chained: some unit specs drive getters on a bare instance.
     return !!this.dialogData?.lockToMakeup;
+  }
+
+  // ── Email notes to parent (opt-in, per save) ─────────────────────────────
+  /** Checked = after this save, email the saved notes to the parent. */
+  emailNotesToParent: boolean = false;
+  /** The save succeeded but the notes email didn't — offer Retry/Close. */
+  emailNotesFailed: boolean = false;
+  private savedResponse: Session | null = null;
+
+  /** The checkbox shows when completing (or amending) attendance on a
+   *  student session — the client's tutors opt in per session. */
+  get canEmailNotes(): boolean {
+    return this.dialogData?.type === 'edit'
+      && !this.isReadOnly
+      && this.hasStudent
+      && this.selectedAttendance === SessionStatus.COMPLETED;
   }
 
   private get sessionDurationMinutes(): number {
@@ -657,7 +677,7 @@ export class SessionDialog implements OnInit {
         ).subscribe(response => {
           this.hasError = false;
           this.syncTrialDateAfterReschedule(session);
-          this.dialogRef.close(response as Session);
+          this.closeAfterUpdate(response as Session);
         });
       }
     } else {
@@ -795,6 +815,43 @@ export class SessionDialog implements OnInit {
         this.dialogRef.close({ deleted: targets.length });
       });
     });
+  }
+
+  /**
+   * The update is saved — if the tutor opted in, email the (now stored)
+   * notes before closing. A failed send keeps the dialog open with a Retry
+   * that ONLY re-sends the email — never re-runs the update, whose status
+   * transition side effects (make-up banking) must not double-apply.
+   */
+  private closeAfterUpdate(response: Session): void {
+    const id = this.dialogData.session.id;
+    if (!this.emailNotesToParent || !id) {
+      this.dialogRef.close(response);
+      return;
+    }
+    this.sessionsService.emailSessionNotes(id).pipe(
+      catchError(err => {
+        console.log(err);
+        this.savedResponse = response;
+        this.emailNotesFailed = true;
+        this.submitting = false;
+        return EMPTY;
+      }),
+    ).subscribe(() => {
+      this.dialogRef.close(response);
+    });
+  }
+
+  /** Retry ONLY the notes email (the session itself is already saved). */
+  retryEmailNotes(): void {
+    this.emailNotesFailed = false;
+    this.submitting = true;
+    this.closeAfterUpdate(this.savedResponse!);
+  }
+
+  /** Give up on the email; the saved session still closes normally. */
+  closeWithoutEmail(): void {
+    this.dialogRef.close(this.savedResponse);
   }
 
   confirmCancelledDelete(): void {

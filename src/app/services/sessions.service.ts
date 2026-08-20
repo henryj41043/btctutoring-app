@@ -74,6 +74,11 @@ export class SessionsService {
     return this.httpClient.put<Session>(`${this.baseUrl}/sessions`, session);
   }
 
+  /** Emails the session's STORED notes to the student's parent. */
+  emailSessionNotes(id: string): Observable<Response> {
+    return this.httpClient.post<Response>(`${this.baseUrl}/sessions/${id}/email-notes`, {});
+  }
+
   deleteSession(id: string): Observable<Response> {
     return this.httpClient.delete<Response>(`${this.baseUrl}/sessions/${id}`);
   }
