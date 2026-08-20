@@ -1,0 +1,93 @@
+<h2 mat-dialog-title>Edit make-up minutes — {{data.student.name || 'student'}}</h2>
+<mat-dialog-content>
+  <p class="makeup-edit-hint">
+    Changing a bucket's minutes restarts its 90-day expiry from today;
+    untouched buckets keep their dates.
+    @if (neverExpire) {
+      <strong>This student's minutes never expire.</strong>
+    }
+  </p>
+
+  @if (rows.length === 0) {
+    <p class="makeup-empty">No make-up minutes on record — add some below.</p>
+  } @else {
+    <table class="makeup-edit-table">
+      <thead>
+        <tr>
+          <th>Minutes</th>
+          <th>Earned</th>
+          <th>Expires</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows; track $index) {
+          <tr [class.removed]="row.removed">
+            <td>
+              <mat-form-field subscriptSizing="dynamic" appearance="outline" class="minutes-field">
+                <input matInput type="number" min="1" [(ngModel)]="row.minutes"
+                       [disabled]="row.removed" name="minutes-{{$index}}">
+              </mat-form-field>
+            </td>
+            <td>
+              @if (row.added) {
+                <span class="row-note">new</span>
+              } @else if (row.legacy) {
+                <span class="row-note">legacy balance</span>
+              } @else {
+                {{row.earned_date | date:'MMM d, y'}}
+              }
+            </td>
+            <td>
+              @if (neverExpire) {
+                Never
+              } @else if (row.removed) {
+                —
+              } @else if (row.added || row.legacy || isDirty(row)) {
+                <span class="row-note">90 days from today</span>
+              } @else {
+                {{expiryOf(row) | date:'MMM d, y'}}
+              }
+            </td>
+            <td>
+              <button matIconButton type="button"
+                      [matTooltip]="row.removed ? 'Keep this bucket' : 'Remove this bucket'"
+                      [attr.aria-label]="row.removed ? 'Keep bucket' : 'Remove bucket'"
+                      (click)="toggleRemoved(row)">
+                <mat-icon>{{row.removed ? 'undo' : 'delete'}}</mat-icon>
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <div class="makeup-add-row">
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="minutes-field">
+      <mat-label>Add minutes</mat-label>
+      <input matInput type="number" min="1" [(ngModel)]="addMinutes" name="addMinutes">
+    </mat-form-field>
+    <button matButton type="button" [disabled]="!addMinutes || addMinutes <= 0" (click)="addRow()">
+      <mat-icon>add</mat-icon>
+      Add
+    </button>
+  </div>
+
+  <p class="makeup-total">New balance: <strong>{{projectedTotal}} min</strong></p>
+
+  @if (!valid) {
+    <mat-error class="makeup-error">Every kept bucket needs a positive number of minutes.</mat-error>
+  }
+  @if (hasError) {
+    <mat-error class="makeup-error">Failed to save. Please try again.</mat-error>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  @if (submitting) {
+    <mat-spinner [diameter]="24"></mat-spinner>
+  } @else {
+    <button matButton type="button" (click)="cancel()">Cancel</button>
+    <button mat-raised-button color="primary" type="button" [disabled]="!valid" (click)="save()">Save</button>
+  }
+</mat-dialog-actions>

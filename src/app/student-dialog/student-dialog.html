@@ -109,6 +109,10 @@
         <p class="makeup-balance">
           Make Up Minutes: <strong>{{ makeupBalance }}</strong>
           <span class="makeup-hint">(from cancelled sessions; expire after 90 days)</span>
+          <button matButton type="button" class="makeup-edit-button" (click)="editMakeupMinutes()">
+            <mat-icon>edit</mat-icon>
+            Edit
+          </button>
         </p>
         <mat-checkbox formControlName="make_up_never_expire">Makeup minutes never expire</mat-checkbox>
       }

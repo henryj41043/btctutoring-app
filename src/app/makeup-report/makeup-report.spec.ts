@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
 import { MakeupReport, MakeupReportRow } from './makeup-report';
+import { MakeupEditDialog } from '../makeup-edit-dialog/makeup-edit-dialog';
 import { StudentService } from '../services/student.service';
 import { Student } from '../models/student.model';
 
@@ -19,11 +21,16 @@ const student = (over: Partial<Student> = {}): Student =>
 
 describe('MakeupReport', () => {
   const studentService = { getStudents: jest.fn() };
+  let editDialogResult: unknown;
+  const dialog = { open: jest.fn(() => ({ afterClosed: () => of(editDialogResult) })) };
 
   const build = (): MakeupReport => {
     TestBed.configureTestingModule({
       imports: [MakeupReport],
-      providers: [{ provide: StudentService, useValue: studentService }],
+      providers: [
+        { provide: StudentService, useValue: studentService },
+        { provide: MatDialog, useValue: dialog },
+      ],
     });
     return TestBed.createComponent(MakeupReport).componentInstance;
   };
@@ -170,6 +177,35 @@ describe('MakeupReport', () => {
     const paginator = {} as never;
     c.matPaginator = paginator;
     expect(ds.paginator).toBe(paginator);
+  });
+
+  it('edit action opens the ledger editor and reloads on save', () => {
+    editDialogResult = { make_up_batches: [], make_up_minutes: 0 };
+    studentService.getStudents.mockReturnValue(of([
+      student({ make_up_batches: [{ minutes: 30, earned_date: daysAgo(5) }] }),
+    ]));
+    const c = build();
+    c.ngOnInit();
+    studentService.getStudents.mockClear();
+    const event = { stopPropagation: jest.fn() } as unknown as Event;
+    c.openEditDialog(rows(c)[0], event);
+    expect(event.stopPropagation).toHaveBeenCalled();
+    expect(dialog.open).toHaveBeenCalledWith(MakeupEditDialog, expect.objectContaining({
+      data: { student: rows(c)[0].student },
+    }));
+    expect(studentService.getStudents).toHaveBeenCalled(); // reloaded
+  });
+
+  it('a cancelled editor does not reload', () => {
+    editDialogResult = null;
+    studentService.getStudents.mockReturnValue(of([
+      student({ make_up_batches: [{ minutes: 30, earned_date: daysAgo(5) }] }),
+    ]));
+    const c = build();
+    c.ngOnInit();
+    studentService.getStudents.mockClear();
+    c.openEditDialog(rows(c)[0], { stopPropagation: jest.fn() } as unknown as Event);
+    expect(studentService.getStudents).not.toHaveBeenCalled();
   });
 
   it('clears the spinner on a load error', () => {
