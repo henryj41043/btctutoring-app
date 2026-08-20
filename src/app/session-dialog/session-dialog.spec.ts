@@ -1433,22 +1433,8 @@ describe('SessionDialog', () => {
       expect(c.tutors.map(t => t.id)).toEqual(['t-1']);
     });
 
-    it('never touches the make-up bank for a cancelled trial', () => {
-      const mutates = (
-        build() as unknown as {
-          mutatesStudent: (t: SessionType, st: SessionStatus) => boolean;
-        }
-      ).mutatesStudent;
-      const c = build() as unknown as {
-        mutatesStudent: (t: SessionType, st: SessionStatus) => boolean;
-      };
-      expect(c.mutatesStudent(SessionType.TRIAL, SessionStatus.CANCELLED)).toBe(false);
-      expect(c.mutatesStudent(SessionType.TRIAL, SessionStatus.COMPLETED)).toBe(false);
-      expect(c.mutatesStudent(SessionType.TRIAL, SessionStatus.NO_CALL_NO_SHOW)).toBe(false);
-      // Tutoring cancel still banks.
-      expect(c.mutatesStudent(SessionType.TUTORING, SessionStatus.CANCELLED)).toBe(true);
-      void mutates;
-    });
+    // The trial/make-up bank rules moved to utils/session-rules.ts; their
+    // direct cases live in session-rules.spec.ts now.
 
     it('rejects a trial edit that is not exactly 45 minutes', () => {
       const c = primedTrialEdit();
