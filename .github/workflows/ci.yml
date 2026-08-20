@@ -49,6 +49,18 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --legacy-peer-deps
+      # Incremental mutation state: every run saves a fresh snapshot (the
+      # run-id key never hits, so the post-job save always fires) and restores
+      # the newest prior one for this branch. Stryker validates entries
+      # against the actual code/tests, so a stale or cross-push restore can
+      # only add work back, never hide a surviving mutant.
+      - name: Restore incremental mutation state
+        uses: actions/cache@v4
+        with:
+          path: reports/stryker-incremental.json
+          key: stryker-incremental-${{ github.head_ref }}-${{ github.run_id }}
+          restore-keys: |
+            stryker-incremental-${{ github.head_ref }}-
       - name: Stryker on changed source files vs ${{ github.base_ref }}
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
