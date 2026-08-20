@@ -517,7 +517,13 @@ export class EventCalendar implements OnInit {
   openCreateSessionDialog(): void {
     console.log('openCreateSessionDialog');
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
-      data: {type: 'create', session: new Session(), existingSessions: this.allSessions},
+      data: {
+        type: 'create',
+        session: new Session(),
+        existingSessions: this.allSessions,
+        // Non-admins may only schedule their own make-ups (backend-enforced).
+        lockToMakeup: !this.authService.isAdmin(),
+      },
     });
 
     sessionDialogRef.afterClosed().subscribe((result: Session): void => {

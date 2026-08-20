@@ -865,6 +865,58 @@ describe('SessionDialog', () => {
     });
   });
 
+  describe('make-up locked create (tutor self-service)', () => {
+    const buildLocked = (): SessionDialog => {
+      isAdmin = false;
+      ownContactId = 'c-self';
+      contactService.getStaff.mockReturnValue(of([
+        // At capacity (not accepting) — must still appear as the locked tutor.
+        tutor({ id: 'c-self', first_name: 'Self', currently_accepting_students: false }),
+        tutor({ id: 'c-other', first_name: 'Other' }),
+      ]));
+      studentService.getStudentsByTutor.mockReturnValue(of([
+        student({ id: 's-own', assigned_tutor_id: 'c-self' }),
+      ]));
+      const c = build({
+        type: 'create',
+        session: new Session(),
+        existingSessions: [],
+        lockToMakeup: true,
+      } as SessionDialogData);
+      c.ngOnInit();
+      return c;
+    };
+
+    it('pins type to MAKE_UP and tutor to self, and pre-filters the caseload', () => {
+      const c = buildLocked();
+      expect(c.selectedType).toBe(SessionType.MAKE_UP);
+      expect(c.sessionTypeOptions).toEqual([SessionType.MAKE_UP]);
+      expect(c.selectedTutor).toBe('c-self');
+      expect(c.isMakeupLocked).toBe(true);
+      // Caseload loaded via the tutor-scoped endpoint and pre-filtered.
+      expect(c.filteredStudents.map(s => s.id)).toEqual(['s-own']);
+    });
+
+    it('the tutors list contains only the tutor themselves, even at capacity', () => {
+      const c = buildLocked();
+      expect(c.tutors.map(t => t.id)).toEqual(['c-self']);
+    });
+
+    it('an unlocked create is unaffected', () => {
+      contactService.getStaff.mockReturnValue(of([]));
+      studentService.getStudents.mockReturnValue(of([]));
+      const c = build({
+        type: 'create',
+        session: new Session(),
+        existingSessions: [],
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.isMakeupLocked).toBe(false);
+      expect(c.sessionTypeOptions.length).toBeGreaterThan(1);
+      expect(c.selectedTutor).toBeUndefined();
+    });
+  });
+
   describe('deleteSession', () => {
     it('deletes a standalone session', () => {
       const c = build({
