@@ -10,6 +10,8 @@ import { ContactService } from '../services/contact.service';
 import { AuthService } from '../services/auth.service';
 import { ContactDialog } from '../contact-dialog/contact-dialog';
 import { DeleteContactDialog } from '../delete-contact-dialog/delete-contact-dialog';
+import { BatchNoteDialog } from '../batch-note-dialog/batch-note-dialog';
+import { NoteService } from '../services/note.service';
 import { Contact } from '../models/contact.model';
 
 const contact = (id: string): Contact => ({ id, first_name: id }) as Contact;
@@ -18,7 +20,11 @@ describe('ContactsTable', () => {
   let isAdmin: boolean;
   let afterClosed: unknown;
   const contactService = { getContacts: jest.fn(), getContactsSummary: jest.fn() };
-  const authService = { isAdmin: () => isAdmin };
+  const noteService = { createNote: jest.fn() };
+  const authService = {
+    isAdmin: () => isAdmin,
+    contact: () => ({ id: 'admin-me', first_name: 'Admin' }),
+  };
   const router = { navigate: jest.fn() };
   const dialog = {
     open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })),
@@ -30,6 +36,7 @@ describe('ContactsTable', () => {
       imports: [ContactsTable],
       providers: [
         { provide: ContactService, useValue: contactService },
+        { provide: NoteService, useValue: noteService },
         { provide: AuthService, useValue: authService },
         { provide: Router, useValue: router },
         { provide: MatDialog, useValue: dialog },
@@ -282,6 +289,79 @@ describe('ContactsTable', () => {
       sessionStorage.setItem('btc-contacts-filters', '{not json');
       const c = seeded();
       expect(names(c)).toHaveLength(4);
+    });
+  });
+
+  describe('batch note to filtered contacts', () => {
+    const seed = (rows: Partial<Contact>[]): ContactsTable => {
+      contactService.getContactsSummary.mockReturnValue(of(rows as Contact[]));
+      const c = build();
+      c.ngOnInit();
+      return c;
+    };
+
+    beforeEach(() => {
+      snackBar.open.mockClear();
+      dialog.open.mockClear();
+      noteService.createNote.mockReset();
+      noteService.createNote.mockReturnValue(of({ id: 'n-1' }));
+    });
+
+    it('creates the note for every filtered contact and reports the count', () => {
+      afterClosed = 'Reminder: turn in your timesheets';
+      const c = seed([
+        { id: 'c-1', first_name: 'Ada', service: 'Hiring' },
+        { id: 'c-2', first_name: 'Tess', service: 'Hiring' },
+        { id: 'c-3', first_name: 'Jane', service: 'Tutoring' },
+      ]);
+      c.onServiceFilterChange(['Hiring']);
+      (c as any).openBatchNoteDialog();
+      expect(dialog.open).toHaveBeenCalledWith(BatchNoteDialog, expect.objectContaining({
+        data: { count: 2 },
+      }));
+      expect(noteService.createNote).toHaveBeenCalledTimes(2);
+      const notes = noteService.createNote.mock.calls.map(call => call[0]);
+      expect(notes.map(n => n.recipient_id)).toEqual(['c-1', 'c-2']);
+      expect(notes[0]).toEqual(expect.objectContaining({
+        message: 'Reminder: turn in your timesheets',
+        author: 'Admin',
+        author_id: 'admin-me',
+        recipient: 'Ada',
+        type: '',
+      }));
+      expect(notes[0]).not.toHaveProperty('order');
+      expect(snackBar.open).toHaveBeenCalledWith('Note added to 2 contacts', undefined, { duration: 5000 });
+    });
+
+    it('counts per-contact failures without aborting the batch', () => {
+      afterClosed = 'hello';
+      noteService.createNote
+        .mockReturnValueOnce(of({ id: 'n-1' }))
+        .mockReturnValueOnce(throwError(() => new Error('x')))
+        .mockReturnValueOnce(of({ id: 'n-3' }));
+      const c = seed([
+        { id: 'c-1', first_name: 'A' },
+        { id: 'c-2', first_name: 'B' },
+        { id: 'c-3', first_name: 'C' },
+      ]);
+      (c as any).openBatchNoteDialog();
+      expect(noteService.createNote).toHaveBeenCalledTimes(3);
+      expect(snackBar.open).toHaveBeenCalledWith('Note added to 2 contacts (1 failed)', undefined, { duration: 5000 });
+    });
+
+    it('a cancelled dialog creates nothing', () => {
+      afterClosed = null;
+      const c = seed([{ id: 'c-1', first_name: 'A' }]);
+      (c as any).openBatchNoteDialog();
+      expect(noteService.createNote).not.toHaveBeenCalled();
+    });
+
+    it('an empty filtered view never opens the dialog', () => {
+      const c = seed([{ id: 'c-1', first_name: 'Ada' }]);
+      c.applyFilter('zzz-no-match');
+      (c as any).openBatchNoteDialog();
+      expect(dialog.open).not.toHaveBeenCalled();
+      expect(snackBar.open).toHaveBeenCalledWith('No contacts in the current view.', undefined, { duration: 4000 });
     });
   });
 

@@ -17,9 +17,12 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {catchError, EMPTY} from 'rxjs';
+import {catchError, EMPTY, from, mergeMap, of, toArray} from 'rxjs';
 import {ContactDialog} from '../contact-dialog/contact-dialog';
 import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
+import {BatchNoteDialog} from '../batch-note-dialog/batch-note-dialog';
+import {NoteService} from '../services/note.service';
+import {Note} from '../models/note.model';
 import {AuthService} from '../services/auth.service';
 import {Contact} from '../models/contact.model';
 import {UserGroup} from '../enums/user-group.enum';
@@ -54,6 +57,7 @@ export class ContactsTable implements OnInit {
   readonly contactDialog: MatDialog = inject(MatDialog);
   private snackBar: MatSnackBar = inject(MatSnackBar);
   private contactService: ContactService = inject(ContactService);
+  private noteService: NoteService = inject(NoteService);
   private authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   // Cancels in-flight HTTP work when the user navigates away.
@@ -251,6 +255,65 @@ export class ContactsTable implements OnInit {
         undefined, {duration: 4000}),
       () => this.snackBar.open('Could not copy to the clipboard.', undefined, {duration: 4000}),
     );
+  }
+
+  /**
+   * One note, attached to EVERY currently-filtered contact (all pages, same
+   * semantics as Copy Emails). The dialog collects the message and shows the
+   * recipient count as the confirmation; creates run 5-at-a-time so a big
+   * filter set doesn't land hundreds of concurrent requests, per-contact
+   * failures are counted rather than rolled back, and the summary lands in
+   * a snackbar.
+   */
+  protected openBatchNoteDialog(): void {
+    const recipients = this.dataSource.filteredData;
+    if (recipients.length === 0) {
+      this.snackBar.open('No contacts in the current view.', undefined, {duration: 4000});
+      return;
+    }
+    const ref = this.contactDialog.open(BatchNoteDialog, {
+      data: {count: recipients.length},
+      width: '440px',
+    });
+    ref.afterClosed().subscribe((message: string | null) => {
+      if (message) {
+        this.createNoteForContacts(message, recipients);
+      }
+    });
+  }
+
+  private createNoteForContacts(message: string, recipients: Contact[]): void {
+    const author = this.authService.contact().first_name;
+    const authorId = this.authService.contact().id;
+    const dateString = new Date().toISOString();
+    from(recipients).pipe(
+      mergeMap(contact => {
+        const note: Note = {
+          message,
+          date_time: dateString,
+          author,
+          author_id: authorId,
+          recipient: contact.first_name,
+          recipient_id: contact.id,
+          type: '',
+        };
+        return this.noteService.createNote(note).pipe(
+          catchError(error => {
+            console.log(error);
+            return of(null); // counted as a failure below, never aborts the batch
+          }),
+        );
+      }, 5),
+      toArray(),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(results => {
+      const failed = results.filter(r => r === null).length;
+      const created = results.length - failed;
+      const failedSuffix = failed > 0 ? ` (${failed} failed)` : '';
+      this.snackBar.open(
+        `Note added to ${created} contact${created === 1 ? '' : 's'}${failedSuffix}`,
+        undefined, {duration: 5000});
+    });
   }
 
   protected openContactDialog(): void {
