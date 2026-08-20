@@ -21,5 +21,8 @@
   "htmlReporter": { "fileName": "reports/mutation/index.html" },
   "thresholds": { "high": 90, "low": 80, "break": 70 },
   "ignoreStatic": true,
-  "tempDirName": ".stryker-tmp"
+  "tempDirName": ".stryker-tmp",
+  "concurrency": 4,
+  "incremental": true,
+  "incrementalFile": "reports/stryker-incremental.json"
 }
