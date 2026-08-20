@@ -9,7 +9,10 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatTooltipModule} from '@angular/material/tooltip';
+import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
+import {MakeupEditDialog} from '../makeup-edit-dialog/makeup-edit-dialog';
 import {StudentService} from '../services/student.service';
 import {Student} from '../models/student.model';
 import {availableMakeupMinutes, MakeupBatchView, unexpiredBatchViews} from '../utils/makeup';
@@ -44,6 +47,7 @@ export interface MakeupReportRow {
     MatInputModule,
     MatPaginatorModule,
     MatProgressSpinnerModule,
+    MatTooltipModule,
   ],
   templateUrl: './makeup-report.html',
   styleUrl: './makeup-report.scss',
@@ -65,7 +69,8 @@ export class MakeupReport implements OnInit {
     }
   }
 
-  protected reportColumns: string[] = ['contact_name', 'name', 'available', 'soonest_expiry'];
+  protected reportColumns: string[] = ['contact_name', 'name', 'available', 'soonest_expiry', 'actions'];
+  private dialog: MatDialog = inject(MatDialog);
   protected dataSource = new MatTableDataSource<MakeupReportRow>([]);
   protected readonly studentDisplayName = studentDisplayName;
   protected loading: boolean = true;
@@ -83,7 +88,12 @@ export class MakeupReport implements OnInit {
         .toLowerCase();
       return haystack.includes(filter);
     };
+    this.load();
+  }
 
+  private load(): void {
+    this.loading = true;
+    this.cdr.markForCheck();
     this.studentService.getStudents(true).pipe(
       catchError(error => {
         console.log(error);
@@ -140,6 +150,22 @@ export class MakeupReport implements OnInit {
   /** The restored search text, for the input's initial value. */
   protected get searchText(): string {
     return this.viewState.load().filter ?? '';
+  }
+
+  /** Opens the ledger editor for a row's student; a save reloads the report
+   *  (the student may now hold zero minutes and leave it entirely). */
+  openEditDialog(row: MakeupReportRow, event: Event): void {
+    // Icon-button action — don't also toggle the row's batch detail.
+    event.stopPropagation();
+    const ref = this.dialog.open(MakeupEditDialog, {
+      data: {student: row.student},
+      width: '520px',
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result) {
+        this.load();
+      }
+    });
   }
 
   toggleExpanded(row: MakeupReportRow): void {

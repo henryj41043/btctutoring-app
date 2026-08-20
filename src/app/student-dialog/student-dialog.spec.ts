@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError, Subject } from 'rxjs';
 import { FormGroup } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MakeupEditDialog } from '../makeup-edit-dialog/makeup-edit-dialog';
 import { StudentDialog, StudentDialogData } from './student-dialog';
 import { StudentService } from '../services/student.service';
 import { Student } from '../models/student.model';
@@ -12,6 +13,8 @@ import { monthKey } from '../utils/billing-amount';
 
 describe('StudentDialog', () => {
   const dialogRef = { close: jest.fn() };
+  let editDialogResult: unknown;
+  const matDialog = { open: jest.fn(() => ({ afterClosed: () => of(editDialogResult) })) };
   const studentService = {
     createStudent: jest.fn(),
     updateStudent: jest.fn(),
@@ -31,6 +34,7 @@ describe('StudentDialog', () => {
         { provide: MatDialogRef, useValue: dialogRef },
         { provide: MAT_DIALOG_DATA, useValue: full },
         { provide: StudentService, useValue: studentService },
+        { provide: MatDialog, useValue: matDialog },
       ],
     });
     const c = TestBed.createComponent(StudentDialog).componentInstance;
@@ -447,6 +451,42 @@ describe('StudentDialog', () => {
       expect(helpers(c).toDateString(null)).toBeUndefined();
       expect(helpers(c).toDateString('2020-01-02')).toBe('2020-01-02');
       expect(helpers(c).toDateString(new Date(2020, 0, 2))).toBe('2020-01-02');
+    });
+  });
+
+  describe('make-up ledger editing', () => {
+    it('opens the editor and patches the local student on save', () => {
+      const student = {
+        id: 's-1', name: 'Pat',
+        make_up_batches: [{ minutes: 30, earned_date: '2026-08-01T10:00:00Z' }],
+        make_up_minutes: 30,
+      } as Student;
+      editDialogResult = {
+        make_up_batches: [{ minutes: 90, earned_date: '2026-08-20T15:00:00Z' }],
+        make_up_minutes: 90,
+      };
+      const c = build({ mode: 'edit', student });
+      c.editMakeupMinutes();
+      expect(matDialog.open).toHaveBeenCalledWith(MakeupEditDialog, expect.objectContaining({
+        data: { student },
+      }));
+      expect(student.make_up_minutes).toBe(90);
+      expect(student.make_up_batches).toEqual([{ minutes: 90, earned_date: '2026-08-20T15:00:00Z' }]);
+    });
+
+    it('a cancelled editor leaves the student untouched', () => {
+      const student = { id: 's-1', name: 'Pat', make_up_minutes: 30 } as Student;
+      editDialogResult = null;
+      const c = build({ mode: 'edit', student });
+      c.editMakeupMinutes();
+      expect(student.make_up_minutes).toBe(30);
+    });
+
+    it('no-ops without a student record', () => {
+      matDialog.open.mockClear();
+      const c = build({ mode: 'create' });
+      c.editMakeupMinutes();
+      expect(matDialog.open).not.toHaveBeenCalled();
     });
   });
 });

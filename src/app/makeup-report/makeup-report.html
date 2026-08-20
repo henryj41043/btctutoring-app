@@ -47,6 +47,16 @@
           </td>
         </ng-container>
 
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let row">
+            <button matIconButton aria-label="Edit make-up minutes" matTooltip="Edit minutes"
+                    (click)="openEditDialog(row, $event)">
+              <mat-icon>edit</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
         <!-- Per-batch detail: minutes, the cancelled session they came from,
              and when they expire. -->
         <ng-container matColumnDef="expandedDetail">

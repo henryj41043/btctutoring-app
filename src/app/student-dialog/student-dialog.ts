@@ -1,17 +1,20 @@
 import {Component, inject, OnInit} from '@angular/core';
 import {
   MAT_DIALOG_DATA,
+  MatDialog,
   MatDialogActions,
   MatDialogContent,
   MatDialogRef,
   MatDialogTitle,
 } from '@angular/material/dialog';
+import {MakeupEditDialog, MakeupEditResult} from '../makeup-edit-dialog/makeup-edit-dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {FormBuilder, FormGroup, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -67,6 +70,7 @@ export interface StudentDialogData {
     MatCheckboxModule,
     MatDatepickerModule,
     MatButtonModule,
+    MatIconModule,
     MatProgressSpinnerModule,
     ReactiveFormsModule,
   ],
@@ -75,6 +79,7 @@ export interface StudentDialogData {
 })
 export class StudentDialog implements OnInit {
   readonly dialogRef = inject(MatDialogRef<StudentDialog>);
+  private matDialog = inject(MatDialog);
   readonly data = inject<StudentDialogData>(MAT_DIALOG_DATA);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private studentService: StudentService = inject(StudentService);
@@ -127,6 +132,25 @@ export class StudentDialog implements OnInit {
   /** The student's currently-available make-up minutes (shown read-only). */
   get makeupBalance(): number {
     return this.data.student ? availableMakeupMinutes(this.data.student) : 0;
+  }
+
+  /** Opens the ledger editor; a save patches the local student so the
+   *  balance line refreshes without reloading the whole dialog. */
+  editMakeupMinutes(): void {
+    const student = this.data.student;
+    if (!student) {
+      return;
+    }
+    const ref = this.matDialog.open(MakeupEditDialog, {
+      data: {student},
+      width: '520px',
+    });
+    ref.afterClosed().subscribe((result: MakeupEditResult | null | undefined) => {
+      if (result) {
+        student.make_up_batches = result.make_up_batches;
+        student.make_up_minutes = result.make_up_minutes;
+      }
+    });
   }
 
   /** In edit mode, the post-onboarding fields stay locked until onboarding is complete. */

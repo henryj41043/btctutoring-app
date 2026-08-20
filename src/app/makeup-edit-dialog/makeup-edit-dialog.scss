@@ -1,0 +1,60 @@
+.makeup-edit-hint {
+  margin: 0 0 14px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.makeup-empty {
+  margin: 0 0 10px;
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.makeup-edit-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+
+  th {
+    text-align: left;
+    font-size: .8rem;
+    color: var(--mat-sys-on-surface-variant);
+    padding: 0 8px 6px 0;
+  }
+
+  td {
+    padding: 4px 8px 4px 0;
+    vertical-align: middle;
+  }
+
+  tr.removed td {
+    opacity: .45;
+    text-decoration: line-through;
+  }
+}
+
+.minutes-field {
+  width: 110px;
+}
+
+.row-note {
+  font-size: .85rem;
+  font-style: italic;
+  color: var(--btc-teal-deep);
+}
+
+.makeup-add-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+
+.makeup-total {
+  margin: 0 0 6px;
+}
+
+.makeup-error {
+  display: block;
+  margin-top: 6px;
+  font-size: .875rem;
+}
