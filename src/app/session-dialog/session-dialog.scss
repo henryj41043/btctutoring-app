@@ -54,3 +54,17 @@
 .dialog-saving-spinner {
   margin: 4px 8px;
 }
+
+/* Email-notes opt-in: sits tight under the notes field with its last-sent hint. */
+.email-notes-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 6px;
+
+  .email-notes-hint {
+    font-size: .8rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}

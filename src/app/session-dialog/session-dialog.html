@@ -110,6 +110,18 @@
     <mat-label>Notes</mat-label>
     <textarea matInput [(ngModel)]="notes" [disabled]="isReadOnly"></textarea>
   </mat-form-field>
+  @if (canEmailNotes) {
+    <div class="email-notes-row">
+      <mat-checkbox [(ngModel)]="emailNotesToParent">
+        Email these notes to the parent
+      </mat-checkbox>
+      @if (dialogData.session.notes_emailed_at) {
+        <span class="email-notes-hint">
+          Last emailed {{dialogData.session.notes_emailed_at | date:'short'}}
+        </span>
+      }
+    </div>
+  }
   <br/>
   @if (showStatusConfirm) {
     <div class="status-confirm-warning">
@@ -141,6 +153,12 @@
       <p>This cancelled session banked make-up minutes on the student when it was cancelled. Deleting the session does <strong>not</strong> remove those minutes — the balance will remain, with no session left to trace it to. Delete anyway?</p>
     </div>
   }
+  @if (emailNotesFailed) {
+    <div class="status-confirm-warning">
+      <p><strong>⚠ The session was saved, but the email didn't send.</strong></p>
+      <p>Your attendance and notes are saved. Emailing the notes to the parent failed — you can retry the email or close without sending.</p>
+    </div>
+  }
   @if (hasError) {
     <mat-error>{{errorMessage}}</mat-error>
   }
@@ -158,6 +176,9 @@
   } @else if (showScheduleWarning) {
     <button matButton (click)="cancelScheduleWarning()">Go Back</button>
     <button matButton color="warn" (click)="confirmScheduleWarning()">Save Anyway</button>
+  } @else if (emailNotesFailed) {
+    <button matButton (click)="closeWithoutEmail()">Close Without Emailing</button>
+    <button matButton color="warn" (click)="retryEmailNotes()">Retry Email</button>
   } @else if (showCancelledDeleteWarning) {
     <button matButton (click)="cancelCancelledDelete()">Go Back</button>
     <button matButton color="warn" (click)="confirmCancelledDelete()">Delete Anyway</button>

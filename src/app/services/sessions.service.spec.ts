@@ -110,6 +110,14 @@ describe('SessionsService', () => {
     req.flush(session);
   });
 
+  it('emailSessionNotes POSTs to the email-notes route with an empty body', () => {
+    service.emailSessionNotes('s-1').subscribe();
+    const req = httpMock.expectOne(`${base}/sessions/s-1/email-notes`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    req.flush({ message: 'ok' });
+  });
+
   it('deleteSession DELETEs by id', () => {
     service.deleteSession('s-1').subscribe();
     const req = httpMock.expectOne(`${base}/sessions/s-1`);
