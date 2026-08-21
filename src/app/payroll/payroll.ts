@@ -84,6 +84,7 @@ export class Payroll implements OnInit {
     'hire_type',
     'tutoring_hours',
     'trial_hours',
+    'group_hours',
     'administrative_time',
     'hours_subtotal',
     'pay_rate',
@@ -136,7 +137,7 @@ export class Payroll implements OnInit {
       margin: { top: 28, bottom: 18 },
       showHead: 'everyPage',
       head: [[
-        'Staff Name', 'Hire Type', 'Tutoring (hrs)', 'Trials (hrs)', 'Admin Time (hrs)', 'Subtotal (hrs)',
+        'Staff Name', 'Hire Type', 'Tutoring (hrs)', 'Trials (hrs)', 'BTC & Me (hrs)', 'Admin (hrs)', 'Subtotal (hrs)',
         'Pay Rate', 'Tutoring Comp', 'Planning (hrs)', 'Planning Rate',
         'Planning Comp', 'Total Comp',
       ]],
@@ -145,6 +146,7 @@ export class Payroll implements OnInit {
         entry.hire_type ?? '',
         entry.tutoring_hours ?? 0,
         entry.trial_hours ?? 0,
+        entry.group_hours ?? 0,
         entry.administrative_time ?? 0,
         entry.hours_subtotal ?? 0,
         `${this.formatMoney(entry.pay_rate)}/hr`,
@@ -156,7 +158,7 @@ export class Payroll implements OnInit {
       ]),
       foot: [[
         'Grand Total', '', this.grandTutoringHours, this.grandTrialHours,
-        this.grandAdminTime, this.grandHoursSubtotal, '',
+        this.grandGroupHours, this.grandAdminTime, this.grandHoursSubtotal, '',
         this.formatMoney(this.grandTutoringComp), this.grandPlanningTime, '',
         this.formatMoney(this.grandPlanningComp), this.formatMoney(this.grandTotalComp),
       ]],
@@ -198,6 +200,10 @@ export class Payroll implements OnInit {
 
   protected get grandTrialHours(): number {
     return this.sumOf(e => e.trial_hours);
+  }
+
+  protected get grandGroupHours(): number {
+    return this.sumOf(e => e.group_hours);
   }
 
   protected get grandAdminTime(): number {
@@ -338,6 +344,7 @@ export class Payroll implements OnInit {
     payrollEntry.administrative_time = 0;
     payrollEntry.tutoring_hours = 0;
     payrollEntry.trial_hours = 0;
+    payrollEntry.group_hours = 0;
     let extraPlanningMinutes = 0;
     sessions.forEach(session => {
       if (session.type === SessionType.ADMIN) {
@@ -351,6 +358,16 @@ export class Payroll implements OnInit {
         ) {
           payrollEntry.trial_hours = payrollEntry.trial_hours! + 1;
         }
+      } else if (session.type === SessionType.GROUP) {
+        // A held BTC & Me group session pays a FLAT hour at the regular rate
+        // (client policy, trial precedent) — never its 45-minute duration,
+        // never per-student, and never planning credit.
+        if (
+          (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) &&
+          this.calculateTime(session.start_datetime!, session.end_datetime!) > 0
+        ) {
+          payrollEntry.group_hours = payrollEntry.group_hours! + 1;
+        }
       } else if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) {
         const counted = this.calculateTime(session.start_datetime!, session.end_datetime!);
         payrollEntry.tutoring_hours = payrollEntry.tutoring_hours! + counted;
@@ -363,7 +380,7 @@ export class Payroll implements OnInit {
     });
     payrollEntry.planning_time = Math.round((payrollEntry.tutoring_hours / 6) * 100) / 100;
     payrollEntry.extra_planning_time = Math.round((extraPlanningMinutes / 60) * 100) / 100;
-    payrollEntry.hours_subtotal = payrollEntry.tutoring_hours + payrollEntry.administrative_time + payrollEntry.trial_hours;
+    payrollEntry.hours_subtotal = payrollEntry.tutoring_hours + payrollEntry.administrative_time + payrollEntry.trial_hours + payrollEntry.group_hours;
     payrollEntry.planning_compensation = Math.round(((payrollEntry.planning_time + payrollEntry.extra_planning_time) * payrollEntry.planning_rate) * 100) / 100;
     payrollEntry.tutoring_compensation = Math.round((payrollEntry.hours_subtotal * payrollEntry.pay_rate!) * 100) / 100;
     payrollEntry.total_compensation = payrollEntry.planning_compensation + payrollEntry.tutoring_compensation;

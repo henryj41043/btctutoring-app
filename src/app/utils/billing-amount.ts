@@ -2,6 +2,19 @@ import {Student} from '../models/student.model';
 import {PackageDef, resolvePackageDef, round2} from './package-config';
 import {countRemainingSlots, proratedFirstMonthCost, semiMonthlySplit} from './proration';
 
+/** Flat monthly fee per student enrolled in the "BTC & Me" group program. */
+export const GROUP_MONTHLY_FEE = 75;
+
+/**
+ * The family's flat "BTC & Me" total: $75 per enrolled (btc_and_me) student.
+ * Charged in full regardless of attendance or mid-month enrollment (client
+ * policy), and never sibling-discounted — add it AFTER the discount. Callers
+ * pass students already filtered to Active. Mirror of the backend helper.
+ */
+export function groupSessionFee(students: Student[]): number {
+  return GROUP_MONTHLY_FEE * students.filter(s => s.btc_and_me).length;
+}
+
 /**
  * Applies a family's sibling discount to an amount, but only when the family
  * actually has 3+ enrolled students (per the client's policy). A stale percent

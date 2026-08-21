@@ -2,7 +2,7 @@ import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
 import {BillingRecord} from '../models/billing-record.model';
 import {BillingCycle} from '../enums/billing-cycle.enum';
-import {siblingDiscountedTotal, studentMonthlyCharge, studentSemiMonthlyCharge} from './billing-amount';
+import {groupSessionFee, siblingDiscountedTotal, studentMonthlyCharge, studentSemiMonthlyCharge} from './billing-amount';
 import {round2} from './package-config';
 
 export interface PeriodAmounts {
@@ -12,8 +12,10 @@ export interface PeriodAmounts {
 
 /**
  * The recomputed (Option A) charge per due day for the given month, across
- * the family's enrolled students, with the sibling discount applied. Returns
- * null when no student is enrolled (nothing to bill).
+ * the family's active billable students (packaged and/or BTC & Me enrolled):
+ * package charges take the sibling discount (packaged-count threshold), then
+ * the flat group fee is added undiscounted to the day-1 amount. Returns null
+ * when no student is billable (nothing to bill).
  */
 export function currentPeriodAmounts(
   contact: Contact,
@@ -29,22 +31,25 @@ export function currentPeriodAmounts(
     (contact.billing_cycle as string) === 'biweekly';
   const cycle = semi ? BillingCycle.SEMI_MONTHLY : BillingCycle.MONTHLY;
   const pct = contact.sibling_discount;
-  const count = enrolled.length;
+  const packaged = enrolled.filter(s => !!s.package);
+  const count = packaged.length;
+  const groupFee = groupSessionFee(enrolled);
 
   const amounts: {day: number; amount: number}[] = [];
   if (semi) {
     let first = 0;
     let fifteenth = 0;
-    for (const s of enrolled) {
+    for (const s of packaged) {
       const charge = studentSemiMonthlyCharge(s, year, month);
       first += charge.first;
       fifteenth += charge.fifteenth;
     }
-    amounts.push({day: 1, amount: siblingDiscountedTotal(round2(first), pct, count)});
+    // The flat group fee lands on the 1st for semi-monthly families.
+    amounts.push({day: 1, amount: round2(siblingDiscountedTotal(round2(first), pct, count) + groupFee)});
     amounts.push({day: 15, amount: siblingDiscountedTotal(round2(fifteenth), pct, count)});
   } else {
-    const total = round2(enrolled.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
-    amounts.push({day: 1, amount: siblingDiscountedTotal(total, pct, count)});
+    const total = round2(packaged.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+    amounts.push({day: 1, amount: round2(siblingDiscountedTotal(total, pct, count) + groupFee)});
   }
   return {cycle, amounts};
 }

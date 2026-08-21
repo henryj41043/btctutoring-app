@@ -15,4 +15,12 @@ export class Session {
   series_id?: string;
   /** Last time the notes were emailed to the parent (re-sends allowed). */
   notes_emailed_at?: string;
+  /** GROUP sessions only: the student roster (student_id stays empty). */
+  participants?: SessionParticipant[];
+}
+
+/** One student in a GROUP session's roster. */
+export interface SessionParticipant {
+  id: string;
+  name: string;
 }

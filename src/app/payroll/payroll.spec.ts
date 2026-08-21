@@ -199,6 +199,71 @@ describe('Payroll', () => {
     expect(entry.tutoring_compensation).toBe(120);
   });
 
+  it('pays a flat hour per held BTC & Me group session, per session not per student', () => {
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          // Completed 45-min group with 3 students -> ONE flat hour.
+          type: SessionType.GROUP,
+          status: SessionStatus.COMPLETED,
+          student_name: 'Ava, Ben, Cy',
+          participants: [
+            {id: 's-a', name: 'Ava'},
+            {id: 's-b', name: 'Ben'},
+            {id: 's-c', name: 'Cy'},
+          ],
+          start_datetime: '2026-06-05T10:00:00',
+          end_datetime: '2026-06-05T10:45:00',
+        },
+        {
+          // NCNS group also pays the flat hour (tutor held the slot).
+          type: SessionType.GROUP,
+          status: SessionStatus.NO_CALL_NO_SHOW,
+          start_datetime: '2026-06-06T10:00:00',
+          end_datetime: '2026-06-06T10:45:00',
+        },
+        {
+          // Pending and cancelled groups pay nothing.
+          type: SessionType.GROUP,
+          status: SessionStatus.PENDING,
+          start_datetime: '2026-06-07T10:00:00',
+          end_datetime: '2026-06-07T10:45:00',
+        },
+        {
+          type: SessionType.GROUP,
+          status: SessionStatus.CANCELLED,
+          start_datetime: '2026-06-08T10:00:00',
+          end_datetime: '2026-06-08T10:45:00',
+        },
+        {
+          // Out-of-window group contributes zero.
+          type: SessionType.GROUP,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-05-01T10:00:00',
+          end_datetime: '2026-05-01T10:45:00',
+        },
+        {
+          // A normal completed tutoring hour keeps the planning math visible.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-06-09T10:00:00',
+          end_datetime: '2026-06-09T11:00:00',
+        },
+      ] as Session[]),
+    );
+
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+
+    const entry = data(p)[0];
+    expect(entry.group_hours).toBe(2); // completed + NCNS, flat 1.0 each
+    expect(entry.tutoring_hours).toBe(1); // groups never join tutoring hours
+    // Planning derives from tutoring hours only — groups earn no credit.
+    expect(entry.planning_time).toBeCloseTo(0.17, 2);
+    expect(entry.hours_subtotal).toBe(3); // 1 tutoring + 2 group
+    expect(entry.tutoring_compensation).toBe(120); // 3h x $40
+  });
+
   it('credits extra planning minutes per counted session for tagged students', () => {
     studentService.getStudentsByTutor.mockReturnValue(
       of([
@@ -456,20 +521,20 @@ describe('Payroll', () => {
         showFoot: string;
         footStyles: { fillColor: number[] };
       };
-      // Exact head pins the Hire Type column's position.
+      // Exact head pins every column's position (13 with BTC & Me).
       expect(tableArgs.head).toEqual([[
-        'Staff Name', 'Hire Type', 'Tutoring (hrs)', 'Trials (hrs)', 'Admin Time (hrs)',
-        'Subtotal (hrs)', 'Pay Rate', 'Tutoring Comp', 'Planning (hrs)', 'Planning Rate',
-        'Planning Comp', 'Total Comp',
+        'Staff Name', 'Hire Type', 'Tutoring (hrs)', 'Trials (hrs)', 'BTC & Me (hrs)',
+        'Admin (hrs)', 'Subtotal (hrs)', 'Pay Rate', 'Tutoring Comp', 'Planning (hrs)',
+        'Planning Rate', 'Planning Comp', 'Total Comp',
       ]]);
       expect(tableArgs.body[0][1]).toBe('1099');
       expect(tableArgs.body[1][1]).toBe(''); // `?? ''` fallback
       expect(tableArgs.body[0]).toContain('0.33 +0.5');
-      // Grand total of Total Comp in the last cell of a 12-cell foot, last page only.
+      // Grand total of Total Comp in the last cell of a 13-cell foot, last page only.
       expect(tableArgs.foot).toEqual([
         // hire_type and the two rate columns stay blank; planning hours
         // include the extra credit (0.33 + 0.5).
-        ['Grand Total', '', 2, 0, 1, 3, '', '$120.00', 0.83, '', '$4.95', '$124.95'],
+        ['Grand Total', '', 2, 0, 0, 1, 3, '', '$120.00', 0.83, '', '$4.95', '$124.95'],
       ]);
       expect(tableArgs.showFoot).toBe('lastPage');
       expect(tableArgs.footStyles).toEqual({ fillColor: [17, 138, 178] });
@@ -574,6 +639,36 @@ describe('Payroll', () => {
       expect(text).toContain('Hire Type');
       expect(text).toContain('W2');
       expect(text).toContain('Grand Total');
+    });
+
+    // Same render guard for the new BTC & Me column's cell + footer wiring.
+    it('renders the BTC & Me hours column and its footer total', () => {
+      isAdmin = true;
+      contactService.getStaff.mockReturnValue(of([staffContact()]));
+      sessionsService.getAllSessions.mockReturnValue(of([
+        {
+          type: SessionType.GROUP,
+          status: SessionStatus.COMPLETED,
+          tutor_id: 't-1',
+          start_datetime: '2026-06-05T10:00:00',
+          end_datetime: '2026-06-05T10:45:00',
+        },
+      ] as Session[]));
+      TestBed.configureTestingModule({
+        imports: [Payroll],
+        providers: [
+          provideNoopAnimations(),
+          { provide: AuthService, useValue: authService },
+          { provide: SessionsService, useValue: sessionsService },
+          { provide: ContactService, useValue: contactService },
+          { provide: StudentService, useValue: studentService },
+        ],
+      });
+      const fixture = TestBed.createComponent(Payroll);
+      fixture.componentInstance.onDateChange(new Date(2026, 5, 10));
+      fixture.detectChanges();
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('BTC & Me (hrs)');
     });
   });
 

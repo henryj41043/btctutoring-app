@@ -31,6 +31,12 @@
         Add Session
       </button>
     }
+    @if (authService.isAdmin()) {
+      <button mat-raised-button (click)="openGroupSessionDialog('create')" class="cal-add-btn">
+        <mat-icon>groups</mat-icon>
+        Add BTC &amp; Me
+      </button>
+    }
     <div class="cal-view-toggle">
       <button matButton (click)="setView(CalendarView.Month)" [class.active]="view === CalendarView.Month">Month</button>
       <button matButton (click)="setView(CalendarView.Week)" [class.active]="view === CalendarView.Week">Week</button>

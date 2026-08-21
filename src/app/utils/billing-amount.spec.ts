@@ -1,4 +1,4 @@
-import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal, monthKey, midMonthAdjustment} from './billing-amount';
+import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal, monthKey, midMonthAdjustment, groupSessionFee, GROUP_MONTHLY_FEE} from './billing-amount';
 import {Student} from '../models/student.model';
 import {Package} from '../enums/package.enum';
 import {Weekday} from '../enums/weekday.enum';
@@ -243,5 +243,22 @@ describe('mid-month package change charges', () => {
   it('splits the whole change-month charge evenly for a semi-monthly family', () => {
     // 396.93 → round2(396.93/2)=198.47, remainder 198.46.
     expect(studentSemiMonthlyCharge(changed(), 2026, 6)).toEqual({ first: 198.47, fifteenth: 198.46 });
+  });
+});
+
+describe('groupSessionFee', () => {
+  it('charges the flat fee per enrolled student', () => {
+    const students = [
+      {btc_and_me: true},
+      {btc_and_me: true},
+      {btc_and_me: false},
+      {},
+    ] as Student[];
+    expect(groupSessionFee(students)).toBe(2 * GROUP_MONTHLY_FEE);
+  });
+
+  it('is zero for a family with no enrollees', () => {
+    expect(groupSessionFee([])).toBe(0);
+    expect(groupSessionFee([{btc_and_me: false}] as Student[])).toBe(0);
   });
 });

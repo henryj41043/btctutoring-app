@@ -621,7 +621,8 @@ export class Contact implements OnInit {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-    const enrolled = this.students.filter(s => s.status === StudentStatus.ACTIVE_STUDENT && !!s.package);
+    const enrolled = this.students.filter(s =>
+      s.status === StudentStatus.ACTIVE_STUDENT && (!!s.package || !!s.btc_and_me));
     const computed = currentPeriodAmounts(contact, enrolled, year, month);
     if (!computed) {
       return;
@@ -674,6 +675,10 @@ export class Contact implements OnInit {
    *  Manage Schedule so the admin redefines the new package's slots, then recompute
    *  this period's billing. */
   openStudentDialog(mode: StudentDialogMode, student?: Student): void {
+    // A BTC & Me enrollment change (edit or delete) reprices the current
+    // month's already-generated billing record — snapshot to detect it.
+    const groupFlagBefore = student?.btc_and_me ?? false;
+    const editedId = student?.id;
     const ref = this.dialog.open(StudentDialog, {
       data: {mode, contactId: this.id, student, tutors: this.tutors},
       width: '480px',
@@ -689,6 +694,12 @@ export class Contact implements OnInit {
           if (changed) {
             this.openManageScheduleDialog(changed, true);
           }
+        }
+        const groupFlagAfter = editedId
+          ? (this.students.find(s => s.id === editedId)?.btc_and_me ?? false)
+          : false;
+        if (groupFlagAfter !== groupFlagBefore) {
+          this.recomputeCurrentPeriodBilling();
         }
       });
     });

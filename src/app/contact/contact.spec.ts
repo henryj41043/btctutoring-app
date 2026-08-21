@@ -860,6 +860,44 @@ describe('Contact', () => {
       expect(() => c.openStudentDialog('delete', { id: 's-1' } as Student)).not.toThrow();
     });
 
+    it('recomputes billing when a save flips the BTC & Me flag', () => {
+      afterClosed = true;
+      const before = { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, btc_and_me: false } as Student;
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ ...before, btc_and_me: true }]),
+      );
+      billingService.getBillingRecordsByContact.mockReturnValue(of([]));
+      const c = build();
+      c.ngOnInit();
+      c.openStudentDialog('edit', before);
+      expect(billingService.getBillingRecordsByContact).toHaveBeenCalled();
+    });
+
+    it('does not recompute when the BTC & Me flag is unchanged', () => {
+      afterClosed = true;
+      const before = { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, btc_and_me: true } as Student;
+      studentService.getStudentsByContact.mockReturnValue(of([{ ...before }]));
+      billingService.getBillingRecordsByContact.mockReturnValue(of([]));
+      const c = build();
+      c.ngOnInit();
+      c.openStudentDialog('edit', before);
+      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
+    });
+
+    it('recomputes when deleting an enrolled student drops the fee', () => {
+      afterClosed = true;
+      const before = { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, btc_and_me: true } as Student;
+      // A packaged sibling remains, so the family still has a record to adjust.
+      studentService.getStudentsByContact.mockReturnValue(of([
+        { id: 's-2', contact_id: 'c-1', name: 'Quinn', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED } as Student,
+      ]));
+      billingService.getBillingRecordsByContact.mockReturnValue(of([]));
+      const c = build();
+      c.ngOnInit();
+      c.openStudentDialog('delete', before);
+      expect(billingService.getBillingRecordsByContact).toHaveBeenCalled();
+    });
+
     it('opens Manage Schedule after a mid-month package change', () => {
       afterClosed = { openScheduleForStudentId: 's-1' };
       studentService.getStudentsByContact.mockReturnValue(

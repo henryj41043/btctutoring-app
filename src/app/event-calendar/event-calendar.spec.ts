@@ -7,6 +7,7 @@ import { SessionsService } from '../services/sessions.service';
 import { ReminderService } from '../services/reminder.service';
 import { ContactService } from '../services/contact.service';
 import { Reminder } from '../models/reminder.model';
+import { GroupSessionDialog } from '../group-session-dialog/group-session-dialog';
 import { ReminderDialog } from '../reminder-dialog/reminder-dialog';
 import { AuthService } from '../services/auth.service';
 import { SessionDialog } from '../session-dialog/session-dialog';
@@ -663,5 +664,86 @@ describe('EventCalendar', () => {
     component.ngOnInit();
     expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
     expect((component as never as {loading: boolean}).loading).toBe(false);
+  });
+
+  describe('BTC & Me group sessions', () => {
+    const groupSession = {
+      id: 'sess-group',
+      type: SessionType.GROUP,
+      status: SessionStatus.PENDING,
+      tutor_id: 'contact-1',
+      tutor_name: 'Tess',
+      student_name: 'Ava, Ben',
+      participants: [
+        { id: 's-a', name: 'Ava' },
+        { id: 's-b', name: 'Ben' },
+      ],
+      series_id: 'series-1',
+      start_datetime: '2026-06-03T21:00:00',
+      end_datetime: '2026-06-03T21:45:00',
+    } as Session;
+
+    const buildWithGroup = (): EventCalendar => {
+      sessionsService.getAllSessions.mockReturnValue(of([groupSession]));
+      const c = build();
+      c.viewDate = new Date(2026, 5, 15);
+      c.ngOnInit();
+      return c;
+    };
+
+    it('renders with the [BTC & Me] prefix, pink color, and no drag/resize', () => {
+      const c = buildWithGroup();
+      const event = c.events.find(e => (e.meta as Session).id === 'sess-group')!;
+      expect(event.title).toContain('[BTC & Me] Tess with Ava, Ben');
+      expect(event.color?.primary).toBe('#d81b60');
+      expect(event.draggable).toBe(false);
+      expect(event.resizable).toEqual({ beforeStart: false, afterEnd: false });
+      // Edit/delete actions stay — only free-form drag is blocked.
+      expect(event.actions?.length).toBeGreaterThan(0);
+    });
+
+    it('finalized group sessions take the outcome colors', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([
+        { ...groupSession, id: 'g-done', status: SessionStatus.COMPLETED },
+        { ...groupSession, id: 'g-miss', status: SessionStatus.NO_CALL_NO_SHOW },
+      ] as Session[]));
+      const c = build();
+      c.viewDate = new Date(2026, 5, 15);
+      c.ngOnInit();
+      expect(c.events.find(e => (e.meta as Session).id === 'g-done')!.color?.primary).toBe('#18c100');
+      expect(c.events.find(e => (e.meta as Session).id === 'g-miss')!.color?.primary).toBe('#ad2121');
+    });
+
+    it('routes group edit and delete to the group dialog', () => {
+      const c = buildWithGroup();
+      afterClosed = undefined;
+      c.openEditSessionDialog(groupSession);
+      expect(dialog.open).toHaveBeenLastCalledWith(GroupSessionDialog, expect.objectContaining({
+        data: { mode: 'edit', session: groupSession },
+      }));
+      c.openDeleteSessionDialog(groupSession);
+      expect(dialog.open).toHaveBeenLastCalledWith(GroupSessionDialog, expect.objectContaining({
+        data: { mode: 'delete', session: groupSession },
+      }));
+    });
+
+    it('a closed group dialog with a result reloads the calendar', () => {
+      const c = buildWithGroup();
+      sessionsService.getAllSessions.mockClear();
+      afterClosed = { created: 9 };
+      c.openGroupSessionDialog('create');
+      expect(dialog.open).toHaveBeenLastCalledWith(GroupSessionDialog, expect.objectContaining({
+        data: { mode: 'create', session: undefined },
+      }));
+      expect(sessionsService.getAllSessions).toHaveBeenCalled();
+    });
+
+    it('a dismissed group dialog does not reload', () => {
+      const c = buildWithGroup();
+      sessionsService.getAllSessions.mockClear();
+      afterClosed = undefined;
+      c.openGroupSessionDialog('edit', groupSession);
+      expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+    });
   });
 });

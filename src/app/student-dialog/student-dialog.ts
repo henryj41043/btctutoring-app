@@ -117,6 +117,7 @@ export class StudentDialog implements OnInit {
       assigned_tutor_id: [student.assigned_tutor_id ?? ''],
       package: [student.package ?? ''],
       scholarship: [student.scholarship ?? false],
+      btc_and_me: [student.btc_and_me ?? false],
       make_up_never_expire: [student.make_up_never_expire ?? false],
       extra_planning_minutes: [student.extra_planning_minutes ?? null],
       custom_monthly_cost: [student.custom_monthly_cost ?? null],

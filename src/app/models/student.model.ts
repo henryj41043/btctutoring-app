@@ -21,6 +21,8 @@ export class Student {
   assigned_tutor_id?: string;
   package?: Package;
   scholarship?: boolean;
+  /** Enrolled in the "BTC & Me" group program — bills a flat monthly fee. */
+  btc_and_me?: boolean;
   /** Weekly recurring tutoring slots; the template auto-renew repeats each month. */
   schedule?: ScheduleSlot[];
   /** ISO date the student's package began; drives first-month proration. */
