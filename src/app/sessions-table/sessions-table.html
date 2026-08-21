@@ -43,6 +43,9 @@
             @if (item.type === SessionType.TRIAL) {
               <span class="btc-chip btc-chip--info trial-chip">Trial</span>
             }
+            @if (item.type === SessionType.GROUP) {
+              <span class="btc-chip btc-chip--info group-chip">BTC &amp; Me</span>
+            }
           </td>
         </ng-container>
         <ng-container matColumnDef="start">

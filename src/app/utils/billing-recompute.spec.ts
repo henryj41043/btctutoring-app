@@ -91,3 +91,60 @@ describe('billing-recompute', () => {
     });
   });
 });
+
+describe('currentPeriodAmounts — BTC & Me fee', () => {
+  it('adds the flat fee to the day-1 amount for monthly billing', () => {
+    const computed = currentPeriodAmounts(
+      contact(), [enrolled({btc_and_me: true})], 2026, 7)!;
+    expect(computed.amounts).toEqual([{day: 1, amount: 437}]); // 362 + 75
+  });
+
+  it('bills a group-only family (no packaged student)', () => {
+    const computed = currentPeriodAmounts(
+      contact(),
+      [enrolled({package: undefined, schedule: undefined, btc_and_me: true})],
+      2026, 7)!;
+    expect(computed).not.toBeNull();
+    expect(computed.amounts).toEqual([{day: 1, amount: 75}]);
+  });
+
+  it('lands the whole fee on the 1st for semi-monthly billing', () => {
+    const computed = currentPeriodAmounts(
+      contact({billing_cycle: BillingCycle.SEMI_MONTHLY}),
+      [enrolled({btc_and_me: true})],
+      2026, 7)!;
+    expect(computed.amounts).toEqual([
+      {day: 1, amount: 256}, // 181 + 75
+      {day: 15, amount: 181},
+    ]);
+  });
+
+  it('never sibling-discounts the fee and keys the threshold to packaged students', () => {
+    const computed = currentPeriodAmounts(
+      contact({sibling_discount: 10}),
+      [
+        enrolled({id: 's-1', btc_and_me: true}),
+        enrolled({id: 's-2'}),
+        enrolled({id: 's-3'}),
+        // Group-only sibling: must NOT push the packaged count past the
+        // threshold on its own (3 packaged students already qualify).
+        enrolled({id: 's-4', package: undefined, schedule: undefined, btc_and_me: true}),
+      ],
+      2026, 7)!;
+    // Packages: 3 × 362 = 1086, less 10% = 977.40; fees: 2 × 75 after discount.
+    expect(computed.amounts).toEqual([{day: 1, amount: 1127.4}]);
+  });
+
+  it('a group-only sibling does not trigger the sibling discount', () => {
+    const computed = currentPeriodAmounts(
+      contact({sibling_discount: 10}),
+      [
+        enrolled({id: 's-1'}),
+        enrolled({id: 's-2'}),
+        enrolled({id: 's-3', package: undefined, schedule: undefined, btc_and_me: true}),
+      ],
+      2026, 7)!;
+    // Only 2 packaged students -> no discount; 724 + 75.
+    expect(computed.amounts).toEqual([{day: 1, amount: 799}]);
+  });
+});

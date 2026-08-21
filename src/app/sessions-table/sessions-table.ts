@@ -19,6 +19,7 @@ import {Session} from '../models/session.model';
 import {SessionType} from '../enums/session-type.enum';
 import {catchError, EMPTY} from 'rxjs';
 import {SessionDialog} from '../session-dialog/session-dialog';
+import {GroupSessionDialog} from '../group-session-dialog/group-session-dialog';
 import {Response} from '../models/response.model';
 import {DatePipe} from '@angular/common';
 import {TableStateStore} from '../utils/table-state';
@@ -166,7 +167,24 @@ export class SessionsTable implements OnInit {
     });
   }
 
+  /** Group sessions get their own roster-aware dialog for edit/delete. */
+  private openGroupSessionDialog(mode: 'edit' | 'delete', session: Session): void {
+    const ref = this.sessionDialog.open(GroupSessionDialog, {
+      data: {mode, session},
+      width: '480px',
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result !== undefined) {
+        this.updateSessionsData();
+      }
+    });
+  }
+
   openEditSessionDialog(item: any): void {
+    if ((item as Session).type === SessionType.GROUP) {
+      this.openGroupSessionDialog('edit', item as Session);
+      return;
+    }
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
       data: {type: 'edit', session: item, existingSessions: this.dataSource.data},
     });
@@ -196,6 +214,10 @@ export class SessionsTable implements OnInit {
   }
 
   openDeleteSessionDialog(item: any): void {
+    if ((item as Session).type === SessionType.GROUP) {
+      this.openGroupSessionDialog('delete', item as Session);
+      return;
+    }
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
       data: {type: 'delete', session: item},
     });

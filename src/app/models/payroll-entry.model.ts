@@ -5,6 +5,8 @@ export class PayrollEntry {
   tutoring_hours?: number;
   /** Completed/NCNS trials in the period — each pays a flat 1.0h at pay_rate. */
   trial_hours?: number;
+  /** Completed/NCNS BTC & Me group sessions — each pays a flat 1.0h at pay_rate. */
+  group_hours?: number;
   administrative_time?: number;
   planning_time?: number;
   /** Extra planning hours from per-student extra_planning_minutes credits. */

@@ -228,6 +228,7 @@ describe('StudentDialog', () => {
       assigned_tutor_id: 't-1',
       package: Package.DETERMINATION,
       scholarship: true,
+      btc_and_me: true,
       schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' }],
       package_start_date: '2026-07-01',
       auto_renew: true,
@@ -248,7 +249,16 @@ describe('StudentDialog', () => {
       ]);
       expect(payload.package_start_date).toBe('2026-07-01');
       expect(payload.auto_renew).toBe(true);
+      expect(payload.btc_and_me).toBe(true);
       expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('round-trips an unchecked BTC & Me flag as false', () => {
+      const c = build({ mode: 'edit', student: richStudent({ btc_and_me: undefined }) });
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      c.save();
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      expect(payload.btc_and_me).toBe(false);
     });
 
     it('sends an undefined birthday when none is set', () => {

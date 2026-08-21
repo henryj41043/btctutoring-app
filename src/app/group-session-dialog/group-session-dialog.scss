@@ -1,0 +1,47 @@
+.group-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 320px;
+}
+
+.group-length-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.group-readonly-line {
+  margin: 0 0 12px;
+}
+
+.group-end-line {
+  margin: -4px 0 12px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.group-notes {
+  width: 100%;
+}
+
+.status-confirm-warning {
+  border: 1px solid #e0a800;
+  border-radius: 6px;
+  background: rgba(224, 168, 0, 0.08);
+  padding: 8px 12px;
+  margin-top: 8px;
+
+  p {
+    margin: 4px 0;
+  }
+}
+
+.dialog-error {
+  display: block;
+  margin-top: 8px;
+}
+
+.dialog-saving-spinner {
+  margin: 8px;
+}

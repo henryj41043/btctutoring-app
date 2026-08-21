@@ -1,0 +1,110 @@
+<h2 mat-dialog-title>
+  @switch (mode) {
+    @case ('create') { Add BTC &amp; Me Session }
+    @case ('edit') { Edit BTC &amp; Me Session }
+    @case ('delete') { Delete BTC &amp; Me Session }
+  }
+</h2>
+
+<mat-dialog-content class="group-dialog-content">
+  @if (mode === 'delete') {
+    <p>
+      Delete this <strong>BTC &amp; Me</strong> session for
+      <strong>{{ data.session?.student_name }}</strong>
+      on {{ data.session?.start_datetime | date:'mediumDate' }}?
+      This cannot be undone.
+    </p>
+  } @else {
+    <p class="group-length-hint">BTC &amp; Me sessions are always 45 minutes, weekly.</p>
+
+    @if (isRestricted) {
+      <p class="group-readonly-line">
+        <strong>{{ data.session?.student_name }}</strong> —
+        {{ data.session?.start_datetime | date:'MMM d, h:mm a' }}
+      </p>
+    } @else {
+      <mat-form-field>
+        <mat-label>Tutor</mat-label>
+        <mat-select [(ngModel)]="selectedTutor">
+          @for (tutor of tutors; track tutor.id) {
+            <mat-option [value]="tutor.id">{{ tutor.first_name }} {{ tutor.last_name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>Students</mat-label>
+        <mat-select [(ngModel)]="selectedStudentIds" multiple>
+          @for (option of rosterOptions; track option.id) {
+            <mat-option [value]="option.id">{{ option.name }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>Students enrolled in BTC &amp; Me (set on the student)</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>{{ mode === 'create' ? 'First Session Date' : 'Date' }}</mat-label>
+        <input matInput [matDatepicker]="groupDatePicker" [(ngModel)]="date">
+        <mat-datepicker #groupDatePicker/>
+        <mat-datepicker-toggle [for]="groupDatePicker" matSuffix/>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>Start Time</mat-label>
+        <input matInput [matTimepicker]="groupStartPicker" [(ngModel)]="startTime">
+        <mat-timepicker #groupStartPicker/>
+        <mat-timepicker-toggle [for]="groupStartPicker" matSuffix/>
+      </mat-form-field>
+
+      @if (endTime) {
+        <p class="group-end-line">Ends at {{ endTime | date:'shortTime' }}</p>
+      }
+    }
+
+    @if (mode === 'edit') {
+      <mat-form-field>
+        <mat-label>Attendance</mat-label>
+        <mat-select [(ngModel)]="selectedAttendance">
+          @for (option of attendanceOptions; track option) {
+            <mat-option [value]="option">{{ option }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+
+    <mat-form-field class="group-notes">
+      <mat-label>Notes (optional)</mat-label>
+      <textarea matInput [(ngModel)]="notes"></textarea>
+    </mat-form-field>
+  }
+
+  @if (showSeriesScopePrompt) {
+    <div class="status-confirm-warning">
+      <p><strong>This session is part of a weekly series.</strong></p>
+      <p>Apply this {{ seriesActionLabel }} to just this occurrence, or to this and all future pending occurrences?</p>
+    </div>
+  }
+
+  @if (hasError) {
+    <mat-error class="dialog-error">{{ errorMessage }}</mat-error>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions>
+  @if (submitting) {
+    <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+  } @else if (showSeriesScopePrompt) {
+    <button matButton (click)="cancelSeriesScope()">Cancel</button>
+    <button matButton (click)="chooseSeriesScope('single')">This occurrence</button>
+    <button matButton color="warn" (click)="chooseSeriesScope('future')">This &amp; future</button>
+  } @else {
+    <button matButton (click)="cancel()">Cancel</button>
+    @if (mode === 'delete') {
+      <button mat-raised-button color="warn" (click)="deleteSession()">Delete</button>
+    } @else {
+      <button mat-raised-button color="primary" [disabled]="!canSave" (click)="save()">
+        {{ mode === 'create' ? 'Create Weekly Series' : 'Save' }}
+      </button>
+    }
+  }
+</mat-dialog-actions>

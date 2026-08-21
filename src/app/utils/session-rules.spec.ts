@@ -31,6 +31,12 @@ describe('session-rules', () => {
         .toBe('Trial sessions are always exactly 45 minutes.');
     });
 
+    it('requires BTC & Me group sessions to be exactly 45 minutes', () => {
+      expect(validateSessionLength(SessionType.GROUP, 45, null, undefined)).toBeNull();
+      expect(validateSessionLength(SessionType.GROUP, 60, def, student))
+        .toBe('BTC & Me sessions are always exactly 45 minutes.');
+    });
+
     it('does not constrain admin or make-up sessions', () => {
       expect(validateSessionLength(SessionType.ADMIN, 600, def, student)).toBeNull();
       expect(validateSessionLength(SessionType.MAKE_UP, 600, def, student)).toBeNull();
@@ -101,6 +107,12 @@ describe('session-rules', () => {
     it('trials never mutate', () => {
       expect(mutatesStudent(SessionType.TRIAL, SessionStatus.CANCELLED)).toBe(false);
       expect(mutatesStudent(SessionType.TRIAL, SessionStatus.COMPLETED)).toBe(false);
+    });
+
+    it('BTC & Me group sessions never mutate', () => {
+      expect(mutatesStudent(SessionType.GROUP, SessionStatus.CANCELLED)).toBe(false);
+      expect(mutatesStudent(SessionType.GROUP, SessionStatus.COMPLETED)).toBe(false);
+      expect(mutatesStudent(SessionType.GROUP, SessionStatus.NO_CALL_NO_SHOW)).toBe(false);
     });
 
     it('make-up mutates on completed and no-call-no-show only', () => {

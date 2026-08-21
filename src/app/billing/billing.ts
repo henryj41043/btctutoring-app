@@ -30,7 +30,7 @@ import {CurrencyPipe, DatePipe} from '@angular/common';
 import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {StudentStatus} from '../enums/student-status.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
-import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
+import {groupSessionFee, studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
 import {round2} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
 import {TableStateStore} from '../utils/table-state';
@@ -170,10 +170,12 @@ export class Billing implements OnInit {
       recordMap.set(`${r.contact_id}#${r.period_start}`, r);
     }
 
-    // Group billable students (active, with a package) by their parent contact.
+    // Group billable students (active, with a package or a BTC & Me
+    // enrollment) by their parent contact.
     const byContact = new Map<string, Student[]>();
     for (const s of students) {
-      if (s.status !== StudentStatus.ACTIVE_STUDENT || !s.package || !s.contact_id) continue;
+      if (s.status !== StudentStatus.ACTIVE_STUDENT || !s.contact_id) continue;
+      if (!s.package && !s.btc_and_me) continue;
       const list = byContact.get(s.contact_id) ?? [];
       list.push(s);
       byContact.set(s.contact_id, list);
@@ -187,10 +189,13 @@ export class Billing implements OnInit {
       const cycle = this.normalizeCycle(contact.billing_cycle);
       const semi = cycle === BillingCycle.SEMI_MONTHLY;
 
-      // Sibling discount: a family-level percent, applied only when the family
-      // has 2+ enrolled students (contactStudents are already active + packaged).
+      // Sibling discount: a family-level percent keyed to PACKAGED enrollment
+      // — group-only students never count toward the 3+ threshold, and the
+      // flat BTC & Me fee is never discounted (added after the discount).
+      const packaged = contactStudents.filter(s => !!s.package);
       const pct = contact.sibling_discount;
-      const enrolled = contactStudents.length;
+      const enrolled = packaged.length;
+      const groupFee = groupSessionFee(contactStudents);
 
       let dueFirst: number | null;
       let dueFifteenth: number | null;
@@ -199,7 +204,7 @@ export class Billing implements OnInit {
       if (semi) {
         let first = 0;
         let fifteenth = 0;
-        for (const s of contactStudents) {
+        for (const s of packaged) {
           const charge = studentSemiMonthlyCharge(s, year, month);
           first += charge.first;
           fifteenth += charge.fifteenth;
@@ -207,7 +212,8 @@ export class Billing implements OnInit {
         first = round2(first);
         fifteenth = round2(fifteenth);
         preDiscountTotal = round2(first + fifteenth);
-        const discFirst = siblingDiscountedTotal(first, pct, enrolled);
+        // The flat group fee lands on the 1st for semi-monthly families.
+        const discFirst = round2(siblingDiscountedTotal(first, pct, enrolled) + groupFee);
         const discFifteenth = siblingDiscountedTotal(fifteenth, pct, enrolled);
         total = round2(discFirst + discFifteenth);
         // A half with no charge (e.g. the blank side of a prorated first month,
@@ -215,19 +221,22 @@ export class Billing implements OnInit {
         dueFirst = discFirst === 0 ? null : discFirst;
         dueFifteenth = discFifteenth === 0 ? null : discFifteenth;
       } else {
-        preDiscountTotal = round2(contactStudents.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
-        total = siblingDiscountedTotal(preDiscountTotal, pct, enrolled);
+        preDiscountTotal = round2(packaged.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+        total = round2(siblingDiscountedTotal(preDiscountTotal, pct, enrolled) + groupFee);
         dueFirst = total;
         dueFifteenth = null;
       }
-      if (preDiscountTotal <= 0) continue; // nobody is billable this month
+      if (preDiscountTotal <= 0 && groupFee <= 0) continue; // nobody is billable this month
 
-      const discount = round2(preDiscountTotal - total);
+      const discount = round2(preDiscountTotal + groupFee - total);
 
       const entry: BillingEntry = {
         contact_id: contactId,
         name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
-        packages: contactStudents.map(s => `${studentDisplayName(s)}: ${s.package}`).join('; '),
+        packages: [
+          ...packaged.map(s => `${studentDisplayName(s)}: ${s.package}`),
+          ...contactStudents.filter(s => s.btc_and_me).map(s => `${studentDisplayName(s)}: BTC & Me`),
+        ].join('; '),
         cycle,
         due_first: dueFirst,
         due_fifteenth: dueFifteenth,
@@ -236,7 +245,7 @@ export class Billing implements OnInit {
         discount_percent: discount > 0 ? (pct ?? 0) : 0,
         paid_first: recordMap.get(`${contactId}#${periodFirst}`)?.paid ?? false,
         paid_fifteenth: semi ? (recordMap.get(`${contactId}#${periodFifteenth}`)?.paid ?? false) : false,
-        needs_attention: contactStudents.some(studentNeedsAttention),
+        needs_attention: packaged.some(studentNeedsAttention),
       };
       entries.push(entry);
     }

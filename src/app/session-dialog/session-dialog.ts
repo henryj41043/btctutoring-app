@@ -80,10 +80,11 @@ export class SessionDialog implements OnInit {
   selectedTutor: string | undefined;
   selectedStudent: string | undefined;
   selectedAttendance: any;
-  // Trials are only created from the contact page; the generic dialog offers
-  // TRIAL only when the session being edited already is one.
+  // Trials are created from the contact page and BTC & Me groups from their
+  // own dialog; the generic dialog offers TRIAL only when the session being
+  // edited already is one (GROUP always routes to the group dialog).
   sessionTypeOptions: SessionType[] =
-    Object.values(SessionType).filter(t => t !== SessionType.TRIAL);
+    Object.values(SessionType).filter(t => t !== SessionType.TRIAL && t !== SessionType.GROUP);
   readonly SessionType = SessionType;
   readonly SessionStatus = SessionStatus;
   readonly typeLabels: Record<string, string> = {
@@ -91,6 +92,7 @@ export class SessionDialog implements OnInit {
     [SessionType.MAKE_UP]: 'Make-up',
     [SessionType.ADMIN]: 'Admin',
     [SessionType.TRIAL]: 'Trial',
+    [SessionType.GROUP]: 'BTC & Me',
   };
   // All active staff (Hiring + Active Staff); the `tutors` getter narrows by
   // session type — Admin time is loggable by any staff member, tutoring only
@@ -255,7 +257,8 @@ export class SessionDialog implements OnInit {
     if(this.dialogData.type !== 'create') {
       this.selectedType = this.dialogData.session.type ?? SessionType.TUTORING;
       if (this.selectedType === SessionType.TRIAL) {
-        this.sessionTypeOptions = Object.values(SessionType);
+        this.sessionTypeOptions =
+          Object.values(SessionType).filter(t => t !== SessionType.GROUP);
       }
       this.selectedStudent = this.dialogData.session.student_id;
       this.selectedTutor = this.dialogData.session.tutor_id;

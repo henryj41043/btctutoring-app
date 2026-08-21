@@ -24,6 +24,11 @@ export function validateSessionLength(
       ? null
       : 'Trial sessions are always exactly 45 minutes.';
   }
+  if (type === SessionType.GROUP) {
+    return durationMinutes === 45
+      ? null
+      : 'BTC & Me sessions are always exactly 45 minutes.';
+  }
   if (type !== SessionType.TUTORING) return null;
   if (!def) return null;
   if (durationMinutes > def.sessionLengthMin) {
@@ -73,8 +78,9 @@ export function validateMakeupPendingBalance(
 
 /** Whether finalizing a session of this type/status changes the student's minute banks. */
 export function mutatesStudent(type: SessionType, status: SessionStatus): boolean {
-  // Trials never touch the make-up bank — a cancelled trial banks nothing.
-  if (type === SessionType.TRIAL) {
+  // Trials and BTC & Me group sessions never touch the make-up bank — a
+  // cancelled one banks nothing (group billing is a flat monthly fee).
+  if (type === SessionType.TRIAL || type === SessionType.GROUP) {
     return false;
   }
   if (type === SessionType.MAKE_UP) {

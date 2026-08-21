@@ -31,6 +31,7 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatTableModule} from '@angular/material/table';
 import {SessionDialog} from '../session-dialog/session-dialog';
+import {GroupSessionDialog} from '../group-session-dialog/group-session-dialog';
 import {Session} from '../models/session.model';
 import {MatDialog} from '@angular/material/dialog';
 import {SessionRange, SessionsService} from '../services/sessions.service';
@@ -80,6 +81,10 @@ const colors: Record<string, EventColor> = {
   teal: {
     primary: '#00897b',
     secondary: '#b2dfdb',
+  },
+  pink: {
+    primary: '#d81b60',
+    secondary: '#f8bbd0',
   },
 };
 
@@ -389,19 +394,23 @@ export class EventCalendar implements OnInit {
       const isAdmin = session.type === SessionType.ADMIN;
       const isMakeUp = session.type === SessionType.MAKE_UP;
       const isTrial = session.type === SessionType.TRIAL;
+      const isGroup = session.type === SessionType.GROUP;
       const editable = this.isSessionEditable(session);
+      // Group sessions are fixed 45-minute weekly occurrences — dragging or
+      // resizing would bypass the length rule and the roster-aware dialog.
+      const adjustable = editable && !isGroup;
       const timeRange = `${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`;
       return {
         title: isAdmin
           ? `${session.tutor_name} - Admin Time - ${timeRange}`
-          : `${isMakeUp ? '[Make-up] ' : ''}${isTrial ? '[Trial] ' : ''}${session.tutor_name} with ${session.student_name} - ${timeRange}`,
+          : `${isMakeUp ? '[Make-up] ' : ''}${isTrial ? '[Trial] ' : ''}${isGroup ? '[BTC & Me] ' : ''}${session.tutor_name} with ${session.student_name} - ${timeRange}`,
         start: new Date(session.start_datetime as string),
         end: new Date(session.end_datetime as string),
         meta: session,
         actions: editable ? this.actions : [],
         color: this.setColor(session.type, session.status),
-        resizable: { beforeStart: editable, afterEnd: editable },
-        draggable: editable,
+        resizable: { beforeStart: adjustable, afterEnd: adjustable },
+        draggable: adjustable,
       };
     });
   }
@@ -419,6 +428,17 @@ export class EventCalendar implements OnInit {
         return colors['red'];
       }
       return colors['teal'];
+    }
+    // Pink marks a SCHEDULED BTC & Me group session; finalized takes the
+    // outcome color like the other typed sessions.
+    if (type === SessionType.GROUP) {
+      if (status === SessionStatus.COMPLETED) {
+        return colors['green'];
+      }
+      if (status === SessionStatus.NO_CALL_NO_SHOW || status === SessionStatus.CANCELLED) {
+        return colors['red'];
+      }
+      return colors['pink'];
     }
     if (type === SessionType.MAKE_UP) {
       // Orange marks a SCHEDULED make-up; once finalized it takes the outcome
@@ -535,8 +555,25 @@ export class EventCalendar implements OnInit {
     });
   }
 
+  /** Group sessions get their own roster-aware dialog for every mutation. */
+  openGroupSessionDialog(mode: 'create' | 'edit' | 'delete', session?: Session): void {
+    const ref = this.sessionDialog.open(GroupSessionDialog, {
+      data: {mode, session},
+      width: '480px',
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result !== undefined) {
+        this.updateSessionsData(true);
+      }
+    });
+  }
+
   openEditSessionDialog(item: any): void {
     console.log('openEditSessionDialog');
+    if ((item as Session).type === SessionType.GROUP) {
+      this.openGroupSessionDialog('edit', item as Session);
+      return;
+    }
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
       data: {type: 'edit', session: item, existingSessions: this.allSessions},
     });
@@ -559,6 +596,10 @@ export class EventCalendar implements OnInit {
 
   openDeleteSessionDialog(item: any): void {
     console.log('openDeleteSessionDialog');
+    if ((item as Session).type === SessionType.GROUP) {
+      this.openGroupSessionDialog('delete', item as Session);
+      return;
+    }
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
       data: {type: 'delete', session: item},
     });

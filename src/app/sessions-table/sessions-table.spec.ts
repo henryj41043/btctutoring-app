@@ -7,6 +7,7 @@ import { SessionsTable } from './sessions-table';
 import { SessionsService } from '../services/sessions.service';
 import { AuthService } from '../services/auth.service';
 import { SessionDialog } from '../session-dialog/session-dialog';
+import { GroupSessionDialog } from '../group-session-dialog/group-session-dialog';
 import { SessionType } from '../enums/session-type.enum';
 import { Session } from '../models/session.model';
 
@@ -253,6 +254,21 @@ describe('SessionsTable', () => {
     (c as unknown as Record<string, (x: unknown) => void>)[method]({} as Session);
     expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
   });
+
+  it.each(['openEditSessionDialog', 'openDeleteSessionDialog'])(
+    '%s routes GROUP sessions to the group dialog and reloads', (method) => {
+      sessionsService.getAllSessions.mockReturnValue(of([]));
+      const c = build();
+      const groupSession = {id: 'g-1', type: SessionType.GROUP} as Session;
+      (c as unknown as Record<string, (x: unknown) => void>)[method](groupSession);
+      expect(dialog.open).toHaveBeenCalledWith(
+        GroupSessionDialog,
+        expect.objectContaining({
+          data: expect.objectContaining({session: groupSession}),
+        }),
+      );
+      expect(sessionsService.getAllSessions).toHaveBeenCalled();
+    });
 
   it('does not query when a tutor has no resolved contact id', () => {
     isAdmin = false;

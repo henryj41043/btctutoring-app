@@ -532,4 +532,66 @@ describe('Billing', () => {
       expect(text).toContain('$362.00');
     });
   });
+
+  describe('BTC & Me fee', () => {
+    it('adds the flat $75 per enrolled student to a monthly family', () => {
+      studentService.getStudents.mockReturnValue(of([student({ btc_and_me: true })]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(437); // 362 + 75
+      expect(entry.total).toBe(437);
+      expect(entry.packages).toBe('Pat: Succeed; Pat: BTC & Me');
+    });
+
+    it('bills a group-only family with no packaged student', () => {
+      studentService.getStudents.mockReturnValue(of([
+        student({ package: undefined, schedule: undefined, btc_and_me: true }),
+      ]));
+      const c = build();
+      c.ngOnInit();
+      expect((c as any).dataSource.data).toHaveLength(1);
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(75);
+      expect(entry.total).toBe(75);
+      expect(entry.packages).toBe('Pat: BTC & Me');
+      expect(entry.needs_attention).toBe(false);
+    });
+
+    it('lands the whole fee on the 1st for a semi-monthly family', () => {
+      contactService.getContacts.mockReturnValue(of([
+        contact({ billing_cycle: BillingCycle.SEMI_MONTHLY }),
+      ]));
+      studentService.getStudents.mockReturnValue(of([student({ btc_and_me: true })]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(256); // 181 + 75
+      expect(entry.due_fifteenth).toBe(181);
+    });
+
+    it('never discounts the fee; group-only siblings do not hit the threshold', () => {
+      contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
+      studentService.getStudents.mockReturnValue(of([
+        student({ id: 's-1', name: 'Pat' }),
+        student({ id: 's-2', name: 'Quinn' }),
+        student({ id: 's-3', name: 'Zoe', package: undefined, schedule: undefined, btc_and_me: true }),
+      ]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      // 2 packaged students -> no sibling discount; 724 + 75 flat.
+      expect(entry.total).toBe(799);
+      expect(entry.discount).toBe(0);
+    });
+
+    it('skips inactive or unenrolled unpackaged students as before', () => {
+      studentService.getStudents.mockReturnValue(of([
+        student({ package: undefined, schedule: undefined }), // no package, not enrolled
+      ]));
+      const c = build();
+      c.ngOnInit();
+      expect((c as any).dataSource.data).toHaveLength(0);
+    });
+  });
 });

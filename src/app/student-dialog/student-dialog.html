@@ -71,6 +71,10 @@
            onboarding (client request). -->
       <mat-checkbox formControlName="scholarship">Scholarship</mat-checkbox>
 
+      <!-- BTC & Me enrollment drives the flat monthly group fee and the
+           group dialog's roster choices; editable like Scholarship. -->
+      <mat-checkbox formControlName="btc_and_me">BTC &amp; Me</mat-checkbox>
+
       @if (!locked) {
         <!-- Birthday is collected on the post-onboarding paperwork, so it only
              appears once onboarding is complete (client request). -->
