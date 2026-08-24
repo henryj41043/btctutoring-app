@@ -1,0 +1,49 @@
+.scholarships {
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    width: 100%;
+    min-width: 720px;
+  }
+
+  .contact-link {
+    color: var(--btc-teal-deep, #0b6e79);
+    text-decoration: underline;
+  }
+
+  .icon-yes {
+    color: #1c7a45;
+  }
+
+  .icon-pending {
+    opacity: .55;
+  }
+}
+
+.scholarships-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.scholarships-month {
+  width: 200px;
+}
+
+.scholarships-empty {
+  margin: 16px 0;
+  opacity: 0.75;
+}
+
+.table-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 0;
+}

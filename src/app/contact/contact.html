@@ -359,38 +359,10 @@
       </div>
     } @else {
       @if (hasScholarshipStudent) {
-      <h2>Scholarship</h2>
+      <!-- Month-keyed checklist with its own Save — decoupled from the main
+           contact form so prior months' history is preserved. -->
+      <app-contact-scholarship-section [contactId]="id"/>
       <div class="scholarship-grid">
-        <mat-form-field>
-          <mat-label>Scholarship State</mat-label>
-          <input matInput formControlName="scholarship_state">
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Invoice Month</mat-label>
-          <input matInput formControlName="invoice_Month">
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Date Funds Requested By BTC</mat-label>
-          <input matInput [matDatepicker]="dfrbbtcDatepicker" formControlName="date_funds_requested_by_btc">
-          <mat-datepicker #dfrbbtcDatepicker/>
-          <mat-datepicker-toggle [for]="dfrbbtcDatepicker" matSuffix/>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Date Funds Requested By Family</mat-label>
-          <input matInput [matDatepicker]="dfrbfDatepicker" formControlName="date_funds_requested_by_family">
-          <mat-datepicker #dfrbfDatepicker/>
-          <mat-datepicker-toggle [for]="dfrbfDatepicker" matSuffix/>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Invoice Number</mat-label>
-          <input matInput formControlName="invoice_number">
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Invoice Paid Date</mat-label>
-          <input matInput [matDatepicker]="invoicePaidDatepicker" formControlName="invoice_paid_date">
-          <mat-datepicker #invoicePaidDatepicker/>
-          <mat-datepicker-toggle [for]="invoicePaidDatepicker" matSuffix/>
-        </mat-form-field>
         <mat-form-field class="billing-textbox">
           <mat-label>Special Circumstance</mat-label>
           <textarea matInput formControlName="special_circumstance"></textarea>

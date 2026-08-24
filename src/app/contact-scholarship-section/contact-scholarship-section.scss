@@ -1,0 +1,42 @@
+.scholarship-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  h2 {
+    margin: 0;
+  }
+}
+
+.scholarship-month {
+  width: 200px;
+}
+
+.scholarship-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+  margin-top: 12px;
+
+  @media (max-width: 700px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scholarship-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.scholarship-saved {
+  color: #1c7a45;
+  font-weight: 500;
+}
+
+.scholarship-error {
+  color: #ad2121;
+  font-weight: 500;
+}
