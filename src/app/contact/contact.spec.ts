@@ -898,6 +898,30 @@ describe('Contact', () => {
       expect(billingService.getBillingRecordsByContact).toHaveBeenCalled();
     });
 
+    it('opens the pending-schedule dialog after a scheduled package change', () => {
+      afterClosed = { openPendingScheduleForStudentId: 's-1' };
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 't-1', pending_package: Package.ACHIEVE, pending_package_effective: '2026-09-01' }]),
+      );
+      contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
+      billingService.getBillingRecordsByContact.mockReturnValue(of([]));
+      const c = build();
+      c.ngOnInit();
+      c.openStudentDialog('edit', { id: 's-1' } as Student);
+      const scheduleCall = dialog.open.mock.calls.find(call => call[0] === ManageScheduleDialog);
+      expect(scheduleCall).toBeDefined();
+      expect((scheduleCall![1] as { data: { pendingMode?: boolean } }).data.pendingMode).toBe(true);
+      // Pending changes affect a future month only — no billing recompute.
+      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
+    });
+
+    it('renders the scheduled-change note for a student card', () => {
+      const c = build();
+      expect(c.pendingNote({ pending_package: Package.ACHIEVE, pending_package_effective: '2026-09-01' } as Student))
+        .toBe('→ Achieve from Sep 1');
+      expect(c.pendingNote({} as Student)).toBeNull();
+    });
+
     it('opens Manage Schedule after a mid-month package change', () => {
       afterClosed = { openScheduleForStudentId: 's-1' };
       studentService.getStudentsByContact.mockReturnValue(

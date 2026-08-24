@@ -22,12 +22,22 @@ import {ScheduleSlot} from '../utils/proration';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {PackageDef} from '../utils/package-config';
 import {ScheduleService} from '../services/schedule.service';
+import {StudentService} from '../services/student.service';
 import {AuthService} from '../services/auth.service';
+import {resolvePackageDef} from '../utils/package-config';
+import {pendingPackageNote} from '../utils/pending-package';
 
 /** Data needed to open the Manage Schedule dialog. */
 export interface ManageScheduleDialogData {
   student: Student;
   tutor?: Contact;
+  /**
+   * Pending mode: edit the slots for a SCHEDULED package change. Validates
+   * against the pending package's definition and persists only
+   * pending_schedule — no sessions are created or deleted, and the live
+   * schedule/package_start_date/auto_renew stay untouched.
+   */
+  pendingMode?: boolean;
 }
 
 /** A schedule slot being edited (weekday not chosen yet until picked). */
@@ -60,12 +70,14 @@ export class ManageScheduleDialog implements OnInit {
   readonly dialogRef = inject(MatDialogRef<ManageScheduleDialog>);
   readonly data = inject<ManageScheduleDialogData>(MAT_DIALOG_DATA);
   private scheduleService: ScheduleService = inject(ScheduleService);
+  private studentService: StudentService = inject(StudentService);
   private authService: AuthService = inject(AuthService);
 
   student!: Student;
   tutor?: Contact;
   def: PackageDef | null = null;
   isEdit: boolean = false;
+  pendingMode: boolean = false;
 
   scheduleSlots: ScheduleSlotInput[] = [];
   startDate: Date | undefined;
@@ -92,6 +104,19 @@ export class ManageScheduleDialog implements OnInit {
   ngOnInit(): void {
     this.student = this.data.student;
     this.tutor = this.data.tutor;
+    this.pendingMode = this.data.pendingMode ?? false;
+    if (this.pendingMode) {
+      // The slots being edited belong to the FUTURE package.
+      this.def = resolvePackageDef(this.student.pending_package || undefined, {
+        monthlyCost: this.student.pending_custom_monthly_cost,
+        sessionsPerWeek: this.student.pending_custom_sessions_per_week,
+        sessionLengthMin: this.student.pending_custom_session_length_min,
+      });
+      this.scheduleSlots = (this.student.pending_schedule ?? []).map(
+        s => ({weekday: s.weekday, start_time: s.start_time}));
+      this.seedScheduleSlots();
+      return;
+    }
     this.def = this.scheduleService.resolveDef(this.student);
     const existing = this.student.schedule ?? [];
     this.isEdit = existing.length > 0;
@@ -102,6 +127,16 @@ export class ManageScheduleDialog implements OnInit {
       this.startDate = new Date();
       this.seedScheduleSlots();
     }
+  }
+
+  /** The pending-mode header line, e.g. '→ Achieve from Sep 1'. */
+  get pendingNote(): string | null {
+    return pendingPackageNote(this.student);
+  }
+
+  /** The package name governing this dialog's slot rules. */
+  get packageLabel(): string {
+    return (this.pendingMode ? this.student.pending_package : this.student.package) || '';
   }
 
   /** Reseeds blank slot rows to match the package's sessions/week (create mode). */
@@ -128,12 +163,12 @@ export class ManageScheduleDialog implements OnInit {
       this.fail('Assign a tutor to this student before setting up a schedule.');
       return;
     }
-    if (!this.isEdit && !this.startDate) {
+    if (!this.pendingMode && !this.isEdit && !this.startDate) {
       this.fail('Please choose a start date.');
       return;
     }
     if (this.scheduleSlots.length !== this.def.sessionsPerWeek) {
-      this.fail(`${this.student.package} requires ${this.def.sessionsPerWeek} session(s) per week.`);
+      this.fail(`${this.packageLabel} requires ${this.def.sessionsPerWeek} session(s) per week.`);
       return;
     }
     if (this.scheduleSlots.some(s => !s.weekday || !s.start_time)) {
@@ -147,9 +182,13 @@ export class ManageScheduleDialog implements OnInit {
       end_time: this.scheduleService.addMinutesToTime(s.start_time, this.def!.sessionLengthMin),
     }));
 
-    // Validate occurrences against tutor availability (warn-and-override for admins).
+    // Validate occurrences against tutor availability (warn-and-override for
+    // admins). Pending mode anchors at the effective date so the checked
+    // occurrences fall in the month the new schedule actually starts.
     if (!this.availabilityOverridden) {
-      const anchor = this.isEdit ? new Date() : this.startDate!;
+      const anchor = this.pendingMode
+        ? this.effectiveAnchor()
+        : this.isEdit ? new Date() : this.startDate!;
       const failures = this.scheduleService.findAvailabilityFailures(
         this.tutor,
         this.scheduleService.buildOccurrences(slots, anchor),
@@ -169,8 +208,34 @@ export class ManageScheduleDialog implements OnInit {
     this.persist(slots);
   }
 
+  /** The effective date as a local Date (component parse — never new Date(string)). */
+  private effectiveAnchor(): Date {
+    const [y, m, d] = (this.student.pending_package_effective ?? '').split('-').map(Number);
+    if (!y || !m || !d) {
+      return new Date();
+    }
+    return new Date(y, m - 1, d);
+  }
+
   private persist(slots: ScheduleSlot[]): void {
     this.saving = true;
+    if (this.pendingMode) {
+      // Only the pending slots change — no sessions, no live-schedule fields.
+      this.studentService
+        .updateStudent({...this.student, pending_schedule: slots})
+        .pipe(
+          catchError(() => {
+            this.saving = false;
+            this.fail('Saving the pending schedule failed.');
+            return EMPTY;
+          }),
+        )
+        .subscribe(() => {
+          this.saving = false;
+          this.dialogRef.close({...this.student, pending_schedule: slots});
+        });
+      return;
+    }
     const tutor = this.tutor!;
     const request$ = this.isEdit
       ? this.scheduleService.updateSchedule(this.student, tutor, slots, this.autoRenew)

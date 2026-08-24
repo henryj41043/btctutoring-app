@@ -28,6 +28,7 @@ import {perSessionCost, resolvePackageDef, round2} from '../utils/package-config
 import {countSlotsBeforeInMonth} from '../utils/proration';
 import {monthKey} from '../utils/billing-amount';
 import {availableMakeupMinutes} from '../utils/makeup';
+import {nextMonthFirsts, pendingChanged, pendingPackageNote} from '../utils/pending-package';
 import {studentDisplayName} from '../utils/student-name';
 
 export type StudentDialogMode = 'create' | 'edit' | 'delete';
@@ -37,7 +38,9 @@ export type StudentDialogMode = 'create' | 'edit' | 'delete';
  * an object when a mid-month package change needs the caller to open Manage
  * Schedule so the admin redefines the new package's slots.
  */
-export type StudentDialogResult = true | {openScheduleForStudentId?: string};
+export type StudentDialogResult =
+  | true
+  | {openScheduleForStudentId?: string; openPendingScheduleForStudentId?: string};
 
 /** Data needed to open the Student dialog. */
 export interface StudentDialogData {
@@ -119,6 +122,13 @@ export class StudentDialog implements OnInit {
       scholarship: [student.scholarship ?? false],
       btc_and_me: [student.btc_and_me ?? false],
       make_up_never_expire: [student.make_up_never_expire ?? false],
+      pending_package: [student.pending_package ?? ''],
+      pending_custom_monthly_cost: [student.pending_custom_monthly_cost ?? null],
+      pending_custom_sessions_per_week: [student.pending_custom_sessions_per_week ?? null],
+      pending_custom_session_length_min: [student.pending_custom_session_length_min ?? null],
+      pending_package_effective: [student.pending_package_effective ?? ''],
+      // Carried through untouched — owned by the pending-schedule dialog.
+      pending_schedule: [student.pending_schedule ?? null],
       extra_planning_minutes: [student.extra_planning_minutes ?? null],
       custom_monthly_cost: [student.custom_monthly_cost ?? null],
       custom_sessions_per_week: [student.custom_sessions_per_week ?? null],
@@ -127,6 +137,37 @@ export class StudentDialog implements OnInit {
       schedule: [student.schedule ?? null],
       package_start_date: [student.package_start_date ?? null],
       auto_renew: [student.auto_renew ?? false],
+    });
+    this.pendingMonthOptions = nextMonthFirsts(new Date());
+    // A stored effective date outside the rolling window must stay selectable.
+    const storedEffective = student.pending_package_effective;
+    if (storedEffective && !this.pendingMonthOptions.some(o => o.value === storedEffective)) {
+      this.pendingMonthOptions = [
+        {value: storedEffective, label: storedEffective},
+        ...this.pendingMonthOptions,
+      ];
+    }
+  }
+
+  /** Effective-month choices for a scheduled package change (next 6 firsts). */
+  protected pendingMonthOptions: {value: string; label: string}[] = [];
+
+  /** The current scheduled-change summary, e.g. '→ Achieve from Sep 1'. */
+  get pendingNote(): string | null {
+    return pendingPackageNote({
+      pending_package: this.studentForm?.get('pending_package')?.value || undefined,
+      pending_package_effective: this.studentForm?.get('pending_package_effective')?.value || undefined,
+    } as Student);
+  }
+
+  /** Clears the scheduled change ('' signals the backend to remove it all). */
+  clearPending(): void {
+    this.studentForm.patchValue({
+      pending_package: '',
+      pending_custom_monthly_cost: null,
+      pending_custom_sessions_per_week: null,
+      pending_custom_session_length_min: null,
+      pending_package_effective: '',
     });
   }
 
@@ -218,15 +259,34 @@ export class StudentDialog implements OnInit {
   }
 
   private update(): void {
-    this.submitting = true;
-    this.hasError = false;
     const raw = this.studentForm.getRawValue();
     const student: Student = {
       ...raw,
       name: (raw.name ?? '').trim(),
       birthday: this.toDateString(raw.birthday),
     };
+    const pendingError = this.validatePendingChange(student);
+    if (pendingError) {
+      this.fail(pendingError);
+      return;
+    }
+    if (!student.pending_package && !this.data.student?.pending_package) {
+      // Nothing pending before or after — omit the keys entirely so a plain
+      // save never issues a gratuitous backend $REMOVE.
+      delete student.pending_package;
+      delete student.pending_custom_monthly_cost;
+      delete student.pending_custom_sessions_per_week;
+      delete student.pending_custom_session_length_min;
+      delete student.pending_package_effective;
+      delete student.pending_schedule;
+    }
+    this.submitting = true;
+    this.hasError = false;
     const packageChanged = this.applyMidMonthPackageChange(student);
+    // The mid-month flow wins when both fire; the pending-schedule dialog can
+    // follow on a later edit.
+    const pendingOpened =
+      !packageChanged && pendingChanged(this.data.student, student);
     this.studentService
       .updateStudent(student)
       .pipe(
@@ -236,11 +296,37 @@ export class StudentDialog implements OnInit {
           return EMPTY;
         }),
       )
-      .subscribe(() =>
-        this.dialogRef.close(
-          packageChanged ? {openScheduleForStudentId: student.id} : true,
-        ),
-      );
+      .subscribe(() => {
+        if (packageChanged) {
+          this.dialogRef.close({openScheduleForStudentId: student.id});
+        } else if (pendingOpened) {
+          this.dialogRef.close({openPendingScheduleForStudentId: student.id});
+        } else {
+          this.dialogRef.close(true);
+        }
+      });
+  }
+
+  /** Scheduled-change validation; returns an error message or null. */
+  private validatePendingChange(student: Student): string | null {
+    if (!student.pending_package) {
+      return null;
+    }
+    if (!student.pending_package_effective) {
+      return 'Pick the month the scheduled package change takes effect.';
+    }
+    if (student.pending_package === student.package) {
+      return 'The scheduled package matches the current one — clear it or pick a different package.';
+    }
+    if (
+      student.pending_package === Package.CUSTOM &&
+      (!student.pending_custom_monthly_cost ||
+        !student.pending_custom_sessions_per_week ||
+        !student.pending_custom_session_length_min)
+    ) {
+      return 'A scheduled Custom package needs all three custom values.';
+    }
+    return null;
   }
 
   /**

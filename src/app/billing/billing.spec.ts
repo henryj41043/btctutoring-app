@@ -594,4 +594,31 @@ describe('Billing', () => {
       expect((c as any).dataSource.data).toHaveLength(0);
     });
   });
+
+  describe('scheduled package changes', () => {
+    const pendingStudent = () => student({
+      pending_package: Package.ACHIEVE, // $546/mo
+      pending_package_effective: '2026-09-01',
+    });
+
+    it('a September view bills and labels the future package', () => {
+      studentService.getStudents.mockReturnValue(of([pendingStudent()]));
+      const c = build();
+      c.selectedDate = new Date(2026, 8, 10); // September 2026
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(546);
+      expect(entry.packages).toBe('Pat: Achieve');
+    });
+
+    it('the August view still bills and labels the current package', () => {
+      studentService.getStudents.mockReturnValue(of([pendingStudent()]));
+      const c = build();
+      c.selectedDate = new Date(2026, 7, 10); // August 2026
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(362);
+      expect(entry.packages).toBe('Pat: Succeed');
+    });
+  });
 });

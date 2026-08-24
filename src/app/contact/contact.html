@@ -243,7 +243,7 @@
                 <div>Status: <span [class]="'btc-chip ' + statusChipClass(student.status)">{{student.status}}</span></div>
                 <div>Assigned Tutor: {{getTutorName(student.assigned_tutor_id)}}</div>
                 <div>Make Up Minutes: {{availableMakeup(student)}}</div>
-                <div>Package: {{student.package || '—'}}</div>
+                <div>Package: {{student.package || '—'}}@if (pendingNote(student)) {<span class="pending-note"> {{pendingNote(student)}}</span>}</div>
                 <div>Scholarship:
                   @if (student.scholarship) {
                     <mat-icon style="color: green;">check</mat-icon>

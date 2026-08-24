@@ -1,5 +1,5 @@
 <h2 mat-dialog-title>
-  @if (isEdit) { Manage Schedule } @else { Set Up Schedule }
+  @if (pendingMode) { Pending Schedule } @else if (isEdit) { Manage Schedule } @else { Set Up Schedule }
   @if (student.name) { — {{student.name}} }
 </h2>
 <mat-dialog-content>
@@ -10,15 +10,17 @@
     </p>
   } @else {
     <p class="schedule-info">
-      {{student.package}}: {{def.sessionsPerWeek}} session(s)/week, {{def.sessionLengthMin}} min each.
-      @if (isEdit) {
+      {{packageLabel}}: {{def.sessionsPerWeek}} session(s)/week, {{def.sessionLengthMin}} min each.
+      @if (pendingMode) {
+        {{pendingNote}} — these slots take effect then; nothing changes before that.
+      } @else if (isEdit) {
         Editing regenerates this month's remaining sessions.
       } @else {
         The start date's month is filled automatically.
       }
     </p>
 
-    @if (!isEdit) {
+    @if (!pendingMode && !isEdit) {
       <mat-form-field>
         <mat-label>Start date</mat-label>
         <input matInput [matDatepicker]="startpicker" [(ngModel)]="startDate">
@@ -51,7 +53,9 @@
       }
     </div>
 
-    <mat-slide-toggle [(ngModel)]="autoRenew">Auto-renew this schedule each month</mat-slide-toggle>
+    @if (!pendingMode) {
+      <mat-slide-toggle [(ngModel)]="autoRenew">Auto-renew this schedule each month</mat-slide-toggle>
+    }
   }
 
   @if (showAvailabilityConfirm) {
@@ -83,11 +87,11 @@
     <button matButton color="warn" (click)="confirmDelete()">Delete Schedule</button>
   } @else {
     <button matButton (click)="cancel()">Cancel</button>
-    @if (isEdit) {
+    @if (isEdit && !pendingMode) {
       <button matButton color="warn" [disabled]="saving" (click)="requestDelete()">Delete</button>
     }
     <button matButton [disabled]="saving || !def" (click)="save()">
-      @if (isEdit) { Save } @else { Create }
+      @if (isEdit || pendingMode) { Save } @else { Create }
     </button>
   }
 </mat-dialog-actions>
