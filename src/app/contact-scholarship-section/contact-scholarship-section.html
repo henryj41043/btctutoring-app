@@ -1,0 +1,62 @@
+<div [formGroup]="scholarshipForm">
+  <div class="scholarship-header">
+    <h2>Scholarship</h2>
+    <mat-form-field subscriptSizing="dynamic" appearance="outline" class="scholarship-month">
+      <mat-label>Month</mat-label>
+      <mat-select [value]="selectedMonth" (selectionChange)="onMonthChange($event.value)">
+        @for (month of monthOptions; track month) {
+          <mat-option [value]="month">{{ monthLabel(month) }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <div class="scholarship-grid">
+    <mat-form-field>
+      <mat-label>Scholarship State</mat-label>
+      <input matInput formControlName="scholarship_state">
+    </mat-form-field>
+    <mat-form-field>
+      <mat-label>Invoice Month</mat-label>
+      <input matInput formControlName="invoice_Month">
+    </mat-form-field>
+    <mat-form-field>
+      <mat-label>Date Funds Requested By BTC</mat-label>
+      <input matInput [matDatepicker]="dfrbbtcDatepicker" formControlName="date_funds_requested_by_btc">
+      <mat-datepicker #dfrbbtcDatepicker/>
+      <mat-datepicker-toggle [for]="dfrbbtcDatepicker" matSuffix/>
+    </mat-form-field>
+    <mat-form-field>
+      <mat-label>Date Funds Requested By Family</mat-label>
+      <input matInput [matDatepicker]="dfrbfDatepicker" formControlName="date_funds_requested_by_family">
+      <mat-datepicker #dfrbfDatepicker/>
+      <mat-datepicker-toggle [for]="dfrbfDatepicker" matSuffix/>
+    </mat-form-field>
+    <mat-form-field>
+      <mat-label>Invoice Number</mat-label>
+      <input matInput formControlName="invoice_number">
+    </mat-form-field>
+    <mat-form-field>
+      <mat-label>Invoice Paid Date</mat-label>
+      <input matInput [matDatepicker]="invoicePaidDatepicker" formControlName="invoice_paid_date">
+      <mat-datepicker #invoicePaidDatepicker/>
+      <mat-datepicker-toggle [for]="invoicePaidDatepicker" matSuffix/>
+    </mat-form-field>
+  </div>
+
+  <div class="scholarship-actions">
+    @if (saving) {
+      <mat-spinner [diameter]="24"></mat-spinner>
+    } @else {
+      <button mat-raised-button color="primary" type="button" (click)="save()">
+        Save {{ monthLabel(selectedMonth) }}
+      </button>
+    }
+    @if (savedSuccessfully) {
+      <span class="scholarship-saved">Saved!</span>
+    }
+    @if (hasError) {
+      <span class="scholarship-error">Saving failed. Please try again.</span>
+    }
+  </div>
+</div>

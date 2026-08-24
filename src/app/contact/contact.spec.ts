@@ -293,8 +293,8 @@ describe('Contact', () => {
 
     for (const key of [
       'id', 'first_name', 'last_name', 'email', 'phone_number', 'service', 'status',
-      'billing_cycle', 'special_circumstance', 'scholarship_state', 'invoice_Month',
-      'invoice_number', 'inquiry_note_from_parent', 'scholarship_name', 'title',
+      'billing_cycle', 'special_circumstance',
+      'inquiry_note_from_parent', 'scholarship_name', 'title',
       'zoom_link', 'user_group',
     ]) {
       expect(f.controls[key].value).toBe('');
@@ -380,9 +380,11 @@ describe('Contact', () => {
     expect(f.controls['cc_authorization_received'].value).toBe(true);
     expect(f.controls['twenty_five_deducted'].value).toBe(true);
     expect(f.controls['special_circumstance'].value).toBe('note');
-    expect(f.controls['scholarship_state'].value).toBe('TX');
-    expect(f.controls['invoice_Month'].value).toBe('July');
-    expect(f.controls['invoice_number'].value).toBe('INV-1');
+    // The month-scoped scholarship fields moved to ContactScholarshipSection
+    // (month-keyed records) — the contact form no longer carries them.
+    expect(f.controls['scholarship_state']).toBeUndefined();
+    expect(f.controls['invoice_Month']).toBeUndefined();
+    expect(f.controls['invoice_number']).toBeUndefined();
     expect(f.controls['inquiry_note_from_parent'].value).toBe('hello');
     expect(f.controls['scholarship_name'].value).toBe('Sch');
     expect(f.controls['title'].value).toBe('Mr');

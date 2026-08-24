@@ -1,0 +1,75 @@
+<div class="scholarships">
+  <div class="btc-page-header">
+    <h2>Scholarships — {{ monthStart | date:'MMMM y' }}</h2>
+    <div class="scholarships-controls">
+      <mat-form-field subscriptSizing="dynamic" appearance="outline" class="scholarships-month">
+        <mat-label>Month</mat-label>
+        <input matInput [matDatepicker]="scholarshipsDatepicker" [ngModel]="selectedDate"
+               (dateChange)="onDateChange($event.value)">
+        <mat-datepicker #scholarshipsDatepicker/>
+        <mat-datepicker-toggle [for]="scholarshipsDatepicker" matSuffix/>
+      </mat-form-field>
+      <button mat-raised-button color="primary" (click)="exportCsv()" [disabled]="loading">
+        <mat-icon>download</mat-icon>
+        Export CSV
+      </button>
+    </div>
+  </div>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      @if (loading) {
+        <div class="table-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="table-spinner-label">Loading scholarships…</span>
+        </div>
+      } @else if (dataSource.data.length === 0) {
+        <p class="scholarships-empty">No scholarship families for this month.</p>
+      } @else {
+        <div class="table-scroll">
+          <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
+            <ng-container matColumnDef="family">
+              <th mat-header-cell *matHeaderCellDef>Family</th>
+              <td mat-cell *matCellDef="let row">
+                <a class="contact-link" [routerLink]="['/contacts', row.contact.id]">{{ familyName(row) }}</a>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="scholarship_name">
+              <th mat-header-cell *matHeaderCellDef>Scholarship</th>
+              <td mat-cell *matCellDef="let row">{{ row.contact.scholarship_name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="state">
+              <th mat-header-cell *matHeaderCellDef>State</th>
+              <td mat-cell *matCellDef="let row">{{ row.record?.scholarship_state }}</td>
+            </ng-container>
+            <ng-container matColumnDef="requested_by_btc">
+              <th mat-header-cell *matHeaderCellDef>Requested by BTC</th>
+              <td mat-cell *matCellDef="let row">{{ row.record?.date_funds_requested_by_btc | date:'M/d/yyyy' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="requested_by_family">
+              <th mat-header-cell *matHeaderCellDef>Requested by Family</th>
+              <td mat-cell *matCellDef="let row">{{ row.record?.date_funds_requested_by_family | date:'M/d/yyyy' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="invoice_number">
+              <th mat-header-cell *matHeaderCellDef>Invoice #</th>
+              <td mat-cell *matCellDef="let row">{{ row.record?.invoice_number }}</td>
+            </ng-container>
+            <ng-container matColumnDef="paid">
+              <th mat-header-cell *matHeaderCellDef>Paid</th>
+              <td mat-cell *matCellDef="let row">
+                @if (isPaid(row)) {
+                  <mat-icon class="icon-yes"
+                            [matTooltip]="'Paid ' + (row.record?.invoice_paid_date | date:'M/d/yyyy')">check_circle</mat-icon>
+                } @else {
+                  <mat-icon class="icon-pending" matTooltip="Not paid yet">schedule</mat-icon>
+                }
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="columns"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+          </table>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

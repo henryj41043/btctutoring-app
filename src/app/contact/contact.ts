@@ -58,6 +58,7 @@ import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
 import {ContactRemindersSection} from '../contact-reminders-section/contact-reminders-section';
 import {ContactEmailsSection} from '../contact-emails-section/contact-emails-section';
+import {ContactScholarshipSection} from '../contact-scholarship-section/contact-scholarship-section';
 import {Router} from '@angular/router';
 
 @Component({
@@ -84,6 +85,7 @@ import {Router} from '@angular/router';
     PhoneFormatDirective,
     ContactRemindersSection,
     ContactEmailsSection,
+    ContactScholarshipSection,
   ],
   templateUrl: './contact.html',
   styleUrl: './contact.scss',
@@ -151,12 +153,6 @@ export class Contact implements OnInit {
     cc_authorization_received: false,
     twenty_five_deducted: false,
     special_circumstance: '',
-    scholarship_state: '',
-    invoice_Month: '',
-    date_funds_requested_by_btc: undefined,
-    date_funds_requested_by_family: undefined,
-    invoice_number: '',
-    invoice_paid_date: undefined,
     inquiry_received: undefined,
     inquiry_note_from_parent: '',
     consult_date: undefined,
@@ -348,12 +344,6 @@ export class Contact implements OnInit {
     this.contactForm.controls['cc_authorization_received'].setValue(contact.cc_authorization_received);
     this.contactForm.controls['twenty_five_deducted'].setValue(contact.twenty_five_deducted);
     this.contactForm.controls['special_circumstance'].setValue(contact.special_circumstance);
-    this.contactForm.controls['scholarship_state'].setValue(contact.scholarship_state);
-    this.contactForm.controls['invoice_Month'].setValue(contact.invoice_Month);
-    this.contactForm.controls['date_funds_requested_by_btc'].setValue(contact.date_funds_requested_by_btc);
-    this.contactForm.controls['date_funds_requested_by_family'].setValue(contact.date_funds_requested_by_family);
-    this.contactForm.controls['invoice_number'].setValue(contact.invoice_number);
-    this.contactForm.controls['invoice_paid_date'].setValue(contact.invoice_paid_date);
     this.contactForm.controls['inquiry_received'].setValue(contact.inquiry_received);
     this.contactForm.controls['inquiry_note_from_parent'].setValue(contact.inquiry_note_from_parent);
     this.contactForm.controls['consult_date'].setValue(contact.consult_date);
