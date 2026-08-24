@@ -110,6 +110,51 @@
           <mat-label>Extra Planning (min/session)</mat-label>
           <input matInput type="number" min="0" formControlName="extra_planning_minutes">
         </mat-form-field>
+        <!-- Scheduled package change: entered now, applied automatically by
+             the backend on the effective 1st (billing + schedule follow). -->
+        <div class="pending-change-section">
+          <p class="pending-change-title">Scheduled Package Change</p>
+          @if (pendingNote) {
+            <p class="pending-change-note">{{ pendingNote }}</p>
+          }
+          <mat-form-field>
+            <mat-label>New Package</mat-label>
+            <mat-select formControlName="pending_package">
+              <mat-option value="">None</mat-option>
+              @for (packageOption of packageOptions; track packageOption) {
+                <mat-option [value]="packageOption">{{ packageOption }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          @if (studentForm.get('pending_package')?.value) {
+            @if (studentForm.get('pending_package')?.value === Package.CUSTOM) {
+              <mat-form-field>
+                <mat-label>New Custom Monthly Cost</mat-label>
+                <input matInput type="number" formControlName="pending_custom_monthly_cost">
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>New Custom Sessions / Week</mat-label>
+                <input matInput type="number" formControlName="pending_custom_sessions_per_week">
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>New Custom Session Length (min)</mat-label>
+                <input matInput type="number" formControlName="pending_custom_session_length_min">
+              </mat-form-field>
+            }
+            <mat-form-field>
+              <mat-label>Takes Effect</mat-label>
+              <mat-select formControlName="pending_package_effective">
+                @for (option of pendingMonthOptions; track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <button matButton type="button" class="pending-clear-button" (click)="clearPending()">
+              Clear Scheduled Change
+            </button>
+          }
+        </div>
+
         <p class="makeup-balance">
           Make Up Minutes: <strong>{{ makeupBalance }}</strong>
           <span class="makeup-hint">(from cancelled sessions; expire after 90 days)</span>

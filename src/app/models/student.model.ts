@@ -40,6 +40,18 @@ export class Student {
   make_up_never_expire?: boolean;
   /** Extra tutor planning minutes credited per counted session (payroll). */
   extra_planning_minutes?: number;
+  /**
+   * Scheduled package change, applied by the backend's 1st-of-month cron on
+   * its effective date ('' on save = clear the pending change).
+   */
+  pending_package?: Package | '';
+  pending_custom_monthly_cost?: number;
+  pending_custom_sessions_per_week?: number;
+  pending_custom_session_length_min?: number;
+  /** 'YYYY-MM-DD', always the 1st of a month. */
+  pending_package_effective?: string;
+  /** The new package's weekly slots, swapped in at promotion. */
+  pending_schedule?: ScheduleSlot[];
   /** Old package's prorated portion for a mid-month package-change month. */
   mid_month_prior_charge?: number;
   /** The 'YYYY-MM' the mid_month_prior_charge applies to (that month only). */

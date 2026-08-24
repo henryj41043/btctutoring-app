@@ -52,6 +52,7 @@ import {minNoteOrder, noteDateIso, noteGroup, sortNotes} from '../utils/note-for
 import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-forms';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {pendingPackageNote} from '../utils/pending-package';
 import {studentStatusChipClass} from '../utils/status-chip';
 import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
@@ -577,6 +578,11 @@ export class Contact implements OnInit {
     return this.students.some(s => !!s.scholarship);
   }
 
+  /** The student's scheduled-change note, e.g. '→ Achieve from Sep 1'. */
+  pendingNote(student: Student): string | null {
+    return pendingPackageNote(student);
+  }
+
   /** True once a student has both an assigned tutor and a package — required to schedule. */
   canManageSchedule(student: Student): boolean {
     return !!student.assigned_tutor_id && !!student.package;
@@ -588,7 +594,11 @@ export class Contact implements OnInit {
   }
 
   /** Opens the Manage Schedule dialog for a student; reloads on a persisted change. */
-  openManageScheduleDialog(student: Student, recomputeBilling: boolean = false): void {
+  openManageScheduleDialog(
+    student: Student,
+    recomputeBilling: boolean = false,
+    pendingMode: boolean = false,
+  ): void {
     this.contactService.getContact(student.assigned_tutor_id!).pipe(
       catchError(error => {
         console.log(error);
@@ -596,7 +606,7 @@ export class Contact implements OnInit {
       })
     ).subscribe(contacts => {
       const ref = this.dialog.open(ManageScheduleDialog, {
-        data: {student, tutor: contacts[0]},
+        data: {student, tutor: contacts[0], pendingMode},
         width: '520px',
       });
       ref.afterClosed().subscribe((updated?: Student) => {
@@ -688,11 +698,20 @@ export class Contact implements OnInit {
         return;
       }
       const openScheduleFor = typeof result === 'object' ? result.openScheduleForStudentId : undefined;
+      const openPendingFor = typeof result === 'object' ? result.openPendingScheduleForStudentId : undefined;
       this.loadStudents(() => {
         if (openScheduleFor) {
           const changed = this.students.find(s => s.id === openScheduleFor);
           if (changed) {
             this.openManageScheduleDialog(changed, true);
+          }
+        }
+        if (openPendingFor) {
+          // Define the FUTURE package's slots; affects only pending_schedule,
+          // so no billing recompute (the change bills a future month).
+          const changed = this.students.find(s => s.id === openPendingFor);
+          if (changed) {
+            this.openManageScheduleDialog(changed, false, true);
           }
         }
         const groupFlagAfter = editedId

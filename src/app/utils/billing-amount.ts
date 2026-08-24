@@ -1,6 +1,7 @@
 import {Student} from '../models/student.model';
 import {PackageDef, resolvePackageDef, round2} from './package-config';
 import {countRemainingSlots, proratedFirstMonthCost, semiMonthlySplit} from './proration';
+import {packageFieldsForMonth} from './pending-package';
 
 /** Flat monthly fee per student enrolled in the "BTC & Me" group program. */
 export const GROUP_MONTHLY_FEE = 75;
@@ -93,10 +94,13 @@ function baseMonthlyCharge(def: PackageDef, student: Student, year: number, mont
  * month-end or isn't configured (e.g. an unconfigured CUSTOM student).
  */
 export function studentMonthlyCharge(student: Student, year: number, month: number): number {
-  const def = resolvePackageDef(student.package, {
-    monthlyCost: student.custom_monthly_cost,
-    sessionsPerWeek: student.custom_sessions_per_week,
-    sessionLengthMin: student.custom_session_length_min,
+  // Resolve the package that GOVERNS the billed month — a scheduled change
+  // applies from its effective month, even before the cron promotes it.
+  const fields = packageFieldsForMonth(student, year, month);
+  const def = resolvePackageDef(fields.package || undefined, {
+    monthlyCost: fields.custom_monthly_cost,
+    sessionsPerWeek: fields.custom_sessions_per_week,
+    sessionLengthMin: fields.custom_session_length_min,
   });
   if (!def) return 0;
 
@@ -113,10 +117,11 @@ export function studentMonthlyCharge(student: Student, year: number, month: numb
  * following month.
  */
 export function studentSemiMonthlyCharge(student: Student, year: number, month: number): SemiMonthlyCharge {
-  const def = resolvePackageDef(student.package, {
-    monthlyCost: student.custom_monthly_cost,
-    sessionsPerWeek: student.custom_sessions_per_week,
-    sessionLengthMin: student.custom_session_length_min,
+  const fields = packageFieldsForMonth(student, year, month);
+  const def = resolvePackageDef(fields.package || undefined, {
+    monthlyCost: fields.custom_monthly_cost,
+    sessionsPerWeek: fields.custom_sessions_per_week,
+    sessionLengthMin: fields.custom_session_length_min,
   });
   if (!def) return {first: 0, fifteenth: 0};
 

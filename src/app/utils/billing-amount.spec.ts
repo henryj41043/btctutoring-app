@@ -262,3 +262,37 @@ describe('groupSessionFee', () => {
     expect(groupSessionFee([{btc_and_me: false}] as Student[])).toBe(0);
   });
 });
+
+describe('scheduled package changes (month-aware charges)', () => {
+  const pending = (over: Partial<Student> = {}): Student => succeed({
+    package_start_date: '2026-01-01T00:00:00',
+    pending_package: Package.ACHIEVE, // $546/mo
+    pending_package_effective: '2026-09-01',
+    ...over,
+  });
+
+  it('monthly: old package before, new from the effective month', () => {
+    expect(studentMonthlyCharge(pending(), 2026, 7)).toBe(362); // August
+    expect(studentMonthlyCharge(pending(), 2026, 8)).toBe(546); // September
+  });
+
+  it('semi-monthly: the effective month splits the NEW cost 50/50', () => {
+    expect(studentSemiMonthlyCharge(pending(), 2026, 7)).toEqual({first: 181, fifteenth: 181});
+    expect(studentSemiMonthlyCharge(pending(), 2026, 8)).toEqual({first: 273, fifteenth: 273});
+  });
+
+  it('charges zero for an empty-string package (never resolves)', () => {
+    expect(studentMonthlyCharge({package: ''} as never, 2026, 8)).toBe(0);
+    expect(studentSemiMonthlyCharge({package: ''} as never, 2026, 8)).toEqual({first: 0, fifteenth: 0});
+  });
+
+  it('resolves pending CUSTOM overrides for the effective month', () => {
+    const s = pending({
+      pending_package: Package.CUSTOM,
+      pending_custom_monthly_cost: 400,
+      pending_custom_sessions_per_week: 2,
+      pending_custom_session_length_min: 30,
+    });
+    expect(studentMonthlyCharge(s, 2026, 8)).toBe(400);
+  });
+});

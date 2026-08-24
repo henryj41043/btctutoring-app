@@ -3,6 +3,7 @@ import {of, throwError} from 'rxjs';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {ManageScheduleDialog, ManageScheduleDialogData} from './manage-schedule-dialog';
 import {ScheduleService} from '../services/schedule.service';
+import {StudentService} from '../services/student.service';
 import {AuthService} from '../services/auth.service';
 import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
@@ -30,6 +31,7 @@ describe('ManageScheduleDialog', () => {
     deleteSchedule: jest.fn(),
   };
   const authService = {isAdmin: () => isAdmin};
+  const studentService = {updateStudent: jest.fn()};
 
   const build = (data: ManageScheduleDialogData): ManageScheduleDialog => {
     TestBed.resetTestingModule();
@@ -39,6 +41,7 @@ describe('ManageScheduleDialog', () => {
         {provide: MAT_DIALOG_DATA, useValue: data},
         {provide: MatDialogRef, useValue: dialogRef},
         {provide: ScheduleService, useValue: scheduleService},
+        {provide: StudentService, useValue: studentService},
         {provide: AuthService, useValue: authService},
       ],
     });
@@ -245,5 +248,144 @@ describe('ManageScheduleDialog', () => {
     const c = primedCreate();
     c.cancel();
     expect(dialogRef.close).toHaveBeenCalledWith();
+  });
+
+  describe('pending mode (scheduled package change)', () => {
+    // Pending Achieve = 3×30min sessions/week; current Determination = 2×60.
+    const pendingStudent = (over: Partial<Student> = {}): Student => ({
+      id: 's-1',
+      name: 'Pat',
+      package: Package.DETERMINATION,
+      schedule: [
+        {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
+        {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00'},
+      ],
+      auto_renew: true,
+      pending_package: Package.ACHIEVE,
+      pending_package_effective: '2026-09-01',
+      ...over,
+    } as Student);
+
+    const primedPending = (over: Partial<Student> = {}): ManageScheduleDialog => {
+      const c = build({student: pendingStudent(over), tutor, pendingMode: true});
+      c.scheduleSlots = [
+        {weekday: Weekday.MONDAY, start_time: '09:00'},
+        {weekday: Weekday.TUESDAY, start_time: '09:00'},
+        {weekday: Weekday.THURSDAY, start_time: '09:00'},
+      ];
+      return c;
+    };
+
+    beforeEach(() => {
+      studentService.updateStudent.mockReturnValue(of({}));
+      scheduleService.addMinutesToTime.mockReturnValue('09:30');
+    });
+
+    it('resolves the def from the PENDING package, not the current one', () => {
+      const c = build({student: pendingStudent(), tutor, pendingMode: true});
+      expect(scheduleService.resolveDef).not.toHaveBeenCalled();
+      expect(c.def).toEqual({monthlyCost: 546, sessionsPerWeek: 3, sessionLengthMin: 30});
+      // Seeded to the pending def's slot count with blank rows.
+      expect(c.scheduleSlots).toHaveLength(3);
+    });
+
+    it('seeds from an existing pending_schedule', () => {
+      const c = build({
+        student: pendingStudent({
+          pending_schedule: [
+            {weekday: Weekday.FRIDAY, start_time: '14:00', end_time: '14:30'},
+          ],
+        }),
+        tutor,
+        pendingMode: true,
+      });
+      expect(c.scheduleSlots[0]).toEqual({weekday: Weekday.FRIDAY, start_time: '14:00'});
+      expect(c.scheduleSlots).toHaveLength(3); // padded to the pending def
+    });
+
+    it('validates the slot count against the pending package', () => {
+      const c = build({student: pendingStudent(), tutor, pendingMode: true});
+      c.scheduleSlots = [{weekday: Weekday.MONDAY, start_time: '09:00'}];
+      c.save();
+      expect(c.errorMessage).toBe('Achieve requires 3 session(s) per week.');
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('saves ONLY pending_schedule — no sessions, no live-schedule fields', () => {
+      const c = primedPending();
+      c.save();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      expect(payload.pending_schedule).toEqual([
+        {weekday: Weekday.MONDAY, start_time: '09:00', end_time: '09:30'},
+        {weekday: Weekday.TUESDAY, start_time: '09:00', end_time: '09:30'},
+        {weekday: Weekday.THURSDAY, start_time: '09:00', end_time: '09:30'},
+      ]);
+      // The live schedule and its owners are untouched.
+      expect(payload.schedule).toEqual(pendingStudent().schedule);
+      expect(payload.auto_renew).toBe(true);
+      expect(scheduleService.createSchedule).not.toHaveBeenCalled();
+      expect(scheduleService.updateSchedule).not.toHaveBeenCalled();
+      expect(scheduleService.deleteSchedule).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalledWith(
+        expect.objectContaining({pending_schedule: payload.pending_schedule}),
+      );
+    });
+
+    it('anchors the availability check at the effective date', () => {
+      const c = primedPending();
+      c.save();
+      const anchor = scheduleService.buildOccurrences.mock.calls.at(-1)![1] as Date;
+      expect(anchor.getFullYear()).toBe(2026);
+      expect(anchor.getMonth()).toBe(8); // September
+      expect(anchor.getDate()).toBe(1);
+    });
+
+    it('availability failures surface the admin override, then save', () => {
+      scheduleService.findAvailabilityFailures.mockReturnValueOnce([{}, {}]);
+      isAdmin = true;
+      const c = primedPending();
+      c.save();
+      expect(c.showAvailabilityConfirm).toBe(true);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      c.confirmAvailabilityOverride();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not require a start date in pending mode', () => {
+      const c = primedPending();
+      c.startDate = undefined;
+      c.save();
+      expect(studentService.updateStudent).toHaveBeenCalled();
+      expect(c.hasError).toBe(false);
+    });
+
+    it('falls back to today as the availability anchor when the effective date is malformed', () => {
+      const c = primedPending({pending_package_effective: 'garbage'});
+      c.save();
+      const anchor = scheduleService.buildOccurrences.mock.calls.at(-1)![1] as Date;
+      expect(anchor.toDateString()).toBe(new Date().toDateString());
+      expect(studentService.updateStudent).toHaveBeenCalled();
+    });
+
+    it('surfaces a failed pending save and stays open', () => {
+      studentService.updateStudent.mockReturnValue(throwError(() => new Error('boom')));
+      const c = primedPending();
+      c.save();
+      expect(c.errorMessage).toBe('Saving the pending schedule failed.');
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it('an unconfigured pending CUSTOM blocks with the package error', () => {
+      const c = build({
+        student: pendingStudent({pending_package: Package.CUSTOM}),
+        tutor,
+        pendingMode: true,
+      });
+      expect(c.def).toBeNull();
+      c.save();
+      expect(c.hasError).toBe(true);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
   });
 });

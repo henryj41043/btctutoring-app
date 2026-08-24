@@ -253,6 +253,111 @@ describe('StudentDialog', () => {
       expect(dialogRef.close).toHaveBeenCalledWith(true);
     });
 
+    describe('scheduled package change', () => {
+      it('a new pending change closes with the pending-schedule signal', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        form(c).get('pending_package').setValue(Package.SUCCEED);
+        form(c).get('pending_package_effective').setValue('2026-09-01');
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_package).toBe(Package.SUCCEED);
+        expect(payload.pending_package_effective).toBe('2026-09-01');
+        expect(dialogRef.close).toHaveBeenCalledWith({ openPendingScheduleForStudentId: 's-1' });
+      });
+
+      it('an unchanged pending change closes with plain true', () => {
+        const c = build({
+          mode: 'edit',
+          student: richStudent({
+            pending_package: Package.SUCCEED,
+            pending_package_effective: '2026-09-01',
+          }),
+        });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        c.save();
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+
+      it('blocks a pending change without an effective month', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        form(c).get('pending_package').setValue(Package.SUCCEED);
+        c.save();
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+        expect(priv(c).hasError).toBe(true);
+      });
+
+      it('blocks a pending change equal to the current package', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        form(c).get('pending_package').setValue(Package.DETERMINATION);
+        form(c).get('pending_package_effective').setValue('2026-09-01');
+        c.save();
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+        expect(priv(c).hasError).toBe(true);
+      });
+
+      it('blocks a pending CUSTOM missing its overrides', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        form(c).get('pending_package').setValue(Package.CUSTOM);
+        form(c).get('pending_package_effective').setValue('2026-09-01');
+        form(c).get('pending_custom_monthly_cost').setValue(500);
+        c.save();
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+        expect(priv(c).hasError).toBe(true);
+      });
+
+      it('Clear sends the empty-string removal signal', () => {
+        const c = build({
+          mode: 'edit',
+          student: richStudent({
+            pending_package: Package.SUCCEED,
+            pending_package_effective: '2026-09-01',
+            pending_custom_monthly_cost: 500,
+          }),
+        });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        c.clearPending();
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_package).toBe('');
+        expect(payload.pending_custom_monthly_cost).toBeNull();
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+
+      it('omits the pending keys entirely when nothing was ever pending', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect('pending_package' in payload).toBe(false);
+        expect('pending_package_effective' in payload).toBe(false);
+        expect('pending_schedule' in payload).toBe(false);
+      });
+
+      it('a mid-month current-package change wins over a simultaneous pending change', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        form(c).get('package').setValue(Package.SUCCEED); // mid-month change
+        form(c).get('pending_package').setValue(Package.ACHIEVE);
+        form(c).get('pending_package_effective').setValue('2026-09-01');
+        c.save();
+        expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
+      });
+
+      it('shows the pending note from the form state', () => {
+        const c = build({
+          mode: 'edit',
+          student: richStudent({
+            pending_package: Package.ACHIEVE,
+            pending_package_effective: '2026-09-01',
+          }),
+        });
+        expect(c.pendingNote).toBe('→ Achieve from Sep 1');
+        c.clearPending();
+        expect(c.pendingNote).toBeNull();
+      });
+    });
+
     it('round-trips an unchecked BTC & Me flag as false', () => {
       const c = build({ mode: 'edit', student: richStudent({ btc_and_me: undefined }) });
       studentService.updateStudent.mockReturnValue(of({} as Student));

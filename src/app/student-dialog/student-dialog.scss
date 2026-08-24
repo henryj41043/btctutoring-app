@@ -19,6 +19,29 @@
   opacity: 0.7;
 }
 
+.pending-change-section {
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  border-radius: 6px;
+  padding: 10px 12px 2px;
+  margin: 4px 0 12px;
+}
+
+.pending-change-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.pending-change-note {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.pending-clear-button {
+  margin-bottom: 8px;
+}
+
 .dialog-error {
   margin-top: 4px;
 }

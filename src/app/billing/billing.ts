@@ -31,6 +31,7 @@ import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {StudentStatus} from '../enums/student-status.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {groupSessionFee, studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
+import {packageFieldsForMonth} from '../utils/pending-package';
 import {round2} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
 import {TableStateStore} from '../utils/table-state';
@@ -234,7 +235,7 @@ export class Billing implements OnInit {
         contact_id: contactId,
         name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
         packages: [
-          ...packaged.map(s => `${studentDisplayName(s)}: ${s.package}`),
+          ...packaged.map(s => `${studentDisplayName(s)}: ${packageFieldsForMonth(s, year, month).package}`),
           ...contactStudents.filter(s => s.btc_and_me).map(s => `${studentDisplayName(s)}: BTC & Me`),
         ].join('; '),
         cycle,
