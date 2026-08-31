@@ -118,6 +118,19 @@ describe('FilterSelect', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it('a re-created options array (parent getter binding) never clobbers in-progress typing', () => {
+    // Production dialogs bind [options] to getters that build a fresh array
+    // every CD cycle, so ngOnChanges fires constantly while the user types.
+    const c = build();
+    c.writeValue('c-1');
+    c.onSearchChange('Cas');
+    const clone = options.map(o => ({...o}));
+    c.options = clone;
+    c.ngOnChanges({options: new SimpleChange(options, clone, false)});
+    expect(priv(c).searchText).toBe('Cas');
+    expect(c.filteredOptions.map(o => o.value)).toEqual(['c-1', 'c-2']);
+  });
+
   it('writeValue renders the label, even when options arrive later', () => {
     const c = build();
     c.options = [];
