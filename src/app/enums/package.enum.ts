@@ -11,4 +11,5 @@ export enum Package {
   TRIUMPH = 'Triumph',
   CONQUEST = 'Conquest',
   SUMMIT = 'Summit',
+  APEX = 'Apex',
 }

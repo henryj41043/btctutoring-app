@@ -41,3 +41,13 @@ describe('package-config', () => {
     });
   });
 });
+
+describe('Apex package', () => {
+  it('resolves 5×60min at $1820/mo', () => {
+    expect(resolvePackageDef(Package.APEX)).toEqual({
+      monthlyCost: 1820,
+      sessionsPerWeek: 5,
+      sessionLengthMin: 60,
+    });
+  });
+});
