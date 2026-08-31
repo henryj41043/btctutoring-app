@@ -29,6 +29,7 @@ import {StudentStatus} from '../enums/student-status.enum';
 import {StaffStatus} from '../enums/staff-status.enum';
 import {Service} from '../enums/service.enum';
 import {studentDisplayName} from '../utils/student-name';
+import {contactDisplayName} from '../utils/contact-name';
 import {futureSeriesTargets} from '../utils/session-times';
 import {
   applyGroupSeriesEdit,
@@ -78,6 +79,7 @@ export interface GroupSessionDialogData {
   styleUrl: './group-session-dialog.scss',
 })
 export class GroupSessionDialog implements OnInit {
+  protected readonly contactDisplayName = contactDisplayName;
   readonly dialogRef = inject(MatDialogRef<GroupSessionDialog>);
   readonly data = inject<GroupSessionDialogData>(MAT_DIALOG_DATA);
   private sessionsService: SessionsService = inject(SessionsService);

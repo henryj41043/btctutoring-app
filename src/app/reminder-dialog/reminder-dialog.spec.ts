@@ -313,4 +313,29 @@ describe('ReminderDialog', () => {
       );
     });
   });
+
+  describe('contactOptions (typeahead picker)', () => {
+    it('maps, sorts, and email-falls-back the linked-contact options', () => {
+      const c = build({
+        mode: 'create',
+        contacts: [
+          { id: 'c-z', first_name: 'Zoe', last_name: 'Young' },
+          { id: 'c-e', email: 'newsletter@example.com' },
+          { id: 'c-a', first_name: 'Ann', last_name: 'Lee' },
+          { first_name: 'NoId' },
+        ] as never,
+      });
+      const opts = (c as unknown as { contactOptions: {value: string; label: string}[] }).contactOptions;
+      expect(opts).toEqual([
+        { value: 'c-a', label: 'Ann Lee' },
+        { value: 'c-e', label: 'newsletter@example.com' },
+        { value: 'c-z', label: 'Zoe Young' },
+      ]);
+    });
+
+    it('is empty when the dialog got no contacts', () => {
+      const c = build({ mode: 'create' });
+      expect((c as unknown as { contactOptions: unknown[] }).contactOptions).toEqual([]);
+    });
+  });
 });

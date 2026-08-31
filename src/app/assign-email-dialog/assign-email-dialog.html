@@ -14,14 +14,11 @@
   </p>
 
   @if (data.mode === 'assign') {
-    <mat-form-field appearance="outline" class="contact-select">
-      <mat-label>Contact</mat-label>
-      <mat-select [(ngModel)]="selectedContactId" name="contact">
-        @for (contact of sortedContacts; track contact.id) {
-          <mat-option [value]="contact.id">{{contactName(contact)}}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
+    <app-filter-select class="contact-select"
+                       label="Contact"
+                       [options]="contactOptions"
+                       [(ngModel)]="selectedContactId"
+                       name="contact"/>
   } @else {
     <p class="discard-hint">
       This removes the email for good — re-forwarding the same message will

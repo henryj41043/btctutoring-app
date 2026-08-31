@@ -14,6 +14,8 @@ import {ReminderService} from '../services/reminder.service';
 import {AuthService} from '../services/auth.service';
 import {Reminder} from '../models/reminder.model';
 import {Contact} from '../models/contact.model';
+import {contactDisplayName} from '../utils/contact-name';
+import {FilterSelect, FilterSelectOption} from '../filter-select/filter-select';
 
 export type ReminderDialogMode = 'create' | 'edit' | 'delete';
 
@@ -39,6 +41,7 @@ export interface ReminderDialogData {
     MatButtonModule,
     MatDatepickerModule,
     MatProgressSpinnerModule,
+    FilterSelect,
   ],
   templateUrl: './reminder-dialog.html',
   styleUrl: './reminder-dialog.scss',
@@ -53,6 +56,15 @@ export class ReminderDialog implements OnInit {
   private authService: AuthService = inject(AuthService);
 
   protected mode: ReminderDialogMode = 'create';
+  protected readonly contactDisplayName = contactDisplayName;
+
+  /** Type-to-filter options for the 1000+-contact linked-contact picker. */
+  protected get contactOptions(): FilterSelectOption[] {
+    return (this.data.contacts ?? [])
+      .filter(c => !!c.id)
+      .map(c => ({value: c.id!, label: contactDisplayName(c)}))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
   protected reminderForm!: FormGroup;
   protected submitting: boolean = false;
   protected hasError: boolean = false;

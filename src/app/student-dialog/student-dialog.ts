@@ -30,6 +30,7 @@ import {monthKey} from '../utils/billing-amount';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {nextMonthFirsts, pendingChanged, pendingPackageNote} from '../utils/pending-package';
 import {studentDisplayName} from '../utils/student-name';
+import {contactDisplayName} from '../utils/contact-name';
 
 export type StudentDialogMode = 'create' | 'edit' | 'delete';
 
@@ -98,6 +99,7 @@ export class StudentDialog implements OnInit {
   // and blocks double-submit.
   protected submitting: boolean = false;
   protected readonly studentDisplayName = studentDisplayName;
+  protected readonly contactDisplayName = contactDisplayName;
   protected hasError: boolean = false;
   protected errorMessage: string = '';
 
