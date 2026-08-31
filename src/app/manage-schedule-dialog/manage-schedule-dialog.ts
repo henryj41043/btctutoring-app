@@ -20,6 +20,7 @@ import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
+import {Package} from '../enums/package.enum';
 import {PackageDef} from '../utils/package-config';
 import {ScheduleService} from '../services/schedule.service';
 import {StudentService} from '../services/student.service';
@@ -50,6 +51,8 @@ interface ScheduleSlotInput {
   start_time: string; // 'HH:mm'
   /** Per-slot tutor override; null = the student's primary tutor. */
   tutor_id: string | null;
+  /** CUSTOM packages only: this slot's length; null = the package default. */
+  length_min: number | null;
 }
 
 @Component({
@@ -113,6 +116,14 @@ export class ManageScheduleDialog implements OnInit {
   readonly weekdayLabels = WEEKDAY_LABELS;
   /** 15-min increments 6:00 AM–9:00 PM as { value: 'HH:mm', label: '1:00 PM' }. */
   readonly timeOptions: {value: string; label: string}[] = this.buildTimeOptions();
+  /** Per-slot length choices for CUSTOM packages (minutes). */
+  readonly lengthOptions: number[] = [15, 30, 45, 60, 75, 90, 105, 120];
+
+  /** CUSTOM packages may vary each slot's length; fixed packages never do. */
+  get isCustomPackage(): boolean {
+    const pkg = this.pendingMode ? this.student.pending_package : this.student.package;
+    return pkg === Package.CUSTOM;
+  }
 
   ngOnInit(): void {
     this.student = this.data.student;
@@ -127,7 +138,8 @@ export class ManageScheduleDialog implements OnInit {
         sessionLengthMin: this.student.pending_custom_session_length_min,
       });
       this.scheduleSlots = (this.student.pending_schedule ?? []).map(
-        s => ({weekday: s.weekday, start_time: s.start_time, tutor_id: s.tutor_id ?? null}));
+        s => ({weekday: s.weekday, start_time: s.start_time, tutor_id: s.tutor_id ?? null,
+               length_min: this.slotLength(s)}));
       this.seedScheduleSlots();
       return;
     }
@@ -137,7 +149,8 @@ export class ManageScheduleDialog implements OnInit {
     this.autoRenew = this.student.auto_renew ?? true;
     if (this.isEdit) {
       this.scheduleSlots = existing.map(
-        s => ({weekday: s.weekday, start_time: s.start_time, tutor_id: s.tutor_id ?? null}));
+        s => ({weekday: s.weekday, start_time: s.start_time, tutor_id: s.tutor_id ?? null,
+               length_min: this.slotLength(s)}));
     } else {
       this.startDate = new Date();
       this.seedScheduleSlots();
@@ -186,12 +199,26 @@ export class ManageScheduleDialog implements OnInit {
     return (this.pendingMode ? this.student.pending_package : this.student.package) || '';
   }
 
+  /**
+   * A stored slot's length in minutes, or null when it matches the package
+   * default (so unchanged slots keep following a later default change).
+   */
+  private slotLength(slot: ScheduleSlot): number | null {
+    if (!this.isCustomPackage || !slot.start_time || !slot.end_time) {
+      return null;
+    }
+    const minutes = this.scheduleService.timeStringToMinutes(slot.end_time)
+      - this.scheduleService.timeStringToMinutes(slot.start_time);
+    return minutes > 0 && minutes !== this.def?.sessionLengthMin ? minutes : null;
+  }
+
   /** Reseeds blank slot rows to match the package's sessions/week (create mode). */
   private seedScheduleSlots(): void {
     const target = this.def ? this.def.sessionsPerWeek : 0;
     const next: ScheduleSlotInput[] = [];
     for (let i = 0; i < target; i++) {
-      next.push(this.scheduleSlots[i] ?? {weekday: null, start_time: '', tutor_id: null});
+      next.push(this.scheduleSlots[i]
+        ?? {weekday: null, start_time: '', tutor_id: null, length_min: null});
     }
     this.scheduleSlots = next;
   }
@@ -225,10 +252,15 @@ export class ManageScheduleDialog implements OnInit {
 
     // The override key is OMITTED when null: dynamoose rejects a nested
     // null (buildStudentAttributes strips nulls at the top level only).
+    // CUSTOM packages may give each slot its own length; fixed packages
+    // always use the package's length.
     const slots: ScheduleSlot[] = this.scheduleSlots.map(s => ({
       weekday: s.weekday as Weekday,
       start_time: s.start_time,
-      end_time: this.scheduleService.addMinutesToTime(s.start_time, this.def!.sessionLengthMin),
+      end_time: this.scheduleService.addMinutesToTime(
+        s.start_time,
+        (this.isCustomPackage ? s.length_min : null) ?? this.def!.sessionLengthMin,
+      ),
       ...(s.tutor_id ? {tutor_id: s.tutor_id} : {}),
     }));
 

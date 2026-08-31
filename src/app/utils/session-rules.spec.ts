@@ -9,6 +9,8 @@ import {Student} from '../models/student.model';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {PackageDef} from './package-config';
+import {Weekday} from '../enums/weekday.enum';
+import {Package} from '../enums/package.enum';
 
 const def: PackageDef = {monthlyCost: 400, sessionsPerWeek: 2, sessionLengthMin: 60};
 const student = {id: 's-1', name: 'Sam', package: 'Succeed'} as Student;
@@ -51,6 +53,41 @@ describe('session-rules', () => {
       expect(validateSessionLength(SessionType.TUTORING, 61, def, student)).toBe(
         "This session is 61 min, but Sam's Succeed package allows up to 60 min per session.",
       );
+    });
+
+    it('CUSTOM caps at the longest scheduled slot length', () => {
+      const custom = {
+        id: 's-1', name: 'Sam', package: Package.CUSTOM,
+        schedule: [
+          {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:45'},
+          {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '10:30'},
+        ],
+      } as Student;
+      const customDef: PackageDef = {monthlyCost: 400, sessionsPerWeek: 2, sessionLengthMin: 30};
+      expect(validateSessionLength(SessionType.TUTORING, 45, customDef, custom)).toBeNull();
+      expect(validateSessionLength(SessionType.TUTORING, 46, customDef, custom))
+        .toBe("This session is 46 min, but Sam's Custom package allows up to 45 min per session.");
+    });
+
+    it('CUSTOM without a schedule (or with shorter slots) caps at the default length', () => {
+      const customDef: PackageDef = {monthlyCost: 400, sessionsPerWeek: 2, sessionLengthMin: 60};
+      const noSchedule = {id: 's-1', name: 'Sam', package: Package.CUSTOM} as Student;
+      expect(validateSessionLength(SessionType.TUTORING, 60, customDef, noSchedule)).toBeNull();
+      expect(validateSessionLength(SessionType.TUTORING, 61, customDef, noSchedule)).toContain('60 min');
+      // Slots shorter than the default never LOWER the cap.
+      const shortSlots = {
+        ...noSchedule,
+        schedule: [{weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30'}],
+      } as Student;
+      expect(validateSessionLength(SessionType.TUTORING, 60, customDef, shortSlots)).toBeNull();
+    });
+
+    it('fixed packages ignore slot lengths entirely (regression)', () => {
+      const fixed = {
+        id: 's-1', name: 'Sam', package: 'Succeed',
+        schedule: [{weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:30'}],
+      } as Student;
+      expect(validateSessionLength(SessionType.TUTORING, 61, def, fixed)).toContain('60 min');
     });
 
     it('falls back to "this student" when no student resolved', () => {
