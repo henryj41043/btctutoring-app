@@ -6,6 +6,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY} from 'rxjs';
 import {EmailService} from '../services/email.service';
+import {ContactService} from '../services/contact.service';
 import {AuthService} from '../services/auth.service';
 import {EmailEntry} from '../models/email-entry.model';
 import {AssignEmailDialog} from '../assign-email-dialog/assign-email-dialog';
@@ -27,6 +28,7 @@ export class ContactEmailsSection implements OnInit {
   @Input({required: true}) contactId!: string;
 
   private emailService: EmailService = inject(EmailService);
+  private contactService: ContactService = inject(ContactService);
   private authService: AuthService = inject(AuthService);
   private dialog: MatDialog = inject(MatDialog);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
@@ -61,6 +63,37 @@ export class ContactEmailsSection implements OnInit {
   toggleEmail(entry: EmailEntry): void {
     this.expandedEmailId = this.expandedEmailId === entry.id ? null : (entry.id ?? null);
     this.cdr.markForCheck();
+  }
+
+  /**
+   * Moves a filed email to a different contact — e.g. a tutor's email about
+   * a family auto-filed on the TUTOR's page (the parser matches the sender).
+   * Reuses the queue's assign dialog; the entry leaves this list on success.
+   */
+  moveEmail(entry: EmailEntry, event: Event): void {
+    event.stopPropagation();
+    this.contactService.getContactsSummary().pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(contacts => {
+      const ref = this.dialog.open(AssignEmailDialog, {
+        data: {
+          mode: 'assign',
+          entry,
+          // Moving to the page it is already on would be a no-op.
+          contacts: contacts.filter(c => c.id !== this.contactId),
+        },
+        width: '440px',
+      });
+      ref.afterClosed().subscribe(result => {
+        if (result) {
+          this.loadContactEmails();
+        }
+      });
+    });
   }
 
   /** Removes a filed email from this contact (discard — it can't resurface). */

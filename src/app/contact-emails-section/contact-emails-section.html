@@ -18,6 +18,10 @@
             <mat-icon>open_in_new</mat-icon>
             View original
           </button>
+          <button matButton type="button" (click)="moveEmail(entry, $event)">
+            <mat-icon>drive_file_move</mat-icon>
+            Move to another contact
+          </button>
           <button matButton type="button" class="email-remove-button" (click)="removeEmail(entry, $event)">
             <mat-icon>delete</mat-icon>
             Remove
