@@ -34,6 +34,7 @@ export const PACKAGE_CONFIG: Record<Exclude<Package, Package.CUSTOM>, PackageDef
   [Package.POWER_UP]:      {monthlyCost: 1092, sessionsPerWeek: 3, sessionLengthMin: 60},
   [Package.CONQUEST]:      {monthlyCost: 1092, sessionsPerWeek: 4, sessionLengthMin: 45},
   [Package.SUMMIT]:        {monthlyCost: 1456, sessionsPerWeek: 4, sessionLengthMin: 60},
+  [Package.APEX]:          {monthlyCost: 1820, sessionsPerWeek: 5, sessionLengthMin: 60},
 };
 
 /** Round to the nearest penny. */
