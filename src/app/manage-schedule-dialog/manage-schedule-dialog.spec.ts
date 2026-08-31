@@ -24,6 +24,10 @@ describe('ManageScheduleDialog', () => {
   const dialogRef = {close: jest.fn()};
   const scheduleService = {
     resolveDef: jest.fn(),
+    timeStringToMinutes: jest.fn((time: string) => {
+      const [h, m] = (time ?? '').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    }),
     addMinutesToTime: jest.fn().mockReturnValue('11:00'),
     buildOccurrences: jest.fn().mockReturnValue([{}]),
     findAvailabilityFailures: jest.fn().mockReturnValue([]),
@@ -87,8 +91,8 @@ describe('ManageScheduleDialog', () => {
       const c = build({student: {name: 'Pat', package: Package.DETERMINATION, schedule: slots, auto_renew: false} as Student, tutor});
       expect(c.isEdit).toBe(true);
       expect(c.scheduleSlots).toEqual([
-        {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null},
-        {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null},
+        {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null, length_min: null},
+        {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null, length_min: null},
       ]);
       expect(c.autoRenew).toBe(false);
     });
@@ -304,7 +308,8 @@ describe('ManageScheduleDialog', () => {
         tutor,
         pendingMode: true,
       });
-      expect(c.scheduleSlots[0]).toEqual({weekday: Weekday.FRIDAY, start_time: '14:00', tutor_id: null});
+      expect(c.scheduleSlots[0]).toEqual(
+        {weekday: Weekday.FRIDAY, start_time: '14:00', tutor_id: null, length_min: null});
       expect(c.scheduleSlots).toHaveLength(3); // padded to the pending def
     });
 
@@ -503,6 +508,89 @@ describe('ManageScheduleDialog', () => {
       const payload = studentService.updateStudent.mock.calls[0][0] as Student;
       expect(payload.pending_schedule![0].tutor_id).toBe('t-2');
       expect('tutor_id' in (payload.pending_schedule![1] as object)).toBe(false);
+    });
+  });
+
+  describe('per-slot lengths (CUSTOM packages)', () => {
+    const customStudent = (over: Partial<Student> = {}): Student => ({
+      id: 's-1', name: 'Pat', package: Package.CUSTOM,
+      custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 30,
+      ...over,
+    } as Student);
+    const customDef = {monthlyCost: 400, sessionsPerWeek: 2, sessionLengthMin: 30};
+
+    beforeEach(() => {
+      scheduleService.resolveDef.mockReturnValue(customDef);
+      scheduleService.addMinutesToTime.mockImplementation(
+        (start: string, minutes: number) => {
+          const [h, m] = start.split(':').map(Number);
+          const total = h * 60 + m + minutes;
+          return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+        });
+      scheduleService.updateSchedule.mockReturnValue(of({} as Student));
+      scheduleService.createSchedule.mockReturnValue(of({} as Student));
+    });
+
+    it('saves each slot with its own length, default when unset', () => {
+      const c = build({student: customStudent(), tutor});
+      c.scheduleSlots = [
+        {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null, length_min: 45},
+        {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null, length_min: null},
+      ];
+      c.save();
+      const slotsArg = scheduleService.createSchedule.mock.calls.at(-1)![2] as ScheduleSlot[];
+      expect(slotsArg[0].end_time).toBe('10:45'); // per-slot 45
+      expect(slotsArg[1].end_time).toBe('10:30'); // default 30
+    });
+
+    it("derives an existing slot's length on load, null when it matches the default", () => {
+      const c = build({
+        student: customStudent({
+          schedule: [
+            {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:45'},
+            {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '10:30'},
+          ],
+        }),
+        tutor,
+      });
+      expect(c.scheduleSlots[0].length_min).toBe(45);
+      expect(c.scheduleSlots[1].length_min).toBeNull(); // equals the default
+    });
+
+    it('fixed packages ignore any stray length and always use the package length', () => {
+      scheduleService.resolveDef.mockReturnValue(def); // Determination 60 min
+      const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION,
+        schedule: slots} as Student, tutor});
+      expect(c.isCustomPackage).toBe(false);
+      c.scheduleSlots[0].length_min = 45; // not reachable via UI; must be inert
+      c.save();
+      const slotsArg = scheduleService.updateSchedule.mock.calls.at(-1)![2] as ScheduleSlot[];
+      expect(slotsArg[0].end_time).toBe('11:00'); // 60-min package length
+    });
+
+    it('pending mode offers per-slot lengths when the PENDING package is CUSTOM', () => {
+      studentService.updateStudent.mockReturnValue(of({}));
+      const c = build({
+        student: customStudent({
+          package: Package.DETERMINATION,
+          pending_package: Package.CUSTOM,
+          pending_custom_monthly_cost: 400,
+          pending_custom_sessions_per_week: 2,
+          pending_custom_session_length_min: 30,
+          pending_package_effective: '2026-10-01',
+        }),
+        tutor,
+        pendingMode: true,
+      });
+      expect(c.isCustomPackage).toBe(true);
+      c.scheduleSlots = [
+        {weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: null, length_min: 45},
+        {weekday: Weekday.TUESDAY, start_time: '09:00', tutor_id: null, length_min: null},
+      ];
+      c.save();
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      expect(payload.pending_schedule![0].end_time).toBe('09:45');
+      expect(payload.pending_schedule![1].end_time).toBe('09:30');
     });
   });
 });

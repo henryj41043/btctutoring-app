@@ -49,6 +49,17 @@
               }
             </mat-select>
           </mat-form-field>
+          @if (isCustomPackage) {
+            <mat-form-field>
+              <mat-label>Length</mat-label>
+              <mat-select [(ngModel)]="slot.length_min">
+                <mat-option [value]="null">Default ({{def?.sessionLengthMin}} min)</mat-option>
+                @for (option of lengthOptions; track option) {
+                  <mat-option [value]="option">{{option}} min</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
           <mat-form-field>
             <mat-label>Tutor</mat-label>
             <mat-select [(ngModel)]="slot.tutor_id">
