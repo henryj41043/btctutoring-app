@@ -1,10 +1,10 @@
 import {studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal, monthKey, midMonthAdjustment, groupSessionFee, GROUP_MONTHLY_FEE} from './billing-amount';
 import {Student} from '../models/student.model';
-import {Package} from '../enums/package.enum';
+import {TEST_CATALOG} from '../../testing/package-catalog.fixture';
 import {Weekday} from '../enums/weekday.enum';
 
 const succeed = (over: Partial<Student> = {}): Student =>
-  ({ package: Package.SUCCEED, ...over }) as Student;
+  ({ package: 'Succeed', ...over }) as Student;
 
 // A Succeed student with a Monday schedule, so mid-month starts actually prorate.
 const prorating = (start: string): Student =>
@@ -16,26 +16,26 @@ const prorating = (start: string): Student =>
 describe('studentMonthlyCharge', () => {
   it('charges the full monthly cost for an ongoing month', () => {
     // Started in a prior month → full Succeed cost.
-    expect(studentMonthlyCharge(succeed({ package_start_date: '2026-05-01T00:00:00' }), 2026, 6))
+    expect(studentMonthlyCharge(succeed({ package_start_date: '2026-05-01T00:00:00' }), 2026, 6, TEST_CATALOG))
       .toBe(362);
   });
 
   it('charges full cost when started on the 1st of the month', () => {
-    expect(studentMonthlyCharge(succeed({ package_start_date: '2026-07-01T00:00:00' }), 2026, 6))
+    expect(studentMonthlyCharge(succeed({ package_start_date: '2026-07-01T00:00:00' }), 2026, 6, TEST_CATALOG))
       .toBe(362);
   });
 
   it('charges zero before the package starts', () => {
-    expect(studentMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6))
+    expect(studentMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6, TEST_CATALOG))
       .toBe(0);
   });
 
   it('charges full cost for a legacy student with no start date', () => {
-    expect(studentMonthlyCharge(succeed(), 2026, 6)).toBe(362);
+    expect(studentMonthlyCharge(succeed(), 2026, 6, TEST_CATALOG)).toBe(362);
   });
 
   it('charges zero for an unconfigured custom package', () => {
-    expect(studentMonthlyCharge(succeed({ package: Package.CUSTOM }), 2026, 6)).toBe(0);
+    expect(studentMonthlyCharge(succeed({ package: 'Custom' }), 2026, 6, TEST_CATALOG)).toBe(0);
   });
 
   it('falls back to full cost when a mid-month starter has no schedule', () => {
@@ -43,20 +43,20 @@ describe('studentMonthlyCharge', () => {
     // schedule the remaining slots can't be counted → full cost, not $0
     // (studentNeedsAttention flags these).
     expect(
-      studentMonthlyCharge(succeed({ package_start_date: '2026-07-31T00:00:00' }), 2026, 6),
+      studentMonthlyCharge(succeed({ package_start_date: '2026-07-31T00:00:00' }), 2026, 6, TEST_CATALOG),
     ).toBe(362);
   });
 
   it('charges zero when starting on the 1st of the next month (boundary)', () => {
     expect(
-      studentMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6),
+      studentMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6, TEST_CATALOG),
     ).toBe(0);
   });
 
   it('charges full when starting on the last day of the prior month (boundary)', () => {
     // June 30 < July 1 monthStart → ongoing full month.
     expect(
-      studentMonthlyCharge(succeed({ package_start_date: '2026-06-30T00:00:00' }), 2026, 6),
+      studentMonthlyCharge(succeed({ package_start_date: '2026-06-30T00:00:00' }), 2026, 6, TEST_CATALOG),
     ).toBe(362);
   });
 
@@ -65,14 +65,14 @@ describe('studentMonthlyCharge', () => {
     // 1, 8, 15, 22, 29. Starting the 15th leaves the 15th, 22nd, 29th → 3 slots.
     // weekly = round(400*12/52,2)=92.31; perSession=92.31; round(92.31*3,2)=276.93
     const student = {
-      package: Package.CUSTOM,
+      package: 'Custom',
       custom_monthly_cost: 400,
       custom_sessions_per_week: 1,
       custom_session_length_min: 45,
       package_start_date: '2026-07-15T00:00:00',
       schedule: [{ weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '10:45' }],
     } as Student;
-    expect(studentMonthlyCharge(student, 2026, 6)).toBe(276.93);
+    expect(studentMonthlyCharge(student, 2026, 6, TEST_CATALOG)).toBe(276.93);
   });
 
   it('charges one per-session cost when a single session remains (regression)', () => {
@@ -87,32 +87,32 @@ describe('studentMonthlyCharge', () => {
         { weekday: Weekday.THURSDAY, start_time: '10:00', end_time: '10:30' },
       ],
     });
-    expect(studentMonthlyCharge(student, 2026, 5)).toBe(41.77);
+    expect(studentMonthlyCharge(student, 2026, 5, TEST_CATALOG)).toBe(41.77);
   });
 });
 
 describe('studentSemiMonthlyCharge', () => {
   it('splits an ongoing month 50/50', () => {
-    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-05-01T00:00:00' }), 2026, 6))
+    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-05-01T00:00:00' }), 2026, 6, TEST_CATALOG))
       .toEqual({ first: 181, fifteenth: 181 });
   });
 
   it('splits 50/50 for a legacy student with no start date', () => {
-    expect(studentSemiMonthlyCharge(succeed(), 2026, 6)).toEqual({ first: 181, fifteenth: 181 });
+    expect(studentSemiMonthlyCharge(succeed(), 2026, 6, TEST_CATALOG)).toEqual({ first: 181, fifteenth: 181 });
   });
 
   it('charges nothing for an unconfigured custom package', () => {
-    expect(studentSemiMonthlyCharge(succeed({ package: Package.CUSTOM }), 2026, 6))
+    expect(studentSemiMonthlyCharge(succeed({ package: 'Custom' }), 2026, 6, TEST_CATALOG))
       .toEqual({ first: 0, fifteenth: 0 });
   });
 
   it('charges nothing before the package starts', () => {
-    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6))
+    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-08-01T00:00:00' }), 2026, 6, TEST_CATALOG))
       .toEqual({ first: 0, fifteenth: 0 });
   });
 
   it('splits 50/50 when starting on the 1st (no proration)', () => {
-    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-07-01T00:00:00' }), 2026, 6))
+    expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-07-01T00:00:00' }), 2026, 6, TEST_CATALOG))
       .toEqual({ first: 181, fifteenth: 181 });
   });
 
@@ -120,46 +120,46 @@ describe('studentSemiMonthlyCharge', () => {
     // Monday schedule, July 2026 Mondays: 6, 13, 20, 27. Start Jul 10 →
     // remaining 13, 20, 27 = 3 slots → round(41.77*3,2) = 125.31 → split.
     const s = prorating('2026-07-10T00:00:00');
-    expect(studentMonthlyCharge(s, 2026, 6)).toBe(125.31);
-    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 62.66, fifteenth: 62.65 });
+    expect(studentMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toBe(125.31);
+    expect(studentSemiMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toEqual({ first: 62.66, fifteenth: 62.65 });
     // The following month resumes the normal split.
-    expect(studentSemiMonthlyCharge(s, 2026, 7)).toEqual({ first: 181, fifteenth: 181 });
+    expect(studentSemiMonthlyCharge(s, 2026, 7, TEST_CATALOG)).toEqual({ first: 181, fifteenth: 181 });
   });
 
   it('bills the full prorated first month on the 15th of the start month when starting on/after the 15th', () => {
     // Start Jul 20 → remaining Mondays 20, 27 = 2 slots → 83.54, entirely on
     // the 15th of the START month; the 1st stays blank (0).
     const s = prorating('2026-07-20T00:00:00');
-    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 0, fifteenth: 83.54 });
+    expect(studentSemiMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toEqual({ first: 0, fifteenth: 83.54 });
     // The following month resumes the normal split.
-    expect(studentSemiMonthlyCharge(s, 2026, 7)).toEqual({ first: 181, fifteenth: 181 });
+    expect(studentSemiMonthlyCharge(s, 2026, 7, TEST_CATALOG)).toEqual({ first: 181, fifteenth: 181 });
   });
 
   it('treats a start exactly on the 15th as billed entirely on the 15th', () => {
     const s = prorating('2026-07-15T00:00:00');
-    const prorated = studentMonthlyCharge(s, 2026, 6);
-    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 0, fifteenth: prorated });
+    const prorated = studentMonthlyCharge(s, 2026, 6, TEST_CATALOG);
+    expect(studentSemiMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toEqual({ first: 0, fifteenth: prorated });
   });
 
   it('treats a start on the 14th as split across both dates', () => {
     // Start Jul 14 → remaining Mondays 20, 27 = 2 slots → 83.54 → 41.77 each.
     const s = prorating('2026-07-14T00:00:00');
-    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 41.77, fifteenth: 41.77 });
+    expect(studentSemiMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toEqual({ first: 41.77, fifteenth: 41.77 });
   });
 
   it('falls back to a full-cost split when a mid-month starter has no schedule', () => {
     const s = succeed({ package_start_date: '2026-07-10T00:00:00' });
-    expect(studentSemiMonthlyCharge(s, 2026, 6)).toEqual({ first: 181, fifteenth: 181 });
+    expect(studentSemiMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toEqual({ first: 181, fifteenth: 181 });
   });
 });
 
 describe('studentNeedsAttention', () => {
   it('flags an unconfigured custom student', () => {
-    expect(studentNeedsAttention(succeed({ package: Package.CUSTOM }))).toBe(true);
+    expect(studentNeedsAttention(succeed({ package: 'Custom' }), TEST_CATALOG)).toBe(true);
   });
 
   it('flags a student missing a schedule or start date', () => {
-    expect(studentNeedsAttention(succeed())).toBe(true);
+    expect(studentNeedsAttention(succeed(), TEST_CATALOG)).toBe(true);
   });
 
   it('does not flag a fully-configured student', () => {
@@ -167,7 +167,7 @@ describe('studentNeedsAttention', () => {
       package_start_date: '2026-07-01T00:00:00',
       schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
     });
-    expect(studentNeedsAttention(student)).toBe(false);
+    expect(studentNeedsAttention(student, TEST_CATALOG)).toBe(false);
   });
 });
 
@@ -220,7 +220,7 @@ describe('mid-month package change charges', () => {
   // prorates over 3 Wednesdays (15, 22, 29) = 276.93, plus a $120 old portion.
   const changed = (over: Partial<Student> = {}): Student =>
     ({
-      package: Package.CUSTOM,
+      package: 'Custom',
       custom_monthly_cost: 400,
       custom_sessions_per_week: 1,
       custom_session_length_min: 45,
@@ -232,17 +232,17 @@ describe('mid-month package change charges', () => {
     }) as Student;
 
   it('adds the old package portion on top of the new package charge in the change month', () => {
-    expect(studentMonthlyCharge(changed(), 2026, 6)).toBe(396.93);
+    expect(studentMonthlyCharge(changed(), 2026, 6, TEST_CATALOG)).toBe(396.93);
   });
 
   it('does not leak the adjustment into other months', () => {
     // August: started Jul 15 (prior month) → full new monthly cost, no adjustment.
-    expect(studentMonthlyCharge(changed(), 2026, 7)).toBe(400);
+    expect(studentMonthlyCharge(changed(), 2026, 7, TEST_CATALOG)).toBe(400);
   });
 
   it('splits the whole change-month charge evenly for a semi-monthly family', () => {
     // 396.93 → round2(396.93/2)=198.47, remainder 198.46.
-    expect(studentSemiMonthlyCharge(changed(), 2026, 6)).toEqual({ first: 198.47, fifteenth: 198.46 });
+    expect(studentSemiMonthlyCharge(changed(), 2026, 6, TEST_CATALOG)).toEqual({ first: 198.47, fifteenth: 198.46 });
   });
 });
 
@@ -266,33 +266,33 @@ describe('groupSessionFee', () => {
 describe('scheduled package changes (month-aware charges)', () => {
   const pending = (over: Partial<Student> = {}): Student => succeed({
     package_start_date: '2026-01-01T00:00:00',
-    pending_package: Package.ACHIEVE, // $546/mo
+    pending_package: 'Achieve', // $546/mo
     pending_package_effective: '2026-09-01',
     ...over,
   });
 
   it('monthly: old package before, new from the effective month', () => {
-    expect(studentMonthlyCharge(pending(), 2026, 7)).toBe(362); // August
-    expect(studentMonthlyCharge(pending(), 2026, 8)).toBe(546); // September
+    expect(studentMonthlyCharge(pending(), 2026, 7, TEST_CATALOG)).toBe(362); // August
+    expect(studentMonthlyCharge(pending(), 2026, 8, TEST_CATALOG)).toBe(546); // September
   });
 
   it('semi-monthly: the effective month splits the NEW cost 50/50', () => {
-    expect(studentSemiMonthlyCharge(pending(), 2026, 7)).toEqual({first: 181, fifteenth: 181});
-    expect(studentSemiMonthlyCharge(pending(), 2026, 8)).toEqual({first: 273, fifteenth: 273});
+    expect(studentSemiMonthlyCharge(pending(), 2026, 7, TEST_CATALOG)).toEqual({first: 181, fifteenth: 181});
+    expect(studentSemiMonthlyCharge(pending(), 2026, 8, TEST_CATALOG)).toEqual({first: 273, fifteenth: 273});
   });
 
   it('charges zero for an empty-string package (never resolves)', () => {
-    expect(studentMonthlyCharge({package: ''} as never, 2026, 8)).toBe(0);
-    expect(studentSemiMonthlyCharge({package: ''} as never, 2026, 8)).toEqual({first: 0, fifteenth: 0});
+    expect(studentMonthlyCharge({package: ''} as never, 2026, 8, TEST_CATALOG)).toBe(0);
+    expect(studentSemiMonthlyCharge({package: ''} as never, 2026, 8, TEST_CATALOG)).toEqual({first: 0, fifteenth: 0});
   });
 
   it('resolves pending CUSTOM overrides for the effective month', () => {
     const s = pending({
-      pending_package: Package.CUSTOM,
+      pending_package: 'Custom',
       pending_custom_monthly_cost: 400,
       pending_custom_sessions_per_week: 2,
       pending_custom_session_length_min: 30,
     });
-    expect(studentMonthlyCharge(s, 2026, 8)).toBe(400);
+    expect(studentMonthlyCharge(s, 2026, 8, TEST_CATALOG)).toBe(400);
   });
 });

@@ -3,7 +3,7 @@ import {Student} from '../models/student.model';
 import {BillingRecord} from '../models/billing-record.model';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {groupSessionFee, siblingDiscountedTotal, studentMonthlyCharge, studentSemiMonthlyCharge} from './billing-amount';
-import {round2} from './package-config';
+import {PackageCatalog, round2} from './package-config';
 
 export interface PeriodAmounts {
   cycle: BillingCycle;
@@ -22,6 +22,7 @@ export function currentPeriodAmounts(
   enrolled: Student[],
   year: number,
   month: number,
+  catalog: PackageCatalog,
 ): PeriodAmounts | null {
   if (enrolled.length === 0) {
     return null;
@@ -40,7 +41,7 @@ export function currentPeriodAmounts(
     let first = 0;
     let fifteenth = 0;
     for (const s of packaged) {
-      const charge = studentSemiMonthlyCharge(s, year, month);
+      const charge = studentSemiMonthlyCharge(s, year, month, catalog);
       first += charge.first;
       fifteenth += charge.fifteenth;
     }
@@ -48,7 +49,7 @@ export function currentPeriodAmounts(
     amounts.push({day: 1, amount: round2(siblingDiscountedTotal(round2(first), pct, count) + groupFee)});
     amounts.push({day: 15, amount: siblingDiscountedTotal(round2(fifteenth), pct, count)});
   } else {
-    const total = round2(packaged.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+    const total = round2(packaged.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month, catalog), 0));
     amounts.push({day: 1, amount: round2(siblingDiscountedTotal(total, pct, count) + groupFee)});
   }
   return {cycle, amounts};

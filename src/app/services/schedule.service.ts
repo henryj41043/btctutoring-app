@@ -10,7 +10,7 @@ import {easternSlotToUtc} from '../utils/eastern-time';
 import {Weekday, WEEKDAY_BY_JS_DAY, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
-import {PackageDef, resolvePackageDef} from '../utils/package-config';
+import {PackageDef, PackageCatalog, resolvePackageDef} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
 import {effectiveSlotTutorId, groupSlotsByEffectiveTutor} from '../utils/slot-tutor';
 
@@ -66,8 +66,8 @@ export class ScheduleService {
 
   // ── package + slots ─────────────────────────────────────────────────────────
   /** The resolved package definition for a student (null if CUSTOM is unconfigured). */
-  resolveDef(student: Student): PackageDef | null {
-    return resolvePackageDef(student.package, {
+  resolveDef(student: Student, catalog: PackageCatalog): PackageDef | null {
+    return resolvePackageDef(student.package, catalog, {
       monthlyCost: student.custom_monthly_cost,
       sessionsPerWeek: student.custom_sessions_per_week,
       sessionLengthMin: student.custom_session_length_min,

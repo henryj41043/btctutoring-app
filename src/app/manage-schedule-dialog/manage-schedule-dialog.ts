@@ -1,4 +1,5 @@
-import {Component, inject, OnInit} from '@angular/core';
+import {Component, DestroyRef, inject, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -15,18 +16,18 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {provideNativeDateAdapter} from '@angular/material/core';
-import {catchError, EMPTY, of} from 'rxjs';
+import {catchError, EMPTY, of, take} from 'rxjs';
 import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
-import {Package} from '../enums/package.enum';
-import {PackageDef} from '../utils/package-config';
+import {CUSTOM_PACKAGE, PackageCatalog, PackageDef, resolvePackageDef, toCatalog} from '../utils/package-config';
 import {ScheduleService} from '../services/schedule.service';
 import {StudentService} from '../services/student.service';
 import {ContactService} from '../services/contact.service';
 import {AuthService} from '../services/auth.service';
-import {resolvePackageDef} from '../utils/package-config';
+import {PackageService} from '../services/package.service';
+import {PackageRow} from '../models/package-row.model';
 import {pendingPackageNote} from '../utils/pending-package';
 import {groupSlotsByEffectiveTutor} from '../utils/slot-tutor';
 import {contactDisplayName} from '../utils/contact-name';
@@ -84,10 +85,14 @@ export class ManageScheduleDialog implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private contactService: ContactService = inject(ContactService);
   private authService: AuthService = inject(AuthService);
+  private packageService: PackageService = inject(PackageService);
+  private destroyRef: DestroyRef = inject(DestroyRef);
 
   student!: Student;
   tutor?: Contact;
   def: PackageDef | null = null;
+  /** The admin-managed package catalog; the slot setup runs once it lands. */
+  protected catalog: PackageCatalog = {};
   isEdit: boolean = false;
   pendingMode: boolean = false;
 
@@ -124,7 +129,7 @@ export class ManageScheduleDialog implements OnInit {
   /** CUSTOM packages may vary each slot's length; fixed packages never do. */
   get isCustomPackage(): boolean {
     const pkg = this.pendingMode ? this.student.pending_package : this.student.package;
-    return pkg === Package.CUSTOM;
+    return pkg === CUSTOM_PACKAGE;
   }
 
   ngOnInit(): void {
@@ -132,9 +137,23 @@ export class ManageScheduleDialog implements OnInit {
     this.tutor = this.data.tutor;
     this.pendingMode = this.data.pendingMode ?? false;
     this.loadTutorOptions();
+    // The whole slot setup needs the resolved def (slotLength reads it), so it
+    // runs once the catalog lands — synchronously on reopen (SWR cache).
+    // take(1): the SWR refresh must not re-run setup over in-progress edits.
+    this.packageService.getPackages().pipe(
+      catchError(() => of([] as PackageRow[])),
+      take(1),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(rows => {
+      this.catalog = toCatalog(rows);
+      this.setUpSlots();
+    });
+  }
+
+  private setUpSlots(): void {
     if (this.pendingMode) {
       // The slots being edited belong to the FUTURE package.
-      this.def = resolvePackageDef(this.student.pending_package || undefined, {
+      this.def = resolvePackageDef(this.student.pending_package || undefined, this.catalog, {
         monthlyCost: this.student.pending_custom_monthly_cost,
         sessionsPerWeek: this.student.pending_custom_sessions_per_week,
         sessionLengthMin: this.student.pending_custom_session_length_min,
@@ -145,7 +164,7 @@ export class ManageScheduleDialog implements OnInit {
       this.seedScheduleSlots();
       return;
     }
-    this.def = this.scheduleService.resolveDef(this.student);
+    this.def = this.scheduleService.resolveDef(this.student, this.catalog);
     const existing = this.student.schedule ?? [];
     this.isEdit = existing.length > 0;
     this.autoRenew = this.student.auto_renew ?? true;

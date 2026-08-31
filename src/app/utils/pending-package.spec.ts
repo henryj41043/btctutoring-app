@@ -5,12 +5,11 @@ import {
   pendingPackageNote,
 } from './pending-package';
 import {Student} from '../models/student.model';
-import {Package} from '../enums/package.enum';
 
 const pendingStudent = (over: Partial<Student> = {}): Student => ({
-  package: Package.SUCCEED,
+  package: 'Succeed',
   custom_monthly_cost: 111,
-  pending_package: Package.ACHIEVE,
+  pending_package: 'Achieve',
   pending_package_effective: '2026-09-01',
   ...over,
 });
@@ -18,7 +17,7 @@ const pendingStudent = (over: Partial<Student> = {}): Student => ({
 describe('packageFieldsForMonth', () => {
   it('returns the current fields before the effective month', () => {
     expect(packageFieldsForMonth(pendingStudent(), 2026, 7)).toEqual({
-      package: Package.SUCCEED,
+      package: 'Succeed',
       custom_monthly_cost: 111,
       custom_sessions_per_week: undefined,
       custom_session_length_min: undefined,
@@ -26,19 +25,19 @@ describe('packageFieldsForMonth', () => {
   });
 
   it('returns the pending fields from the effective month onward', () => {
-    expect(packageFieldsForMonth(pendingStudent(), 2026, 8).package).toBe(Package.ACHIEVE);
-    expect(packageFieldsForMonth(pendingStudent(), 2027, 0).package).toBe(Package.ACHIEVE);
+    expect(packageFieldsForMonth(pendingStudent(), 2026, 8).package).toBe('Achieve');
+    expect(packageFieldsForMonth(pendingStudent(), 2027, 0).package).toBe('Achieve');
   });
 
   it('carries the pending CUSTOM overrides', () => {
     const fields = packageFieldsForMonth(pendingStudent({
-      pending_package: Package.CUSTOM,
+      pending_package: 'Custom',
       pending_custom_monthly_cost: 500,
       pending_custom_sessions_per_week: 2,
       pending_custom_session_length_min: 45,
     }), 2026, 8);
     expect(fields).toEqual({
-      package: Package.CUSTOM,
+      package: 'Custom',
       custom_monthly_cost: 500,
       custom_sessions_per_week: 2,
       custom_session_length_min: 45,
@@ -47,15 +46,15 @@ describe('packageFieldsForMonth', () => {
 
   it('ignores a pending package with no effective date, and vice versa', () => {
     expect(packageFieldsForMonth(pendingStudent({pending_package_effective: undefined}), 2026, 8).package)
-      .toBe(Package.SUCCEED);
+      .toBe('Succeed');
     expect(packageFieldsForMonth(pendingStudent({pending_package: undefined}), 2026, 8).package)
-      .toBe(Package.SUCCEED);
+      .toBe('Succeed');
   });
 
   it('handles a year-boundary effective date', () => {
     const s = pendingStudent({pending_package_effective: '2027-01-01'});
-    expect(packageFieldsForMonth(s, 2026, 11).package).toBe(Package.SUCCEED);
-    expect(packageFieldsForMonth(s, 2027, 0).package).toBe(Package.ACHIEVE);
+    expect(packageFieldsForMonth(s, 2026, 11).package).toBe('Succeed');
+    expect(packageFieldsForMonth(s, 2027, 0).package).toBe('Achieve');
   });
 });
 
@@ -96,7 +95,7 @@ describe('pendingChanged', () => {
   });
 
   it('is true for a brand-new pending change', () => {
-    expect(pendingChanged({package: Package.SUCCEED} as Student, pendingStudent())).toBe(true);
+    expect(pendingChanged({package: 'Succeed'} as Student, pendingStudent())).toBe(true);
     expect(pendingChanged(undefined, pendingStudent())).toBe(true);
   });
 
@@ -105,7 +104,7 @@ describe('pendingChanged', () => {
   });
 
   it('is true when any pending field differs', () => {
-    expect(pendingChanged(prior, pendingStudent({pending_package: Package.EXCEL}))).toBe(true);
+    expect(pendingChanged(prior, pendingStudent({pending_package: 'Excel'}))).toBe(true);
     expect(pendingChanged(prior, pendingStudent({pending_package_effective: '2026-10-01'}))).toBe(true);
     expect(pendingChanged(prior, pendingStudent({pending_custom_monthly_cost: 9}))).toBe(true);
     expect(pendingChanged(prior, pendingStudent({pending_custom_sessions_per_week: 9}))).toBe(true);

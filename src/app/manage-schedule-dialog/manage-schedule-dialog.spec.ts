@@ -10,7 +10,8 @@ import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
 import {Weekday} from '../enums/weekday.enum';
-import {Package} from '../enums/package.enum';
+import {PackageService} from '../services/package.service';
+import {TEST_CATALOG_ROWS} from '../../testing/package-catalog.fixture';
 
 const def = {monthlyCost: 728, sessionsPerWeek: 2, sessionLengthMin: 60};
 const tutor = {id: 't-1', first_name: 'Tess'} as Contact;
@@ -38,6 +39,7 @@ describe('ManageScheduleDialog', () => {
   const authService = {isAdmin: () => isAdmin};
   const studentService = {updateStudent: jest.fn()};
   const contactService = {getStaff: jest.fn(), getContact: jest.fn()};
+  const packageService = {getPackages: () => of(TEST_CATALOG_ROWS)};
 
   const build = (data: ManageScheduleDialogData): ManageScheduleDialog => {
     TestBed.resetTestingModule();
@@ -50,6 +52,7 @@ describe('ManageScheduleDialog', () => {
         {provide: StudentService, useValue: studentService},
         {provide: ContactService, useValue: contactService},
         {provide: AuthService, useValue: authService},
+        {provide: PackageService, useValue: packageService},
       ],
     });
     const c = TestBed.createComponent(ManageScheduleDialog).componentInstance;
@@ -59,7 +62,7 @@ describe('ManageScheduleDialog', () => {
 
   /** A create-mode dialog with valid, filled slots ready to save. */
   const primedCreate = (): ManageScheduleDialog => {
-    const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION} as Student, tutor});
+    const c = build({student: {id: 's-1', name: 'Pat', package: 'Determination'} as Student, tutor});
     c.scheduleSlots = [
       {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null},
       {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null},
@@ -80,7 +83,7 @@ describe('ManageScheduleDialog', () => {
 
   describe('ngOnInit', () => {
     it('seeds blank slots for a new schedule (create mode)', () => {
-      const c = build({student: {name: 'Pat', package: Package.DETERMINATION} as Student, tutor});
+      const c = build({student: {name: 'Pat', package: 'Determination'} as Student, tutor});
       expect(c.isEdit).toBe(false);
       expect(c.scheduleSlots).toHaveLength(2); // sessionsPerWeek
       expect(c.startDate).toBeInstanceOf(Date);
@@ -88,7 +91,7 @@ describe('ManageScheduleDialog', () => {
     });
 
     it('pre-seeds slots from an existing schedule (edit mode)', () => {
-      const c = build({student: {name: 'Pat', package: Package.DETERMINATION, schedule: slots, auto_renew: false} as Student, tutor});
+      const c = build({student: {name: 'Pat', package: 'Determination', schedule: slots, auto_renew: false} as Student, tutor});
       expect(c.isEdit).toBe(true);
       expect(c.scheduleSlots).toEqual([
         {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null, length_min: null},
@@ -101,7 +104,7 @@ describe('ManageScheduleDialog', () => {
   describe('save validation', () => {
     it('blocks when the package is unconfigured', () => {
       scheduleService.resolveDef.mockReturnValue(null);
-      const c = build({student: {name: 'Pat', package: Package.CUSTOM} as Student, tutor});
+      const c = build({student: {name: 'Pat', package: 'Custom'} as Student, tutor});
       c.save();
       expect(c.hasError).toBe(true);
       expect(c.errorMessage).toContain("isn't configured");
@@ -157,7 +160,7 @@ describe('ManageScheduleDialog', () => {
     it('updates an existing schedule via updateSchedule', () => {
       const updated = {id: 's-1', schedule: slots} as Student;
       scheduleService.updateSchedule.mockReturnValue(of(updated));
-      const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION, schedule: slots} as Student, tutor});
+      const c = build({student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor});
       c.save();
       expect(scheduleService.updateSchedule).toHaveBeenCalled();
       expect(scheduleService.createSchedule).not.toHaveBeenCalled();
@@ -174,7 +177,7 @@ describe('ManageScheduleDialog', () => {
 
     it('surfaces an update error', () => {
       scheduleService.updateSchedule.mockReturnValue(throwError(() => new Error('x')));
-      const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION, schedule: slots} as Student, tutor});
+      const c = build({student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor});
       c.save();
       expect(c.hasError).toBe(true);
       expect(c.errorMessage).toContain('Updating the schedule failed');
@@ -227,7 +230,7 @@ describe('ManageScheduleDialog', () => {
     it('confirms then deletes the schedule, closing with the cleared student', () => {
       const cleared = {id: 's-1', schedule: []} as Student;
       scheduleService.deleteSchedule.mockReturnValue(of(cleared));
-      const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION, schedule: slots} as Student, tutor});
+      const c = build({student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor});
       c.requestDelete();
       expect(c.showDeleteConfirm).toBe(true);
       c.confirmDelete();
@@ -236,7 +239,7 @@ describe('ManageScheduleDialog', () => {
     });
 
     it('cancelling delete keeps the schedule', () => {
-      const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION, schedule: slots} as Student, tutor});
+      const c = build({student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor});
       c.requestDelete();
       c.cancelDelete();
       expect(c.showDeleteConfirm).toBe(false);
@@ -245,7 +248,7 @@ describe('ManageScheduleDialog', () => {
 
     it('surfaces a delete error', () => {
       scheduleService.deleteSchedule.mockReturnValue(throwError(() => new Error('x')));
-      const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION, schedule: slots} as Student, tutor});
+      const c = build({student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor});
       c.requestDelete();
       c.confirmDelete();
       expect(c.hasError).toBe(true);
@@ -264,13 +267,13 @@ describe('ManageScheduleDialog', () => {
     const pendingStudent = (over: Partial<Student> = {}): Student => ({
       id: 's-1',
       name: 'Pat',
-      package: Package.DETERMINATION,
+      package: 'Determination',
       schedule: [
         {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
         {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00'},
       ],
       auto_renew: true,
-      pending_package: Package.ACHIEVE,
+      pending_package: 'Achieve',
       pending_package_effective: '2026-09-01',
       ...over,
     } as Student);
@@ -388,7 +391,7 @@ describe('ManageScheduleDialog', () => {
 
     it('an unconfigured pending CUSTOM blocks with the package error', () => {
       const c = build({
-        student: pendingStudent({pending_package: Package.CUSTOM}),
+        student: pendingStudent({pending_package: 'Custom'}),
         tutor,
         pendingMode: true,
       });
@@ -423,7 +426,7 @@ describe('ManageScheduleDialog', () => {
       contactService.getContact.mockReturnValue(of([former]));
       const c = build({
         student: {
-          id: 's-1', name: 'Pat', package: Package.DETERMINATION,
+          id: 's-1', name: 'Pat', package: 'Determination',
           schedule: [
             {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00', tutor_id: 't-old'},
             {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00'},
@@ -439,7 +442,7 @@ describe('ManageScheduleDialog', () => {
     it('save includes tutor_id only when set — a null override omits the key', () => {
       const c = build({
         student: {
-          id: 's-1', name: 'Pat', package: Package.DETERMINATION,
+          id: 's-1', name: 'Pat', package: 'Determination',
           schedule: [
             {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
             {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00'},
@@ -492,8 +495,8 @@ describe('ManageScheduleDialog', () => {
       scheduleService.addMinutesToTime.mockReturnValue('09:30');
       const c = build({
         student: {
-          id: 's-1', name: 'Pat', package: Package.DETERMINATION,
-          pending_package: Package.ACHIEVE,
+          id: 's-1', name: 'Pat', package: 'Determination',
+          pending_package: 'Achieve',
           pending_package_effective: '2026-09-01',
         } as Student,
         tutor,
@@ -513,7 +516,7 @@ describe('ManageScheduleDialog', () => {
 
   describe('per-slot lengths (CUSTOM packages)', () => {
     const customStudent = (over: Partial<Student> = {}): Student => ({
-      id: 's-1', name: 'Pat', package: Package.CUSTOM,
+      id: 's-1', name: 'Pat', package: 'Custom',
       custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 30,
       ...over,
     } as Student);
@@ -559,7 +562,7 @@ describe('ManageScheduleDialog', () => {
 
     it('fixed packages ignore any stray length and always use the package length', () => {
       scheduleService.resolveDef.mockReturnValue(def); // Determination 60 min
-      const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION,
+      const c = build({student: {id: 's-1', name: 'Pat', package: 'Determination',
         schedule: slots} as Student, tutor});
       expect(c.isCustomPackage).toBe(false);
       c.scheduleSlots[0].length_min = 45; // not reachable via UI; must be inert
@@ -572,8 +575,8 @@ describe('ManageScheduleDialog', () => {
       studentService.updateStudent.mockReturnValue(of({}));
       const c = build({
         student: customStudent({
-          package: Package.DETERMINATION,
-          pending_package: Package.CUSTOM,
+          package: 'Determination',
+          pending_package: 'Custom',
           pending_custom_monthly_cost: 400,
           pending_custom_sessions_per_week: 2,
           pending_custom_session_length_min: 30,

@@ -34,7 +34,9 @@ import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {AuthService} from '../services/auth.service';
 import {ScheduleService} from '../services/schedule.service';
-import {PackageDef, resolvePackageDef} from '../utils/package-config';
+import {PackageCatalog, PackageDef, resolvePackageDef, toCatalog} from '../utils/package-config';
+import {PackageService} from '../services/package.service';
+import {PackageRow} from '../models/package-row.model';
 import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
 import {contactDisplayName} from '../utils/contact-name';
@@ -153,6 +155,7 @@ export class SessionDialog implements OnInit {
   studentService: StudentService = inject(StudentService);
   authService: AuthService = inject(AuthService);
   scheduleService: ScheduleService = inject(ScheduleService);
+  packageService: PackageService = inject(PackageService);
   // Cancels the dropdown loads if the dialog closes before they land.
   private destroyRef: DestroyRef = inject(DestroyRef);
 
@@ -160,11 +163,15 @@ export class SessionDialog implements OnInit {
     return this.students.find(s => s.id === this.selectedStudent);
   }
 
+  /** The admin-managed package catalog; loaded in ngOnInit, empty until it lands
+   *  (a null def then skips length validation, same as an unconfigured CUSTOM). */
+  protected catalog: PackageCatalog = {};
+
   /** The resolved package definition for the selected student (null if CUSTOM is unconfigured). */
   get selectedPackageDef(): PackageDef | null {
     const student = this.selectedStudentObj;
     if (!student) return null;
-    return resolvePackageDef(student.package, {
+    return resolvePackageDef(student.package, this.catalog, {
       monthlyCost: student.custom_monthly_cost,
       sessionsPerWeek: student.custom_sessions_per_week,
       sessionLengthMin: student.custom_session_length_min,
@@ -250,6 +257,12 @@ export class SessionDialog implements OnInit {
   }
 
   ngOnInit(): void {
+    // Package catalog for length validation; a failed load just leaves the
+    // cap unenforced (same degradation as an unconfigured CUSTOM package).
+    this.packageService.getPackages().pipe(
+      catchError(() => of([] as PackageRow[])),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(rows => (this.catalog = toCatalog(rows)));
     if (this.dialogData.type === 'create' && this.isMakeupLocked) {
       // Tutor self-service: make-up only, assigned to themselves. Set BEFORE
       // getStudents so the caseload pre-filter sees the selected tutor.

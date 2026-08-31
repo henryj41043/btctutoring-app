@@ -31,6 +31,9 @@ import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {StudentStatus} from '../enums/student-status.enum';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {groupSessionFee, studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
+import {PackageService} from '../services/package.service';
+import {PackageCatalog, toCatalog} from '../utils/package-config';
+import {PackageRow} from '../models/package-row.model';
 import {packageFieldsForMonth} from '../utils/pending-package';
 import {round2} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
@@ -65,6 +68,7 @@ export class Billing implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private studentService: StudentService = inject(StudentService);
   private billingService: BillingService = inject(BillingService);
+  private packageService: PackageService = inject(PackageService);
   private noteService: NoteService = inject(NoteService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   // Cancels in-flight HTTP work when the user navigates away.
@@ -91,6 +95,10 @@ export class Billing implements OnInit {
   protected dataSource = new MatTableDataSource<BillingEntry>([]);
   protected selectedDate: Date = new Date();
   protected loading: boolean = true;
+  /** True when the load (notably the package catalog) failed — shown loudly. */
+  protected hasError: boolean = false;
+  /** The admin-managed package catalog governing all derived amounts. */
+  private catalog: PackageCatalog = {};
   /** First-of-month for the selected billing month, used for the header. */
   protected monthStart: Date = new Date();
 
@@ -137,6 +145,7 @@ export class Billing implements OnInit {
   private loadBilling(date: Date): void {
     this.monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
     this.loading = true;
+    this.hasError = false;
     this.dataSource.data = [];
     this.cdr.markForCheck();
 
@@ -151,7 +160,18 @@ export class Billing implements OnInit {
       records: this.billingService
         .getBillingRecordsByMonth(this.monthKeyOf(date))
         .pipe(catchError(() => of([] as BillingRecord[]))),
-    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({contacts, students, records}) => {
+      // No catchError: a missing catalog must fail LOUDLY here — every
+      // named-package row would otherwise silently derive $0.
+      packages: this.packageService.getPackages(),
+    }).pipe(
+      catchError(() => {
+        this.hasError = true;
+        this.finishLoading([]);
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(({contacts, students, records, packages}) => {
+      this.catalog = toCatalog(packages);
       this.finishLoading(this.buildEntries(date, contacts, students, records));
     });
   }
@@ -206,7 +226,7 @@ export class Billing implements OnInit {
         let first = 0;
         let fifteenth = 0;
         for (const s of packaged) {
-          const charge = studentSemiMonthlyCharge(s, year, month);
+          const charge = studentSemiMonthlyCharge(s, year, month, this.catalog);
           first += charge.first;
           fifteenth += charge.fifteenth;
         }
@@ -222,7 +242,7 @@ export class Billing implements OnInit {
         dueFirst = discFirst === 0 ? null : discFirst;
         dueFifteenth = discFifteenth === 0 ? null : discFifteenth;
       } else {
-        preDiscountTotal = round2(packaged.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month), 0));
+        preDiscountTotal = round2(packaged.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month, this.catalog), 0));
         total = round2(siblingDiscountedTotal(preDiscountTotal, pct, enrolled) + groupFee);
         dueFirst = total;
         dueFifteenth = null;
@@ -246,7 +266,7 @@ export class Billing implements OnInit {
         discount_percent: discount > 0 ? (pct ?? 0) : 0,
         paid_first: recordMap.get(`${contactId}#${periodFirst}`)?.paid ?? false,
         paid_fifteenth: semi ? (recordMap.get(`${contactId}#${periodFifteenth}`)?.paid ?? false) : false,
-        needs_attention: packaged.some(studentNeedsAttention),
+        needs_attention: packaged.some(s => studentNeedsAttention(s, this.catalog)),
       };
       entries.push(entry);
     }

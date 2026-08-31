@@ -1,0 +1,91 @@
+<div class="packages">
+  <div class="btc-page-header">
+    <h2>Packages</h2>
+    <div class="packages-controls">
+      <mat-slide-toggle [checked]="showRetired" (change)="toggleShowRetired($event.checked)">
+        Show retired ({{retiredCount}})
+      </mat-slide-toggle>
+      <button mat-raised-button color="primary" (click)="openCreateDialog()">
+        <mat-icon>add</mat-icon>
+        Add Package
+      </button>
+    </div>
+  </div>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      @if (loading) {
+        <div class="table-spinner">
+          <mat-spinner [diameter]="48"></mat-spinner>
+          <span class="table-spinner-label">Loading packages…</span>
+        </div>
+      } @else if (hasError) {
+        <p class="packages-empty packages-error">Something went wrong loading or updating packages. Reload to try again.</p>
+      } @else if (dataSource.data.length === 0) {
+        <p class="packages-empty">No packages yet. Add one to offer it in the student package selects.</p>
+      } @else {
+        <p class="packages-hint">
+          Packages can't be edited after creation — to change one, retire it and create a
+          replacement. Students on a retired package keep billing at its price.
+        </p>
+        <div class="table-scroll">
+          <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Package</th>
+              <td mat-cell *matCellDef="let row" [class.retired-name]="row.retired">{{row.id}}</td>
+            </ng-container>
+            <ng-container matColumnDef="monthlyCost">
+              <th mat-header-cell *matHeaderCellDef>Monthly Price</th>
+              <td mat-cell *matCellDef="let row">{{row.monthlyCost | currency:'USD':'symbol':'1.0-2'}}</td>
+            </ng-container>
+            <ng-container matColumnDef="sessionsPerWeek">
+              <th mat-header-cell *matHeaderCellDef>Sessions / Week</th>
+              <td mat-cell *matCellDef="let row">{{row.sessionsPerWeek}}</td>
+            </ng-container>
+            <ng-container matColumnDef="sessionLengthMin">
+              <th mat-header-cell *matHeaderCellDef>Session Length</th>
+              <td mat-cell *matCellDef="let row">{{row.sessionLengthMin}} min</td>
+            </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.retired) {
+                  <span class="retired-chip">Retired</span>
+                } @else {
+                  <span class="active-chip">Active</span>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let row" class="actions-cell">
+                @if (mutatingId === row.id) {
+                  <mat-spinner [diameter]="20"></mat-spinner>
+                } @else if (row.retired) {
+                  <button matButton aria-label="Unretire package" (click)="restore(row, $event)">
+                    <mat-icon>restore</mat-icon>
+                    Unretire
+                  </button>
+                } @else if (pendingRetireId === row.id) {
+                  <span class="confirm-retire">
+                    Retire {{row.id}}?
+                    <button matButton color="warn" (click)="confirmRetire(row)">Retire</button>
+                    <button matButton (click)="cancelRetire()">Cancel</button>
+                  </span>
+                } @else {
+                  <button matIconButton aria-label="Retire package"
+                          matTooltip="Retire — hides it from package selects; students on it keep billing"
+                          (click)="askRetire(row, $event)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                }
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="columns"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+          </table>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>
