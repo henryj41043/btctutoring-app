@@ -43,10 +43,24 @@ export class FilterSelect implements ControlValueAccessor, OnChanges {
   private onChange: (value: string | null) => void = () => undefined;
   private onTouched: () => void = () => undefined;
 
-  /** Options often arrive after writeValue — re-resolve the shown label. */
+  /**
+   * Options often arrive after writeValue — re-resolve the shown label. But
+   * ONLY when the box still shows the previous options' label for the
+   * selection: parents commonly bind a getter that builds a fresh options
+   * array every change-detection cycle, so this fires constantly — resetting
+   * unconditionally would clobber every keystroke of in-progress typing.
+   */
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['options'] && this.selectedValue !== null) {
+    const change = changes['options'];
+    if (!change || this.selectedValue === null) {
+      return;
+    }
+    const previous = (change.previousValue ?? []) as FilterSelectOption[];
+    const previousLabel =
+      previous.find(o => o.value === this.selectedValue)?.label ?? '';
+    if (this.searchText === previousLabel && this.searchText !== this.selectedLabel) {
       this.searchText = this.selectedLabel;
+      this.cdr.markForCheck();
     }
   }
 
