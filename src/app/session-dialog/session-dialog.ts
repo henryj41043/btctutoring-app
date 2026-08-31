@@ -37,6 +37,7 @@ import {ScheduleService} from '../services/schedule.service';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
 import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {contactDisplayName} from '../utils/contact-name';
 import {studentVisibleToTutor} from '../utils/slot-tutor';
 import {
   combineDateTime,
@@ -71,6 +72,7 @@ import {mutatesStudent, validateMakeupPendingBalance, validateSessionLength} fro
 })
 export class SessionDialog implements OnInit {
   protected readonly studentDisplayName = studentDisplayName;
+  protected readonly contactDisplayName = contactDisplayName;
   startTime: Date | undefined;
   endTime: Date | undefined;
   date: Date | undefined;

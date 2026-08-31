@@ -63,9 +63,9 @@
           <mat-form-field>
             <mat-label>Tutor</mat-label>
             <mat-select [(ngModel)]="slot.tutor_id">
-              <mat-option [value]="null">Primary ({{tutor?.first_name || '—'}})</mat-option>
+              <mat-option [value]="null">Primary ({{tutor ? contactDisplayName(tutor) : '—'}})</mat-option>
               @for (option of tutorOptions; track option.id) {
-                <mat-option [value]="option.id">{{option.first_name}} {{option.last_name}}</mat-option>
+                <mat-option [value]="option.id">{{contactDisplayName(option)}}</mat-option>
               }
             </mat-select>
           </mat-form-field>

@@ -27,7 +27,7 @@
         <mat-label>Tutor</mat-label>
         <mat-select [(ngModel)]="selectedTutor">
           @for (tutor of tutors; track tutor.id) {
-            <mat-option [value]="tutor.id">{{ tutor.first_name }} {{ tutor.last_name }}</mat-option>
+            <mat-option [value]="tutor.id">{{ contactDisplayName(tutor) }}</mat-option>
           }
         </mat-select>
       </mat-form-field>

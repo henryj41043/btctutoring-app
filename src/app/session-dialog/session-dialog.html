@@ -40,7 +40,7 @@
       <mat-label>{{selectedType === SessionType.ADMIN ? 'Select Staff' : 'Select Tutor'}}</mat-label>
       <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)" [disabled]="isMakeupLocked">
         @for (tutor of tutors; track tutor) {
-          <mat-option [value]="tutor.id">{{tutor.first_name}}</mat-option>
+          <mat-option [value]="tutor.id">{{contactDisplayName(tutor)}}</mat-option>
         }
       </mat-select>
     </mat-form-field>

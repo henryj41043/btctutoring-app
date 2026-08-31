@@ -48,7 +48,7 @@
         <mat-label>Created by</mat-label>
         <mat-select formControlName="created_by">
           @for (admin of data.admins; track admin.id) {
-            <mat-option [value]="admin.id">{{ admin.first_name }} {{ admin.last_name }}</mat-option>
+            <mat-option [value]="admin.id">{{ contactDisplayName(admin) }}</mat-option>
           }
         </mat-select>
       </mat-form-field>
@@ -58,20 +58,15 @@
           <mat-label>Recipients</mat-label>
           <mat-select formControlName="recipient_ids" multiple>
             @for (admin of data.admins; track admin.id) {
-              <mat-option [value]="admin.id">{{ admin.first_name }} {{ admin.last_name }}</mat-option>
+              <mat-option [value]="admin.id">{{ contactDisplayName(admin) }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
       }
-      <mat-form-field>
-        <mat-label>Linked contact (optional)</mat-label>
-        <mat-select formControlName="contact_id">
-          <mat-option [value]="null">None</mat-option>
-          @for (contact of data.contacts ?? []; track contact.id) {
-            <mat-option [value]="contact.id">{{ contact.first_name }} {{ contact.last_name }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
+      <app-filter-select label="Linked contact (optional)"
+                         [options]="contactOptions"
+                         [clearable]="true"
+                         formControlName="contact_id"/>
       <mat-form-field>
         <mat-label>Note (optional)</mat-label>
         <textarea matInput rows="2" formControlName="note"></textarea>

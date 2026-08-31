@@ -1,0 +1,18 @@
+<mat-form-field class="filter-select-field">
+  <mat-label>{{ label }}</mat-label>
+  <input matInput
+         [ngModel]="searchText"
+         (ngModelChange)="onSearchChange($event)"
+         [matAutocomplete]="filterAuto"
+         [disabled]="disabled"
+         (blur)="onBlur()"
+         placeholder="Type to filter…">
+  <mat-autocomplete #filterAuto [displayWith]="displayLabel" (optionSelected)="onOptionSelected($event)">
+    @for (option of filteredOptions; track option.value) {
+      <mat-option [value]="option.value">{{ option.label }}</mat-option>
+    }
+    @if (filteredOptions.length === 0) {
+      <mat-option disabled [value]="null">No matches</mat-option>
+    }
+  </mat-autocomplete>
+</mat-form-field>

@@ -29,6 +29,7 @@ import {AuthService} from '../services/auth.service';
 import {resolvePackageDef} from '../utils/package-config';
 import {pendingPackageNote} from '../utils/pending-package';
 import {groupSlotsByEffectiveTutor} from '../utils/slot-tutor';
+import {contactDisplayName} from '../utils/contact-name';
 import {StaffStatus} from '../enums/staff-status.enum';
 import {Service} from '../enums/service.enum';
 
@@ -76,6 +77,7 @@ interface ScheduleSlotInput {
   styleUrl: './manage-schedule-dialog.scss',
 })
 export class ManageScheduleDialog implements OnInit {
+  protected readonly contactDisplayName = contactDisplayName;
   readonly dialogRef = inject(MatDialogRef<ManageScheduleDialog>);
   readonly data = inject<ManageScheduleDialogData>(MAT_DIALOG_DATA);
   private scheduleService: ScheduleService = inject(ScheduleService);

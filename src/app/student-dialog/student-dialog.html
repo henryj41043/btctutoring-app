@@ -62,7 +62,7 @@
         <mat-label>Assign Tutor</mat-label>
         <mat-select formControlName="assigned_tutor_id">
           @for (tutorOption of tutors; track tutorOption) {
-            <mat-option [value]="tutorOption.id">{{ tutorOption.first_name }}</mat-option>
+            <mat-option [value]="tutorOption.id">{{ contactDisplayName(tutorOption) }}</mat-option>
           }
         </mat-select>
       </mat-form-field>

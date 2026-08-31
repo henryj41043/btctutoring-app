@@ -10,6 +10,7 @@ import {catchError, EMPTY, Observable} from 'rxjs';
 import {TeamService} from '../services/team.service';
 import {Team} from '../models/team.model';
 import {Contact} from '../models/contact.model';
+import {contactDisplayName} from '../utils/contact-name';
 import {UserGroup} from '../enums/user-group.enum';
 
 export type TeamDialogMode = 'create' | 'edit' | 'delete';
@@ -85,7 +86,7 @@ export class TeamDialog implements OnInit {
   }
 
   displayName(contact: Contact): string {
-    return `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim();
+    return contactDisplayName(contact);
   }
 
   cancel(): void {

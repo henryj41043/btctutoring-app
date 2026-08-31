@@ -42,6 +42,18 @@ describe('AssignEmailDialog', () => {
     expect(c['contactName'](contacts[2])).toBe('only-email@example.com');
   });
 
+  it('builds typeahead options: sorted labels with email fallback, id-less dropped', () => {
+    const c = build({
+      contacts: [...contacts, { first_name: 'NoId' } as Contact],
+    });
+    const opts = (c as unknown as { contactOptions: {value: string; label: string}[] }).contactOptions;
+    expect(opts).toEqual([
+      { value: 'c-a', label: 'Ann Lee' },
+      { value: 'c-e', label: 'only-email@example.com' },
+      { value: 'c-z', label: 'Zoe Young' },
+    ]);
+  });
+
   it('renders sparse contact records without crashing the name', () => {
     const c = build();
     expect(c['contactName']({ id: 'c-x' } as Contact)).toBe('');

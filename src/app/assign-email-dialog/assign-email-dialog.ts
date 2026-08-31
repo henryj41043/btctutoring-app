@@ -10,6 +10,7 @@ import {EmailService} from '../services/email.service';
 import {EmailEntry} from '../models/email-entry.model';
 import {Contact} from '../models/contact.model';
 import {contactDisplayName} from '../utils/contact-name';
+import {FilterSelect, FilterSelectOption} from '../filter-select/filter-select';
 
 export type AssignEmailDialogMode = 'assign' | 'discard';
 
@@ -35,6 +36,7 @@ export interface AssignEmailDialogData {
     MatFormFieldModule,
     MatSelectModule,
     MatProgressSpinnerModule,
+    FilterSelect,
   ],
   templateUrl: './assign-email-dialog.html',
   styleUrl: './assign-email-dialog.scss',
@@ -55,6 +57,13 @@ export class AssignEmailDialog {
   protected get sortedContacts(): Contact[] {
     return [...this.data.contacts].sort((a, b) =>
       this.contactName(a).localeCompare(this.contactName(b)));
+  }
+
+  /** Type-to-filter options (1000+ contacts scroll poorly in a plain select). */
+  protected get contactOptions(): FilterSelectOption[] {
+    return this.sortedContacts
+      .filter(c => !!c.id)
+      .map(c => ({value: c.id!, label: this.contactName(c)}));
   }
 
   protected contactName(contact: Contact): string {
