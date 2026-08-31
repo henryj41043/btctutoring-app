@@ -240,6 +240,23 @@ describe('SessionDialog', () => {
       expect(c.filteredStudents.map((s) => s.id)).toEqual(['s-1']);
     });
 
+    it('onTutorChange includes students slot-scheduled with the tutor', () => {
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      c.students = [
+        student(),
+        student({
+          id: 's-slot',
+          assigned_tutor_id: 't-9',
+          schedule: [
+            { weekday: 'WEDNESDAY', start_time: '16:00', end_time: '16:45', tutor_id: 't-1' },
+          ],
+        } as never),
+        student({ id: 's-other', assigned_tutor_id: 't-9' }),
+      ];
+      c.onTutorChange('t-1');
+      expect(c.filteredStudents.map((s) => s.id)).toEqual(['s-1', 's-slot']);
+    });
+
     it('cancel closes the dialog', () => {
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.cancel();

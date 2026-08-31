@@ -12,6 +12,7 @@ import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
+import {effectiveSlotTutorId, groupSlotsByEffectiveTutor} from '../utils/slot-tutor';
 
 /** One generated occurrence of a weekly slot on a concrete calendar date. */
 export interface ScheduleOccurrence {
@@ -73,11 +74,26 @@ export class ScheduleService {
     });
   }
 
-  /** A read-only summary of a schedule, e.g. ['Mon 10:00 AM', 'Wed 10:00 AM']. */
-  scheduleSummary(schedule: ScheduleSlot[] | undefined): string[] {
-    return (schedule ?? []).map(
-      slot => `${WEEKDAY_LABELS[slot.weekday]} ${this.formatTime12(slot.start_time)}`,
-    );
+  /**
+   * A read-only summary of a schedule, e.g. ['Mon 10:00 AM', 'Wed 4:00 PM (Maria)'].
+   * A slot overriding the primary tutor gets the tutor's first name appended
+   * when the caller supplies a resolver (suffix omitted while unresolvable).
+   */
+  scheduleSummary(
+    schedule: ScheduleSlot[] | undefined,
+    primaryTutorId?: string,
+    tutorNameById?: (id: string) => string | undefined,
+  ): string[] {
+    return (schedule ?? []).map(slot => {
+      const base = `${WEEKDAY_LABELS[slot.weekday]} ${this.formatTime12(slot.start_time)}`;
+      if (slot.tutor_id && slot.tutor_id !== primaryTutorId) {
+        const name = tutorNameById?.(slot.tutor_id);
+        if (name) {
+          return `${base} (${name})`;
+        }
+      }
+      return base;
+    });
   }
 
   // ── occurrence generation ───────────────────────────────────────────────────
@@ -141,26 +157,34 @@ export class ScheduleService {
   }
 
   // ── session building ────────────────────────────────────────────────────────
-  /** Builds the PENDING tutoring sessions for a set of occurrences, tagged with `seriesId`. */
+  /**
+   * Builds the PENDING tutoring sessions for a set of occurrences. Each
+   * occurrence belongs to its slot's EFFECTIVE tutor (per-slot override or the
+   * primary) and carries that tutor's series id from `seriesIdByTutor` —
+   * series-scoped edits must never touch another tutor's sessions.
+   */
   buildSessions(
     student: Student,
     tutor: Contact,
     occurrences: ScheduleOccurrence[],
-    seriesId: string,
+    seriesIdByTutor: Map<string, string>,
+    tutorsById: Map<string, Contact> = new Map(),
     notes: string = '',
   ): Session[] {
     return occurrences.map(({date, slot}) => {
+      const effTutorId = effectiveSlotTutorId(slot, {...student, assigned_tutor_id: tutor.id}) ?? tutor.id;
+      const effTutor = effTutorId === tutor.id ? tutor : tutorsById.get(effTutorId!);
       const s = new Session();
       s.type = SessionType.TUTORING;
-      s.tutor_id = tutor.id;
-      s.tutor_name = tutor.first_name;
+      s.tutor_id = effTutorId;
+      s.tutor_name = effTutor?.first_name ?? '';
       s.student_id = student.id;
       s.student_name = studentDisplayName(student);
       s.start_datetime = this.atTime(date, slot.start_time).toISOString();
       s.end_datetime = this.atTime(date, slot.end_time).toISOString();
       s.status = SessionStatus.PENDING;
       s.notes = notes;
-      s.series_id = seriesId;
+      s.series_id = seriesIdByTutor.get(effTutorId ?? '');
       return s;
     });
   }
@@ -177,12 +201,35 @@ export class ScheduleService {
     );
   }
 
-  /** The series id of the soonest future-pending session, or null if there are none. */
-  private activeSeriesId(futurePending: Session[]): string | null {
-    const soonest = [...futurePending].sort(
+  /**
+   * The soonest future-pending series id PER TUTOR — the reuse candidates for
+   * regeneration. On legacy single-tutor data this reuses the exact id the old
+   * single-series logic chose.
+   */
+  private activeSeriesIdByTutor(futurePending: Session[]): Map<string, string> {
+    const sorted = [...futurePending].sort(
       (a, b) => new Date(a.start_datetime!).getTime() - new Date(b.start_datetime!).getTime(),
-    )[0];
-    return soonest?.series_id ?? null;
+    );
+    const byTutor = new Map<string, string>();
+    for (const session of sorted) {
+      if (session.tutor_id && session.series_id && !byTutor.has(session.tutor_id)) {
+        byTutor.set(session.tutor_id, session.series_id);
+      }
+    }
+    return byTutor;
+  }
+
+  /** One series id per effective tutor: reuse when recoverable, else mint. */
+  private seriesIdsFor(
+    slots: ScheduleSlot[],
+    student: Student,
+    reusable: Map<string, string> = new Map(),
+  ): Map<string, string> {
+    const ids = new Map<string, string>();
+    for (const tutorId of groupSlotsByEffectiveTutor(slots, student).keys()) {
+      ids.set(tutorId, reusable.get(tutorId) ?? crypto.randomUUID());
+    }
+    return ids;
   }
 
   private dateOnlyIso(date: Date): string {
@@ -201,10 +248,12 @@ export class ScheduleService {
     slots: ScheduleSlot[],
     startDate: Date,
     autoRenew: boolean,
+    tutorsById: Map<string, Contact> = new Map(),
   ): Observable<Student> {
-    const seriesId = crypto.randomUUID();
+    const withPrimary: Student = {...student, assigned_tutor_id: tutor.id};
+    const seriesIds = this.seriesIdsFor(slots, withPrimary);
     const occurrences = this.buildOccurrences(slots, startDate);
-    const sessions = this.buildSessions(student, tutor, occurrences, seriesId);
+    const sessions = this.buildSessions(student, tutor, occurrences, seriesIds, tutorsById);
     const updated: Student = {
       ...student,
       assigned_tutor_id: tutor.id,
@@ -232,6 +281,7 @@ export class ScheduleService {
     tutor: Contact,
     slots: ScheduleSlot[],
     autoRenew: boolean,
+    tutorsById: Map<string, Contact> = new Map(),
   ): Observable<Student> {
     const now = new Date();
     const updated: Student = {
@@ -243,8 +293,9 @@ export class ScheduleService {
     return this.sessionsService.getSessionsByStudent(student.id!).pipe(
       switchMap(existing => {
         const futurePending = this.futurePendingSeries(existing, now);
-        const seriesId = this.activeSeriesId(futurePending) ?? crypto.randomUUID();
-        const sessions = this.buildSessions(student, tutor, this.buildOccurrences(slots, now), seriesId)
+        const seriesIds = this.seriesIdsFor(
+          slots, updated, this.activeSeriesIdByTutor(futurePending));
+        const sessions = this.buildSessions(student, tutor, this.buildOccurrences(slots, now), seriesIds, tutorsById)
           .filter(s => new Date(s.start_datetime!) > now);
         const deletes$: Observable<unknown> = futurePending.length
           ? forkJoin(futurePending.map(s => this.sessionsService.deleteSession(s.id!)))

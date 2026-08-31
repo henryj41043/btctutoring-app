@@ -1571,6 +1571,31 @@ describe('Contact', () => {
       expect(contactService.getContact).not.toHaveBeenCalledWith('former-1');
     });
 
+    it('fetches a former-staff SLOT tutor so the schedule summary can name them', () => {
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{
+          id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT,
+          assigned_tutor_id: 't-1',
+          schedule: [
+            { weekday: 'WEDNESDAY', start_time: '16:00', end_time: '16:45', tutor_id: 'slot-former' },
+          ],
+        }]),
+      );
+      contactService.getContact.mockImplementation((id: string) =>
+        id === 'slot-former'
+          ? of([{ id: 'slot-former', first_name: 'Maria', last_name: 'Cruz' }])
+          : of([fullContact()]),
+      );
+      const c = build();
+      c.ngOnInit();
+      expect(contactService.getContact).toHaveBeenCalledWith('slot-former');
+      // The summary resolver hands the widened service call a name lookup.
+      c.scheduleSummary(students(c)[0]);
+      const args = scheduleService.scheduleSummary.mock.calls.at(-1)!;
+      expect(args[1]).toBe('t-1'); // primary tutor id
+      expect((args[2] as (id: string) => string | undefined)('slot-former')).toBe('Maria');
+    });
+
     it('shows a dash (not the id) when a former-staff tutor fetch fails', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 'gone-1' }]),

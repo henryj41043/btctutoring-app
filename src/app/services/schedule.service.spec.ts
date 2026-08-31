@@ -107,6 +107,27 @@ describe('ScheduleService', () => {
       expect(service.scheduleSummary(slots)).toEqual(['Mon 10:00 AM', 'Wed 10:00 AM']);
       expect(service.scheduleSummary(undefined)).toEqual([]);
     });
+
+    it('appends the slot tutor name only for resolvable overrides', () => {
+      const mixed: ScheduleSlot[] = [
+        {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
+        {weekday: Weekday.WEDNESDAY, start_time: '16:00', end_time: '16:45', tutor_id: 't-2'},
+        {weekday: Weekday.FRIDAY, start_time: '09:00', end_time: '10:00', tutor_id: 't-ghost'},
+        // Redundant override naming the primary gets no suffix.
+        {weekday: Weekday.THURSDAY, start_time: '09:00', end_time: '10:00', tutor_id: 't-1'},
+      ];
+      const names = new Map([['t-2', 'Maria']]);
+      expect(service.scheduleSummary(mixed, 't-1', id => names.get(id))).toEqual([
+        'Mon 10:00 AM',
+        'Wed 4:00 PM (Maria)',
+        'Fri 9:00 AM', // unresolvable name -> suffix omitted
+        'Thu 9:00 AM',
+      ]);
+      // Legacy 1-arg calls never suffix.
+      expect(service.scheduleSummary(mixed)).toEqual([
+        'Mon 10:00 AM', 'Wed 4:00 PM', 'Fri 9:00 AM', 'Thu 9:00 AM',
+      ]);
+    });
   });
 
   describe('occurrence generation', () => {
@@ -156,7 +177,8 @@ describe('ScheduleService', () => {
   describe('buildSessions', () => {
     it('builds pending tutoring sessions tagged with the series id', () => {
       const occ = service.buildOccurrences(slots, new Date(2026, 6, 1));
-      const built = service.buildSessions(student(), tutor(), occ, 'series-x', 'hi');
+      const built = service.buildSessions(
+        student(), tutor(), occ, new Map([['t-1', 'series-x']]), new Map(), 'hi');
       expect(built.length).toBe(9);
       const first = built[0];
       expect(first.type).toBe(SessionType.TUTORING);
@@ -169,6 +191,42 @@ describe('ScheduleService', () => {
       // 10:00-11:00 ET in July (EDT) = 14:00-15:00Z, independent of host TZ.
       expect(first.start_datetime!.endsWith('T14:00:00.000Z')).toBe(true);
       expect(first.end_datetime!.endsWith('T15:00:00.000Z')).toBe(true);
+    });
+  });
+
+  describe('buildSessions with per-slot tutors', () => {
+    const mixedSlots: ScheduleSlot[] = [
+      {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
+      {weekday: Weekday.WEDNESDAY, start_time: '16:00', end_time: '16:45', tutor_id: 't-2'},
+    ];
+    const maria = tutor({id: 't-2', first_name: 'Maria'});
+
+    it('assigns each occurrence its effective tutor, name, and series', () => {
+      const occ = service.buildOccurrences(mixedSlots, new Date(2026, 6, 1));
+      const built = service.buildSessions(
+        student(), tutor(), occ,
+        new Map([['t-1', 'series-a'], ['t-2', 'series-b']]),
+        new Map([['t-2', maria]]),
+      );
+      const mondays = built.filter(s => s.tutor_id === 't-1');
+      const wednesdays = built.filter(s => s.tutor_id === 't-2');
+      expect(mondays).toHaveLength(4);
+      expect(wednesdays).toHaveLength(5);
+      expect(mondays[0].tutor_name).toBe('Tess');
+      expect(mondays[0].series_id).toBe('series-a');
+      expect(wednesdays[0].tutor_name).toBe('Maria');
+      expect(wednesdays[0].series_id).toBe('series-b');
+    });
+
+    it('an unresolvable slot tutor still generates, with a blank name', () => {
+      const occ = service.buildOccurrences(
+        [{weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00', tutor_id: 't-ghost'}],
+        new Date(2026, 6, 1));
+      const built = service.buildSessions(
+        student(), tutor(), occ, new Map([['t-ghost', 'series-g']]), new Map());
+      expect(built[0].tutor_id).toBe('t-ghost');
+      expect(built[0].tutor_name).toBe('');
+      expect(built[0].series_id).toBe('series-g');
     });
   });
 
@@ -192,6 +250,25 @@ describe('ScheduleService', () => {
       expect(result).toBe(saved);
     });
 
+    it('mints one series per distinct effective tutor', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      const mixed: ScheduleSlot[] = [
+        {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
+        {weekday: Weekday.WEDNESDAY, start_time: '16:00', end_time: '16:45', tutor_id: 't-2'},
+      ];
+      service.createSchedule(
+        student(), tutor(), mixed, new Date(2026, 6, 1), true,
+        new Map([['t-2', tutor({id: 't-2', first_name: 'Maria'})]]),
+      ).subscribe();
+      const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
+      const seriesByTutor = new Map(created.map(s => [s.tutor_id, s.series_id]));
+      expect(seriesByTutor.size).toBe(2);
+      expect(seriesByTutor.get('t-1')).not.toBe(seriesByTutor.get('t-2'));
+      // Stable within each tutor's occurrences.
+      expect(new Set(created.filter(s => s.tutor_id === 't-2').map(s => s.series_id)).size).toBe(1);
+    });
+
     it('skips session creation when the month has no occurrences left', () => {
       studentService.updateStudent.mockReturnValue(of({} as Student));
       // July 31 2026 is a Friday — no Mon/Wed remain.
@@ -206,9 +283,9 @@ describe('ScheduleService', () => {
     afterEach(() => jest.useRealTimers());
 
     const existing = (): Session[] => [
-      {id: 'past', type: SessionType.TUTORING, status: SessionStatus.PENDING,
+      {id: 'past', type: SessionType.TUTORING, status: SessionStatus.PENDING, tutor_id: 't-1',
         series_id: 'old-series', start_datetime: new Date(2026, 5, 15, 10, 0).toISOString()} as Session,
-      {id: 'future', type: SessionType.TUTORING, status: SessionStatus.PENDING,
+      {id: 'future', type: SessionType.TUTORING, status: SessionStatus.PENDING, tutor_id: 't-1',
         series_id: 'old-series', start_datetime: new Date(2026, 6, 8, 10, 0).toISOString()} as Session,
     ];
 
@@ -242,6 +319,39 @@ describe('ScheduleService', () => {
       expect(sessionsService.deleteSession).not.toHaveBeenCalled();
       const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
       expect(created[0].series_id).not.toBe('old-series');
+    });
+
+    it("reuses each tutor's soonest series and mints for a new tutor", () => {
+      const mixedExisting: Session[] = [
+        ...existing(),
+        {id: 'future-b', type: SessionType.TUTORING, status: SessionStatus.PENDING, tutor_id: 't-2',
+          series_id: 'old-series-b', start_datetime: new Date(2026, 6, 9, 16, 0).toISOString()} as Session,
+      ];
+      sessionsService.getSessionsByStudent.mockReturnValue(of(mixedExisting));
+      sessionsService.deleteSession.mockReturnValue(of({message: 'ok'}));
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+
+      const newSlots: ScheduleSlot[] = [
+        {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
+        {weekday: Weekday.WEDNESDAY, start_time: '16:00', end_time: '16:45', tutor_id: 't-2'},
+        {weekday: Weekday.FRIDAY, start_time: '09:00', end_time: '09:30', tutor_id: 't-3'},
+      ];
+      service.updateSchedule(
+        student(), tutor(), newSlots, true,
+        new Map([['t-2', tutor({id: 't-2', first_name: 'Maria'})]]),
+      ).subscribe();
+
+      // BOTH tutors' future-pending sessions were deleted (series-agnostic).
+      expect(sessionsService.deleteSession).toHaveBeenCalledWith('future');
+      expect(sessionsService.deleteSession).toHaveBeenCalledWith('future-b');
+      const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
+      const bySeries = new Map(created.map(s => [s.tutor_id, s.series_id]));
+      expect(bySeries.get('t-1')).toBe('old-series');
+      expect(bySeries.get('t-2')).toBe('old-series-b');
+      expect(bySeries.get('t-3')).toBeDefined();
+      expect(bySeries.get('t-3')).not.toBe('old-series');
+      expect(bySeries.get('t-3')).not.toBe('old-series-b');
     });
 
     it('deleteSchedule removes future-pending sessions and clears the template', () => {

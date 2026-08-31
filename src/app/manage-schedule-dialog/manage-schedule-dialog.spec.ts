@@ -4,6 +4,7 @@ import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {ManageScheduleDialog, ManageScheduleDialogData} from './manage-schedule-dialog';
 import {ScheduleService} from '../services/schedule.service';
 import {StudentService} from '../services/student.service';
+import {ContactService} from '../services/contact.service';
 import {AuthService} from '../services/auth.service';
 import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
@@ -32,6 +33,7 @@ describe('ManageScheduleDialog', () => {
   };
   const authService = {isAdmin: () => isAdmin};
   const studentService = {updateStudent: jest.fn()};
+  const contactService = {getStaff: jest.fn(), getContact: jest.fn()};
 
   const build = (data: ManageScheduleDialogData): ManageScheduleDialog => {
     TestBed.resetTestingModule();
@@ -42,6 +44,7 @@ describe('ManageScheduleDialog', () => {
         {provide: MatDialogRef, useValue: dialogRef},
         {provide: ScheduleService, useValue: scheduleService},
         {provide: StudentService, useValue: studentService},
+        {provide: ContactService, useValue: contactService},
         {provide: AuthService, useValue: authService},
       ],
     });
@@ -54,8 +57,8 @@ describe('ManageScheduleDialog', () => {
   const primedCreate = (): ManageScheduleDialog => {
     const c = build({student: {id: 's-1', name: 'Pat', package: Package.DETERMINATION} as Student, tutor});
     c.scheduleSlots = [
-      {weekday: Weekday.MONDAY, start_time: '10:00'},
-      {weekday: Weekday.WEDNESDAY, start_time: '10:00'},
+      {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null},
+      {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null},
     ];
     return c;
   };
@@ -67,6 +70,8 @@ describe('ManageScheduleDialog', () => {
     scheduleService.addMinutesToTime.mockReturnValue('11:00');
     scheduleService.buildOccurrences.mockReturnValue([{}]);
     scheduleService.findAvailabilityFailures.mockReturnValue([]);
+    contactService.getStaff.mockReturnValue(of([]));
+    contactService.getContact.mockReturnValue(of([]));
   });
 
   describe('ngOnInit', () => {
@@ -82,8 +87,8 @@ describe('ManageScheduleDialog', () => {
       const c = build({student: {name: 'Pat', package: Package.DETERMINATION, schedule: slots, auto_renew: false} as Student, tutor});
       expect(c.isEdit).toBe(true);
       expect(c.scheduleSlots).toEqual([
-        {weekday: Weekday.MONDAY, start_time: '10:00'},
-        {weekday: Weekday.WEDNESDAY, start_time: '10:00'},
+        {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null},
+        {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null},
       ]);
       expect(c.autoRenew).toBe(false);
     });
@@ -269,9 +274,9 @@ describe('ManageScheduleDialog', () => {
     const primedPending = (over: Partial<Student> = {}): ManageScheduleDialog => {
       const c = build({student: pendingStudent(over), tutor, pendingMode: true});
       c.scheduleSlots = [
-        {weekday: Weekday.MONDAY, start_time: '09:00'},
-        {weekday: Weekday.TUESDAY, start_time: '09:00'},
-        {weekday: Weekday.THURSDAY, start_time: '09:00'},
+        {weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: null},
+        {weekday: Weekday.TUESDAY, start_time: '09:00', tutor_id: null},
+        {weekday: Weekday.THURSDAY, start_time: '09:00', tutor_id: null},
       ];
       return c;
     };
@@ -299,13 +304,13 @@ describe('ManageScheduleDialog', () => {
         tutor,
         pendingMode: true,
       });
-      expect(c.scheduleSlots[0]).toEqual({weekday: Weekday.FRIDAY, start_time: '14:00'});
+      expect(c.scheduleSlots[0]).toEqual({weekday: Weekday.FRIDAY, start_time: '14:00', tutor_id: null});
       expect(c.scheduleSlots).toHaveLength(3); // padded to the pending def
     });
 
     it('validates the slot count against the pending package', () => {
       const c = build({student: pendingStudent(), tutor, pendingMode: true});
-      c.scheduleSlots = [{weekday: Weekday.MONDAY, start_time: '09:00'}];
+      c.scheduleSlots = [{weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: null}];
       c.save();
       expect(c.errorMessage).toBe('Achieve requires 3 session(s) per week.');
       expect(studentService.updateStudent).not.toHaveBeenCalled();
@@ -386,6 +391,118 @@ describe('ManageScheduleDialog', () => {
       c.save();
       expect(c.hasError).toBe(true);
       expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('per-slot tutors', () => {
+    const maria = {id: 't-2', first_name: 'Maria', last_name: 'Cruz',
+      status: 'Staff', service: 'Hiring', is_tutor: true} as Contact;
+    const former = {id: 't-old', first_name: 'Gone'} as Contact;
+
+    beforeEach(() => {
+      contactService.getStaff.mockReturnValue(of([
+        maria,
+        {id: 't-x', first_name: 'NotTutor', status: 'Staff', service: 'Hiring', is_tutor: false} as Contact,
+        {id: 't-y', first_name: 'Left', status: 'Former Staff', service: 'Hiring'} as Contact,
+      ]));
+      scheduleService.updateSchedule.mockReturnValue(of({} as Student));
+      scheduleService.createSchedule.mockReturnValue(of({} as Student));
+    });
+
+    it('offers only active tutors as overrides', () => {
+      const c = primedCreate();
+      expect(c.tutorOptions.map(t => t.id)).toEqual(['t-2']);
+    });
+
+    it('fetches a former slot tutor individually so their override renders', () => {
+      contactService.getContact.mockReturnValue(of([former]));
+      const c = build({
+        student: {
+          id: 's-1', name: 'Pat', package: Package.DETERMINATION,
+          schedule: [
+            {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00', tutor_id: 't-old'},
+            {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00'},
+          ],
+        } as Student,
+        tutor,
+      });
+      expect(contactService.getContact).toHaveBeenCalledWith('t-old');
+      expect(c.tutorOptions.some(t => t.id === 't-old')).toBe(true);
+      expect(c.scheduleSlots[0].tutor_id).toBe('t-old');
+    });
+
+    it('save includes tutor_id only when set — a null override omits the key', () => {
+      const c = build({
+        student: {
+          id: 's-1', name: 'Pat', package: Package.DETERMINATION,
+          schedule: [
+            {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '11:00'},
+            {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00'},
+          ],
+        } as Student,
+        tutor,
+      });
+      c.scheduleSlots[1].tutor_id = 't-2';
+      c.save();
+      const slotsArg = scheduleService.updateSchedule.mock.calls.at(-1)![2] as ScheduleSlot[];
+      // Nested null is rejected by dynamoose — the key must be ABSENT.
+      expect('tutor_id' in (slotsArg[0] as object)).toBe(false);
+      expect(slotsArg[1].tutor_id).toBe('t-2');
+      // The resolvable-staff map rides along for denormalized names.
+      const mapArg = scheduleService.updateSchedule.mock.calls.at(-1)![4] as Map<string, Contact>;
+      expect(mapArg.get('t-2')).toBe(maria);
+    });
+
+    it('availability failures report per effective tutor', () => {
+      isAdmin = true;
+      scheduleService.findAvailabilityFailures
+        .mockReturnValueOnce([])        // primary group passes
+        .mockReturnValueOnce([{}, {}]); // Maria's group fails twice
+      const c = primedCreate();
+      c.scheduleSlots[1].tutor_id = 't-2';
+      c.save();
+      expect(c.showAvailabilityConfirm).toBe(true);
+      expect(c.availabilityMessage).toBe("2 session(s) fall outside Maria's availability");
+      expect(scheduleService.findAvailabilityFailures).toHaveBeenCalledTimes(2);
+      // Confirm proceeds through the same override flow.
+      c.confirmAvailabilityOverride();
+      expect(scheduleService.createSchedule).toHaveBeenCalled();
+    });
+
+    it('non-admins hard-fail on a secondary tutor availability clash', () => {
+      isAdmin = false;
+      scheduleService.findAvailabilityFailures
+        .mockReturnValueOnce([])
+        .mockReturnValueOnce([{}]);
+      const c = primedCreate();
+      c.scheduleSlots[1].tutor_id = 't-2';
+      c.save();
+      expect(c.showAvailabilityConfirm).toBe(false);
+      expect(c.errorMessage).toBe("1 session(s) fall outside Maria's availability.");
+      expect(scheduleService.createSchedule).not.toHaveBeenCalled();
+    });
+
+    it('pending mode carries slot tutors into pending_schedule', () => {
+      studentService.updateStudent.mockReturnValue(of({}));
+      scheduleService.addMinutesToTime.mockReturnValue('09:30');
+      const c = build({
+        student: {
+          id: 's-1', name: 'Pat', package: Package.DETERMINATION,
+          pending_package: Package.ACHIEVE,
+          pending_package_effective: '2026-09-01',
+        } as Student,
+        tutor,
+        pendingMode: true,
+      });
+      c.scheduleSlots = [
+        {weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: 't-2'},
+        {weekday: Weekday.TUESDAY, start_time: '09:00', tutor_id: null},
+        {weekday: Weekday.THURSDAY, start_time: '09:00', tutor_id: null},
+      ];
+      c.save();
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      expect(payload.pending_schedule![0].tutor_id).toBe('t-2');
+      expect('tutor_id' in (payload.pending_schedule![1] as object)).toBe(false);
     });
   });
 });

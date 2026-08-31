@@ -37,6 +37,7 @@ import {ScheduleService} from '../services/schedule.service';
 import {PackageDef, resolvePackageDef} from '../utils/package-config';
 import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {studentVisibleToTutor} from '../utils/slot-tutor';
 import {
   combineDateTime,
   durationMinutes,
@@ -858,7 +859,9 @@ export class SessionDialog implements OnInit {
   onTutorChange(tutorId: string): void {
     this.selectedTutor = tutorId;
     this.selectedStudent = undefined;
-    this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === tutorId);
+    // Assigned tutor OR any per-slot tutor — a second-subject tutor sees
+    // their slot-scheduled students too.
+    this.filteredStudents = this.students.filter(s => studentVisibleToTutor(s, tutorId));
   }
 
   private getStudents() {
@@ -880,7 +883,8 @@ export class SessionDialog implements OnInit {
         (this.selectedType === SessionType.TRIAL && s.status === StudentStatus.ONBOARDING));
       // Pre-filter for edit mode where tutor is already selected when students load
       if (this.selectedTutor) {
-        this.filteredStudents = this.students.filter(s => s.assigned_tutor_id === this.selectedTutor);
+        this.filteredStudents = this.students.filter(
+          s => studentVisibleToTutor(s, this.selectedTutor));
       }
     });
   }

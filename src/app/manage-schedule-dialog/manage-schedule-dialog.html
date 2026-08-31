@@ -49,6 +49,15 @@
               }
             </mat-select>
           </mat-form-field>
+          <mat-form-field>
+            <mat-label>Tutor</mat-label>
+            <mat-select [(ngModel)]="slot.tutor_id">
+              <mat-option [value]="null">Primary ({{tutor?.first_name || '—'}})</mat-option>
+              @for (option of tutorOptions; track option.id) {
+                <mat-option [value]="option.id">{{option.first_name}} {{option.last_name}}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
         </div>
       }
     </div>
@@ -61,8 +70,7 @@
   @if (showAvailabilityConfirm) {
     <div class="status-confirm-warning">
       <p><strong>⚠ Outside tutor availability.</strong></p>
-      <p>{{availabilityFailCount}} session(s) fall outside {{availabilityTutorName}}'s set
-        availability. Do you want to save anyway?</p>
+      <p>{{availabilityMessage}}. Do you want to save anyway?</p>
     </div>
   }
   @if (showDeleteConfirm) {
