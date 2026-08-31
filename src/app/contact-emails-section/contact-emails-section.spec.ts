@@ -3,6 +3,7 @@ import { of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { ContactEmailsSection } from './contact-emails-section';
 import { EmailService } from '../services/email.service';
+import { ContactService } from '../services/contact.service';
 import { AuthService } from '../services/auth.service';
 import { EmailEntry } from '../models/email-entry.model';
 
@@ -10,6 +11,7 @@ describe('ContactEmailsSection', () => {
   let isAdmin: boolean;
   let afterClosed: unknown;
   const emailService = { getEmailsForContact: jest.fn(), getOriginalUrl: jest.fn() };
+  const contactService = { getContactsSummary: jest.fn() };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
 
   const build = (): ContactEmailsSection => {
@@ -17,6 +19,7 @@ describe('ContactEmailsSection', () => {
       imports: [ContactEmailsSection],
       providers: [
         { provide: EmailService, useValue: emailService },
+        { provide: ContactService, useValue: contactService },
         { provide: AuthService, useValue: { isAdmin: () => isAdmin } },
         { provide: MatDialog, useValue: dialog },
       ],
@@ -45,6 +48,10 @@ describe('ContactEmailsSection', () => {
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     emailService.getEmailsForContact.mockReturnValue(of([]));
     emailService.getOriginalUrl.mockReturnValue(of({ url: 'https://signed' }));
+    contactService.getContactsSummary.mockReturnValue(of([
+      { id: 'c-1', first_name: 'This', last_name: 'Page' },
+      { id: 'c-2', first_name: 'Fam', last_name: 'Ily' },
+    ]));
   });
 
   it('loads the filed emails for an admin', () => {
@@ -126,5 +133,44 @@ describe('ContactEmailsSection', () => {
     ).not.toThrow();
     expect(open).not.toHaveBeenCalled();
     open.mockRestore();
+  });
+
+  describe('moveEmail', () => {
+    it('opens the assign dialog with every contact except this page, reloads on success', () => {
+      afterClosed = true;
+      emailService.getEmailsForContact.mockReturnValue(of([emailEntry]));
+      const c = build();
+      c.ngOnInit();
+      emailService.getEmailsForContact.mockClear();
+      const event = { stopPropagation: jest.fn() } as unknown as Event;
+      c.moveEmail(emailEntry, event);
+      expect((event as unknown as { stopPropagation: jest.Mock }).stopPropagation).toHaveBeenCalled();
+      const config = dialog.open.mock.calls.at(-1)![1] as {
+        data: { mode: string; entry: EmailEntry; contacts: { id: string }[] };
+      };
+      expect(config.data.mode).toBe('assign');
+      expect(config.data.entry).toBe(emailEntry);
+      // Moving to the page it is already on would be a no-op.
+      expect(config.data.contacts.map(contact => contact.id)).toEqual(['c-2']);
+      expect(emailService.getEmailsForContact).toHaveBeenCalledTimes(1); // reload
+    });
+
+    it('does not reload when the dialog is dismissed', () => {
+      afterClosed = undefined;
+      const c = build();
+      c.ngOnInit();
+      emailService.getEmailsForContact.mockClear();
+      c.moveEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event);
+      expect(emailService.getEmailsForContact).not.toHaveBeenCalled();
+    });
+
+    it('swallows a failed contacts load (no dialog opens)', () => {
+      contactService.getContactsSummary.mockReturnValue(throwError(() => new Error('x')));
+      const c = build();
+      c.ngOnInit();
+      dialog.open.mockClear();
+      c.moveEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).not.toHaveBeenCalled();
+    });
   });
 });
