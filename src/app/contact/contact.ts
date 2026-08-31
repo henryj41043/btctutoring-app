@@ -266,8 +266,10 @@ export class Contact implements OnInit {
    */
   private resolveMissingTutorNames() {
     if (!this.staffLoaded) return;
+    // Assigned tutors AND any per-slot tutors — a former staff member named
+    // on a slot must still resolve for the schedule summary.
     const missing = new Set(this.students
-      .map(s => s.assigned_tutor_id)
+      .flatMap(s => [s.assigned_tutor_id, ...(s.schedule ?? []).map(slot => slot.tutor_id)])
       .filter((id): id is string =>
         !!id && !this.staffById.has(id) && !this.individuallyFetchedTutorIds.has(id)));
     missing.forEach(id => {
@@ -580,7 +582,11 @@ export class Contact implements OnInit {
 
   /** A read-only one-line summary of a student's schedule, e.g. "Mon 10:00 AM · Wed 10:00 AM". */
   scheduleSummary(student: Student): string {
-    return this.scheduleService.scheduleSummary(student.schedule).join(' · ');
+    return this.scheduleService.scheduleSummary(
+      student.schedule,
+      student.assigned_tutor_id,
+      id => this.staffById.get(id)?.first_name,
+    ).join(' · ');
   }
 
   /** Opens the Manage Schedule dialog for a student; reloads on a persisted change. */

@@ -6,6 +6,8 @@ export interface ScheduleSlot {
   weekday: Weekday;
   start_time: string; // 'HH:mm'
   end_time: string;   // 'HH:mm'
+  /** Optional per-slot tutor override; absent = the student's assigned (primary) tutor. */
+  tutor_id?: string;
 }
 
 /**
