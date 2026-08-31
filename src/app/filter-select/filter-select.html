@@ -5,9 +5,10 @@
          (ngModelChange)="onSearchChange($event)"
          [matAutocomplete]="filterAuto"
          [disabled]="disabled"
-         (blur)="onBlur()"
          placeholder="Type to filter…">
-  <mat-autocomplete #filterAuto [displayWith]="displayLabel" (optionSelected)="onOptionSelected($event)">
+  <mat-autocomplete #filterAuto [displayWith]="displayLabel"
+                    (optionSelected)="onOptionSelected($event)"
+                    (closed)="onPanelClosed()">
     @for (option of filteredOptions; track option.value) {
       <mat-option [value]="option.value">{{ option.label }}</mat-option>
     }

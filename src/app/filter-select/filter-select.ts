@@ -78,16 +78,30 @@ export class FilterSelect implements ControlValueAccessor, OnChanges {
     this.searchText = text;
   }
 
+  /** Set on selection so the panel close that follows doesn't re-resolve. */
+  private selectionHandled = false;
+
   onOptionSelected(event: MatAutocompleteSelectedEvent): void {
     const value = event.option.value as string;
+    this.selectionHandled = true;
     this.selectedValue = value;
     this.searchText = this.selectedLabel;
     this.onChange(value);
     this.onTouched();
   }
 
-  /** Free text never leaks: revert to the selection, or clear if allowed. */
-  onBlur(): void {
+  /**
+   * Free text never leaks: when the panel closes without a pick, revert to the
+   * selection, or clear if allowed. The panel's close (not input blur) is the
+   * signal — blur fires BEFORE a clicked option's click lands, and reverting
+   * then re-renders the filtered list mid-click, destroying the option under
+   * the cursor so the selection never registers.
+   */
+  onPanelClosed(): void {
+    if (this.selectionHandled) {
+      this.selectionHandled = false;
+      return;
+    }
     const exact = this.options.find(
       o => o.label.toLowerCase() === this.searchText.trim().toLowerCase());
     if (exact && exact.value !== this.selectedValue) {
