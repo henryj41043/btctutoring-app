@@ -1,4 +1,5 @@
-import {Component, inject, OnInit} from '@angular/core';
+import {Component, DestroyRef, inject, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {
   MAT_DIALOG_DATA,
   MatDialog,
@@ -8,7 +9,7 @@ import {
   MatDialogTitle,
 } from '@angular/material/dialog';
 import {MakeupEditDialog, MakeupEditResult} from '../makeup-edit-dialog/makeup-edit-dialog';
-import {catchError, EMPTY} from 'rxjs';
+import {catchError, EMPTY, of} from 'rxjs';
 import {FormBuilder, FormGroup, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -22,9 +23,18 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {StudentStatus} from '../enums/student-status.enum';
-import {Package} from '../enums/package.enum';
 import {StudentService} from '../services/student.service';
-import {perSessionCost, resolvePackageDef, round2} from '../utils/package-config';
+import {PackageService} from '../services/package.service';
+import {PackageRow} from '../models/package-row.model';
+import {
+  CUSTOM_PACKAGE,
+  PackageCatalog,
+  packageSelectOptions,
+  perSessionCost,
+  resolvePackageDef,
+  round2,
+  toCatalog,
+} from '../utils/package-config';
 import {countSlotsBeforeInMonth} from '../utils/proration';
 import {monthKey} from '../utils/billing-amount';
 import {availableMakeupMinutes} from '../utils/makeup';
@@ -87,10 +97,15 @@ export class StudentDialog implements OnInit {
   readonly data = inject<StudentDialogData>(MAT_DIALOG_DATA);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private studentService: StudentService = inject(StudentService);
+  private packageService: PackageService = inject(PackageService);
+  private destroyRef: DestroyRef = inject(DestroyRef);
 
-  protected readonly Package = Package;
+  protected readonly CUSTOM_PACKAGE = CUSTOM_PACKAGE;
   protected statusOptions: string[] = Object.values(StudentStatus);
-  protected packageOptions: string[] = Object.values(Package);
+  /** Active catalog packages by ascending price + Custom (+ any stored retired value). */
+  protected packageOptions: string[] = [CUSTOM_PACKAGE];
+  /** The admin-managed package catalog; loaded in ngOnInit. */
+  protected catalog: PackageCatalog = {};
   protected mode: StudentDialogMode = 'create';
   protected tutors: Contact[] = [];
   /** True if the student began the dialog still in Onboarding status. */
@@ -109,6 +124,18 @@ export class StudentDialog implements OnInit {
     this.mode = this.data.mode;
     this.tutors = this.data.tutors ?? [];
     const student: Student = this.data.student ?? {};
+    // Catalog for the package selects; a stored retired (or unknown) value is
+    // appended so an open form never blanks an existing selection.
+    this.packageService.getPackages().pipe(
+      catchError(() => of([] as PackageRow[])),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(rows => {
+      this.catalog = toCatalog(rows);
+      this.packageOptions = packageSelectOptions(this.catalog, [
+        student.package,
+        student.pending_package || undefined,
+      ]);
+    });
     this.startedInOnboarding =
       (student.status ?? StudentStatus.ONBOARDING) === StudentStatus.ONBOARDING;
     this.studentForm = this.formBuilder.group({
@@ -321,7 +348,7 @@ export class StudentDialog implements OnInit {
       return 'The scheduled package matches the current one — clear it or pick a different package.';
     }
     if (
-      student.pending_package === Package.CUSTOM &&
+      student.pending_package === CUSTOM_PACKAGE &&
       (!student.pending_custom_monthly_cost ||
         !student.pending_custom_sessions_per_week ||
         !student.pending_custom_session_length_min)
@@ -347,7 +374,7 @@ export class StudentDialog implements OnInit {
     }
 
     const changeDate = new Date();
-    const oldDef = resolvePackageDef(oldPackage, {
+    const oldDef = resolvePackageDef(oldPackage, this.catalog, {
       monthlyCost: prior?.custom_monthly_cost,
       sessionsPerWeek: prior?.custom_sessions_per_week,
       sessionLengthMin: prior?.custom_session_length_min,

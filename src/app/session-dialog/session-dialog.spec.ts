@@ -7,6 +7,8 @@ import { SessionsService } from '../services/sessions.service';
 import { ContactService } from '../services/contact.service';
 import { StudentService } from '../services/student.service';
 import { AuthService } from '../services/auth.service';
+import { PackageService } from '../services/package.service';
+import { TEST_CATALOG, TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
 import { SessionDialogData } from '../interfaces/session-dialog-data.interface';
 import { Contact } from '../models/contact.model';
 import { Student } from '../models/student.model';
@@ -17,7 +19,6 @@ import { Service } from '../enums/service.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { SessionType } from '../enums/session-type.enum';
 import { Weekday } from '../enums/weekday.enum';
-import { Package } from '../enums/package.enum';
 
 const tutor = (over: Partial<Contact> = {}): Contact =>
   ({
@@ -38,10 +39,12 @@ const student = (over: Partial<Student> = {}): Student =>
     name: 'Pat',
     status: StudentStatus.ACTIVE_STUDENT,
     assigned_tutor_id: 't-1',
-    package: Package.DETERMINATION, // 2 sessions/week, 60 min
+    package: 'Determination', // 2 sessions/week, 60 min
     make_up_minutes: 120,
     ...over,
   }) as Student;
+
+const packageServiceStub = { getPackages: () => of(TEST_CATALOG_ROWS) };
 
 describe('SessionDialog', () => {
   let isAdmin: boolean;
@@ -77,9 +80,14 @@ describe('SessionDialog', () => {
         { provide: ContactService, useValue: contactService },
         { provide: StudentService, useValue: studentService },
         { provide: AuthService, useValue: authService },
+        { provide: PackageService, useValue: packageServiceStub },
       ],
     });
-    return TestBed.createComponent(SessionDialog).componentInstance;
+    const c = TestBed.createComponent(SessionDialog).componentInstance;
+    // Specs drive the component without ngOnInit; give it the loaded catalog
+    // (production state once the SWR fetch lands).
+    (c as unknown as { catalog: unknown }).catalog = TEST_CATALOG;
+    return c;
   };
 
   /** A create-mode dialog primed with a valid tutor/student/time selection. */
@@ -171,12 +179,12 @@ describe('SessionDialog', () => {
       c.selectedStudent = 's-1';
       expect(c.selectedPackageDef?.sessionsPerWeek).toBe(2);
 
-      c.students = [student({ package: Package.CUSTOM })];
+      c.students = [student({ package: 'Custom' })];
       expect(c.selectedPackageDef).toBeNull();
 
       c.students = [
         student({
-          package: Package.CUSTOM,
+          package: 'Custom',
           custom_monthly_cost: 400,
           custom_sessions_per_week: 1,
           custom_session_length_min: 45,
@@ -372,7 +380,7 @@ describe('SessionDialog', () => {
 
     it('skips the length check when the package is unconfigured', () => {
       const c = primedCreate();
-      c.students = [student({ package: Package.CUSTOM })]; // no overrides → def null
+      c.students = [student({ package: 'Custom' })]; // no overrides → def null
       c.endTime = new Date(2026, 5, 1, 12, 0); // 120 min, but no cap to enforce
       sessionsService.createSession.mockReturnValue(of({ id: 'ok' }));
       c.createSession();
@@ -419,7 +427,7 @@ describe('SessionDialog', () => {
       c.createSession();
       expect(c.showScheduleWarning).toBe(true);
       expect(c.scheduleWarningMessage).toContain('2 session(s)/week');
-      expect(c.scheduleWarningMessage).toContain(Package.DETERMINATION);
+      expect(c.scheduleWarningMessage).toContain('Determination');
       expect(sessionsService.createSession).not.toHaveBeenCalled();
     });
 
@@ -465,7 +473,7 @@ describe('SessionDialog', () => {
 
     it('falls back to the schedule length when the package is unconfigured', () => {
       const c = primedCreate();
-      c.students = [scheduled({ package: Package.CUSTOM })]; // resolvePackageDef → null
+      c.students = [scheduled({ package: 'Custom' })]; // resolvePackageDef → null
       c.createSession();
       expect(c.showScheduleWarning).toBe(true);
       expect(c.scheduleWarningMessage).toContain('2 session(s)/week'); // from schedule.length
@@ -1606,6 +1614,7 @@ describe('SessionDialog', () => {
           { provide: ContactService, useValue: contactService },
           { provide: StudentService, useValue: studentService },
           { provide: AuthService, useValue: authService },
+        { provide: PackageService, useValue: packageServiceStub },
         ],
       });
       const fixture = TestBed.createComponent(SessionDialog);

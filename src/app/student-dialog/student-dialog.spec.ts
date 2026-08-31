@@ -5,11 +5,14 @@ import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dial
 import { MakeupEditDialog } from '../makeup-edit-dialog/makeup-edit-dialog';
 import { StudentDialog, StudentDialogData } from './student-dialog';
 import { StudentService } from '../services/student.service';
+import { PackageService } from '../services/package.service';
+import { TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
 import { Student } from '../models/student.model';
 import { StudentStatus } from '../enums/student-status.enum';
-import { Package } from '../enums/package.enum';
 import { Weekday } from '../enums/weekday.enum';
 import { monthKey } from '../utils/billing-amount';
+
+const packageServiceStub = { getPackages: () => of(TEST_CATALOG_ROWS) };
 
 describe('StudentDialog', () => {
   const dialogRef = { close: jest.fn() };
@@ -35,6 +38,7 @@ describe('StudentDialog', () => {
         { provide: MAT_DIALOG_DATA, useValue: full },
         { provide: StudentService, useValue: studentService },
         { provide: MatDialog, useValue: matDialog },
+        { provide: PackageService, useValue: packageServiceStub },
       ],
     });
     const c = TestBed.createComponent(StudentDialog).componentInstance;
@@ -226,7 +230,7 @@ describe('StudentDialog', () => {
       status: StudentStatus.ACTIVE_STUDENT,
       onboarding_complete: true,
       assigned_tutor_id: 't-1',
-      package: Package.DETERMINATION,
+      package: 'Determination',
       scholarship: true,
       btc_and_me: true,
       schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' }],
@@ -257,11 +261,11 @@ describe('StudentDialog', () => {
       it('a new pending change closes with the pending-schedule signal', () => {
         const c = build({ mode: 'edit', student: richStudent() });
         studentService.updateStudent.mockReturnValue(of({} as Student));
-        form(c).get('pending_package').setValue(Package.SUCCEED);
+        form(c).get('pending_package').setValue('Succeed');
         form(c).get('pending_package_effective').setValue('2026-09-01');
         c.save();
         const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-        expect(payload.pending_package).toBe(Package.SUCCEED);
+        expect(payload.pending_package).toBe('Succeed');
         expect(payload.pending_package_effective).toBe('2026-09-01');
         expect(dialogRef.close).toHaveBeenCalledWith({ openPendingScheduleForStudentId: 's-1' });
       });
@@ -270,7 +274,7 @@ describe('StudentDialog', () => {
         const c = build({
           mode: 'edit',
           student: richStudent({
-            pending_package: Package.SUCCEED,
+            pending_package: 'Succeed',
             pending_package_effective: '2026-09-01',
           }),
         });
@@ -281,7 +285,7 @@ describe('StudentDialog', () => {
 
       it('blocks a pending change without an effective month', () => {
         const c = build({ mode: 'edit', student: richStudent() });
-        form(c).get('pending_package').setValue(Package.SUCCEED);
+        form(c).get('pending_package').setValue('Succeed');
         c.save();
         expect(studentService.updateStudent).not.toHaveBeenCalled();
         expect(priv(c).hasError).toBe(true);
@@ -289,7 +293,7 @@ describe('StudentDialog', () => {
 
       it('blocks a pending change equal to the current package', () => {
         const c = build({ mode: 'edit', student: richStudent() });
-        form(c).get('pending_package').setValue(Package.DETERMINATION);
+        form(c).get('pending_package').setValue('Determination');
         form(c).get('pending_package_effective').setValue('2026-09-01');
         c.save();
         expect(studentService.updateStudent).not.toHaveBeenCalled();
@@ -298,7 +302,7 @@ describe('StudentDialog', () => {
 
       it('blocks a pending CUSTOM missing its overrides', () => {
         const c = build({ mode: 'edit', student: richStudent() });
-        form(c).get('pending_package').setValue(Package.CUSTOM);
+        form(c).get('pending_package').setValue('Custom');
         form(c).get('pending_package_effective').setValue('2026-09-01');
         form(c).get('pending_custom_monthly_cost').setValue(500);
         c.save();
@@ -310,7 +314,7 @@ describe('StudentDialog', () => {
         const c = build({
           mode: 'edit',
           student: richStudent({
-            pending_package: Package.SUCCEED,
+            pending_package: 'Succeed',
             pending_package_effective: '2026-09-01',
             pending_custom_monthly_cost: 500,
           }),
@@ -337,8 +341,8 @@ describe('StudentDialog', () => {
       it('a mid-month current-package change wins over a simultaneous pending change', () => {
         const c = build({ mode: 'edit', student: richStudent() });
         studentService.updateStudent.mockReturnValue(of({} as Student));
-        form(c).get('package').setValue(Package.SUCCEED); // mid-month change
-        form(c).get('pending_package').setValue(Package.ACHIEVE);
+        form(c).get('package').setValue('Succeed'); // mid-month change
+        form(c).get('pending_package').setValue('Achieve');
         form(c).get('pending_package_effective').setValue('2026-09-01');
         c.save();
         expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
@@ -348,7 +352,7 @@ describe('StudentDialog', () => {
         const c = build({
           mode: 'edit',
           student: richStudent({
-            pending_package: Package.ACHIEVE,
+            pending_package: 'Achieve',
             pending_package_effective: '2026-09-01',
           }),
         });
@@ -485,7 +489,7 @@ describe('StudentDialog', () => {
       name: 'Pat',
       status: StudentStatus.ACTIVE_STUDENT,
       onboarding_complete: true,
-      package: Package.SUCCEED,
+      package: 'Succeed',
       package_start_date: '2026-05-01T00:00:00',
       schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
       make_up_minutes: 0,
@@ -495,13 +499,13 @@ describe('StudentDialog', () => {
     it('stamps the student and routes to Manage Schedule when the package changes', () => {
       const student = enrolled();
       const c = build({ mode: 'edit', student });
-      form(c).get('package')?.setValue(Package.THRIVE);
+      form(c).get('package')?.setValue('Thrive');
       studentService.updateStudent.mockReturnValue(of({} as Student));
       c.save();
 
       const payload = studentService.updateStudent.mock.calls[0][0] as Student;
       const now = new Date();
-      expect(payload.package).toBe(Package.THRIVE);
+      expect(payload.package).toBe('Thrive');
       expect(payload.mid_month_change_period).toBe(monthKey(now.getFullYear(), now.getMonth()));
       expect(payload.package_start_date).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00$/);
       expect(typeof payload.mid_month_prior_charge).toBe('number');
@@ -519,7 +523,7 @@ describe('StudentDialog', () => {
 
     it('does not treat setting a first package as a mid-month change', () => {
       const c = build({ mode: 'edit', student: enrolled({ package: undefined }) });
-      form(c).get('package')?.setValue(Package.SUCCEED);
+      form(c).get('package')?.setValue('Succeed');
       studentService.updateStudent.mockReturnValue(of({} as Student));
       c.save();
       expect(dialogRef.close).toHaveBeenCalledWith(true);
@@ -527,9 +531,9 @@ describe('StudentDialog', () => {
 
     it('records a zero prior charge when the old package was unconfigured custom', () => {
       // Old CUSTOM package with no custom values → not resolvable → $0 old portion.
-      const student = enrolled({ package: Package.CUSTOM });
+      const student = enrolled({ package: 'Custom' });
       const c = build({ mode: 'edit', student });
-      form(c).get('package')?.setValue(Package.SUCCEED);
+      form(c).get('package')?.setValue('Succeed');
       studentService.updateStudent.mockReturnValue(of({} as Student));
       c.save();
       const payload = studentService.updateStudent.mock.calls[0][0] as Student;

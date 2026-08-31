@@ -1,0 +1,78 @@
+.packages {
+  padding: 16px;
+
+  .packages-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .packages-empty {
+    padding: 32px 0;
+    text-align: center;
+    color: var(--btc-teal-deep);
+    font-weight: 600;
+  }
+
+  .packages-error {
+    color: #b3261e;
+  }
+
+  .packages-hint {
+    margin: 0 0 12px;
+    color: rgba(0, 0, 0, 0.6);
+    font-size: 13px;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .table-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 0;
+
+    .table-spinner-label {
+      color: var(--btc-teal-deep);
+      font-weight: 600;
+    }
+  }
+
+  .retired-name {
+    text-decoration: line-through;
+    color: rgba(0, 0, 0, 0.5);
+  }
+
+  .retired-chip,
+  .active-chip {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .active-chip {
+    background: #e0f2ef;
+    color: #00695c;
+  }
+
+  .retired-chip {
+    background: #eeeeee;
+    color: #616161;
+  }
+
+  .actions-cell {
+    white-space: nowrap;
+  }
+
+  .confirm-retire {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+  }
+}

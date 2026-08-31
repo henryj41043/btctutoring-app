@@ -19,10 +19,11 @@ import { BillingCycle } from '../enums/billing-cycle.enum';
 import { Service } from '../enums/service.enum';
 import { StudentStatus } from '../enums/student-status.enum';
 import { StaffStatus } from '../enums/staff-status.enum';
-import { Package } from '../enums/package.enum';
 import { ScheduleService } from '../services/schedule.service';
 import { ReminderService } from '../services/reminder.service';
 import { EmailService } from '../services/email.service';
+import { PackageService } from '../services/package.service';
+import { TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
 
 const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
   ({
@@ -38,6 +39,8 @@ const fullContact = (over: Partial<ContactModel> = {}): ContactModel =>
     availability: [{ days: ['MONDAY'], start_time: '09:00', end_time: '10:00' }],
     ...over,
   }) as ContactModel;
+
+const packageServiceStub = { getPackages: () => of(TEST_CATALOG_ROWS) };
 
 describe('Contact', () => {
   let isAdmin: boolean;
@@ -106,6 +109,7 @@ describe('Contact', () => {
         { provide: BillingService, useValue: billingService },
         { provide: ReminderService, useValue: reminderService },
         { provide: EmailService, useValue: emailService },
+        { provide: PackageService, useValue: packageServiceStub },
       ],
     });
     const c = TestBed.createComponent(Contact).componentInstance;
@@ -721,9 +725,9 @@ describe('Contact', () => {
     it('qualifiesForSiblingDiscount is true with 3+ active packaged students', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([
-          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
-          { id: 's-2', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
-          { id: 's-3', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
+          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: 'Succeed' },
+          { id: 's-2', status: StudentStatus.ACTIVE_STUDENT, package: 'Thrive' },
+          { id: 's-3', status: StudentStatus.ACTIVE_STUDENT, package: 'Thrive' },
         ]),
       );
       const c = build();
@@ -734,8 +738,8 @@ describe('Contact', () => {
     it('qualifiesForSiblingDiscount is false for a two-student family', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([
-          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
-          { id: 's-2', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
+          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: 'Succeed' },
+          { id: 's-2', status: StudentStatus.ACTIVE_STUDENT, package: 'Thrive' },
         ]),
       );
       const c = build();
@@ -746,10 +750,10 @@ describe('Contact', () => {
     it('qualifiesForSiblingDiscount ignores onboarding and package-less students', () => {
       studentService.getStudentsByContact.mockReturnValue(
         of([
-          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED },
-          { id: 's-2', status: StudentStatus.ONBOARDING, package: Package.THRIVE },
+          { id: 's-1', status: StudentStatus.ACTIVE_STUDENT, package: 'Succeed' },
+          { id: 's-2', status: StudentStatus.ONBOARDING, package: 'Thrive' },
           { id: 's-3', status: StudentStatus.ACTIVE_STUDENT }, // no package
-          { id: 's-4', status: StudentStatus.ACTIVE_STUDENT, package: Package.THRIVE },
+          { id: 's-4', status: StudentStatus.ACTIVE_STUDENT, package: 'Thrive' },
         ]),
       );
       const c = build();
@@ -891,7 +895,7 @@ describe('Contact', () => {
       const before = { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, btc_and_me: true } as Student;
       // A packaged sibling remains, so the family still has a record to adjust.
       studentService.getStudentsByContact.mockReturnValue(of([
-        { id: 's-2', contact_id: 'c-1', name: 'Quinn', status: StudentStatus.ACTIVE_STUDENT, package: Package.SUCCEED } as Student,
+        { id: 's-2', contact_id: 'c-1', name: 'Quinn', status: StudentStatus.ACTIVE_STUDENT, package: 'Succeed' } as Student,
       ]));
       billingService.getBillingRecordsByContact.mockReturnValue(of([]));
       const c = build();
@@ -903,7 +907,7 @@ describe('Contact', () => {
     it('opens the pending-schedule dialog after a scheduled package change', () => {
       afterClosed = { openPendingScheduleForStudentId: 's-1' };
       studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 't-1', pending_package: Package.ACHIEVE, pending_package_effective: '2026-09-01' }]),
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 't-1', pending_package: 'Achieve', pending_package_effective: '2026-09-01' }]),
       );
       contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
       billingService.getBillingRecordsByContact.mockReturnValue(of([]));
@@ -919,7 +923,7 @@ describe('Contact', () => {
 
     it('renders the scheduled-change note for a student card', () => {
       const c = build();
-      expect(c.pendingNote({ pending_package: Package.ACHIEVE, pending_package_effective: '2026-09-01' } as Student))
+      expect(c.pendingNote({ pending_package: 'Achieve', pending_package_effective: '2026-09-01' } as Student))
         .toBe('→ Achieve from Sep 1');
       expect(c.pendingNote({} as Student)).toBeNull();
     });
@@ -947,7 +951,7 @@ describe('Contact', () => {
     };
     const enrolled = (over = {}) => ({
       id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT,
-      package: Package.SUCCEED, package_start_date: '2020-01-01T00:00:00',
+      package: 'Succeed', package_start_date: '2020-01-01T00:00:00',
       schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '10:30' }], ...over,
     });
     const recompute = (c: Contact) => (c as unknown as { recomputeCurrentPeriodBilling: () => void }).recomputeCurrentPeriodBilling();
@@ -1080,9 +1084,9 @@ describe('Contact', () => {
       const c = build();
       expect(c.canManageSchedule({} as Student)).toBe(false);
       expect(c.canManageSchedule({ assigned_tutor_id: 't-1' } as Student)).toBe(false);
-      expect(c.canManageSchedule({ package: Package.DETERMINATION } as Student)).toBe(false);
+      expect(c.canManageSchedule({ package: 'Determination' } as Student)).toBe(false);
       expect(
-        c.canManageSchedule({ assigned_tutor_id: 't-1', package: Package.DETERMINATION } as Student),
+        c.canManageSchedule({ assigned_tutor_id: 't-1', package: 'Determination' } as Student),
       ).toBe(true);
     });
 

@@ -10,7 +10,6 @@ import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {PackageDef} from './package-config';
 import {Weekday} from '../enums/weekday.enum';
-import {Package} from '../enums/package.enum';
 
 const def: PackageDef = {monthlyCost: 400, sessionsPerWeek: 2, sessionLengthMin: 60};
 const student = {id: 's-1', name: 'Sam', package: 'Succeed'} as Student;
@@ -57,7 +56,7 @@ describe('session-rules', () => {
 
     it('CUSTOM caps at the longest scheduled slot length', () => {
       const custom = {
-        id: 's-1', name: 'Sam', package: Package.CUSTOM,
+        id: 's-1', name: 'Sam', package: 'Custom',
         schedule: [
           {weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:45'},
           {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '10:30'},
@@ -71,7 +70,7 @@ describe('session-rules', () => {
 
     it('CUSTOM without a schedule (or with shorter slots) caps at the default length', () => {
       const customDef: PackageDef = {monthlyCost: 400, sessionsPerWeek: 2, sessionLengthMin: 60};
-      const noSchedule = {id: 's-1', name: 'Sam', package: Package.CUSTOM} as Student;
+      const noSchedule = {id: 's-1', name: 'Sam', package: 'Custom'} as Student;
       expect(validateSessionLength(SessionType.TUTORING, 60, customDef, noSchedule)).toBeNull();
       expect(validateSessionLength(SessionType.TUTORING, 61, customDef, noSchedule)).toContain('60 min');
       // Slots shorter than the default never LOWER the cap.

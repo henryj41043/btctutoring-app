@@ -87,6 +87,14 @@ export const routes: Routes = [
     canActivate: [AuthGuard, AdminGuard],
   },
   {
+    path: 'packages',
+    // Lazy: an occasional admin surface — keeps it out of the initial
+    // bundle, which sits right at the size budget.
+    loadComponent: () =>
+      import('./packages/packages').then(m => m.Packages),
+    canActivate: [AuthGuard, AdminGuard],
+  },
+  {
     path: 'payroll',
     component: Payroll,
     canActivate: [AuthGuard],

@@ -1,5 +1,5 @@
 import {Student} from '../models/student.model';
-import {PackageDef, resolvePackageDef, round2} from './package-config';
+import {PackageCatalog, PackageDef, resolvePackageDef, round2} from './package-config';
 import {countRemainingSlots, proratedFirstMonthCost, semiMonthlySplit} from './proration';
 import {packageFieldsForMonth} from './pending-package';
 
@@ -93,11 +93,16 @@ function baseMonthlyCharge(def: PackageDef, student: Student, year: number, mont
  * monthly cost for ongoing months, or 0 if the package hasn't started by
  * month-end or isn't configured (e.g. an unconfigured CUSTOM student).
  */
-export function studentMonthlyCharge(student: Student, year: number, month: number): number {
+export function studentMonthlyCharge(
+  student: Student,
+  year: number,
+  month: number,
+  catalog: PackageCatalog,
+): number {
   // Resolve the package that GOVERNS the billed month — a scheduled change
   // applies from its effective month, even before the cron promotes it.
   const fields = packageFieldsForMonth(student, year, month);
-  const def = resolvePackageDef(fields.package || undefined, {
+  const def = resolvePackageDef(fields.package || undefined, catalog, {
     monthlyCost: fields.custom_monthly_cost,
     sessionsPerWeek: fields.custom_sessions_per_week,
     sessionLengthMin: fields.custom_session_length_min,
@@ -116,9 +121,14 @@ export function studentMonthlyCharge(student: Student, year: number, month: numb
  * when they start on the 15th or later. Normal 50/50 billing resumes the
  * following month.
  */
-export function studentSemiMonthlyCharge(student: Student, year: number, month: number): SemiMonthlyCharge {
+export function studentSemiMonthlyCharge(
+  student: Student,
+  year: number,
+  month: number,
+  catalog: PackageCatalog,
+): SemiMonthlyCharge {
   const fields = packageFieldsForMonth(student, year, month);
-  const def = resolvePackageDef(fields.package || undefined, {
+  const def = resolvePackageDef(fields.package || undefined, catalog, {
     monthlyCost: fields.custom_monthly_cost,
     sessionsPerWeek: fields.custom_sessions_per_week,
     sessionLengthMin: fields.custom_session_length_min,
@@ -134,7 +144,7 @@ export function studentSemiMonthlyCharge(student: Student, year: number, month: 
   // (new package prorated + the old package's portion) evenly, matching the
   // backend's total-then-split behavior.
   if (midMonthAdjustment(student, year, month) > 0) {
-    const [first, fifteenth] = semiMonthlySplit(studentMonthlyCharge(student, year, month));
+    const [first, fifteenth] = semiMonthlySplit(studentMonthlyCharge(student, year, month, catalog));
     return {first, fifteenth};
   }
 
@@ -163,8 +173,8 @@ export function studentSemiMonthlyCharge(student: Student, year: number, month: 
  * unconfigured CUSTOM package, or a missing schedule/start date that prevents
  * accurate first-month proration. Surfaced as a flag on the billing page.
  */
-export function studentNeedsAttention(student: Student): boolean {
-  const def = resolvePackageDef(student.package, {
+export function studentNeedsAttention(student: Student, catalog: PackageCatalog): boolean {
+  const def = resolvePackageDef(student.package, catalog, {
     monthlyCost: student.custom_monthly_cost,
     sessionsPerWeek: student.custom_sessions_per_week,
     sessionLengthMin: student.custom_session_length_min,

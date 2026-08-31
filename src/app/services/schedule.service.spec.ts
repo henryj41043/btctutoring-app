@@ -4,13 +4,13 @@ import {ScheduleService} from './schedule.service';
 import {SessionsService} from './sessions.service';
 import {StudentService} from './student.service';
 import {Student} from '../models/student.model';
+import {TEST_CATALOG} from '../../testing/package-catalog.fixture';
 import {Contact} from '../models/contact.model';
 import {Session} from '../models/session.model';
 import {ScheduleSlot} from '../utils/proration';
 import {Weekday} from '../enums/weekday.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
-import {Package} from '../enums/package.enum';
 import { StudentStatus } from '../enums/student-status.enum';
 import { StaffStatus } from '../enums/staff-status.enum';
 
@@ -29,7 +29,7 @@ const student = (over: Partial<Student> = {}): Student =>
     name: 'Pat',
     status: StudentStatus.ACTIVE_STUDENT,
     assigned_tutor_id: 't-1',
-    package: Package.DETERMINATION, // 2/week, 60 min
+    package: 'Determination', // 2/week, 60 min
     make_up_minutes: 0,
     ...over,
   }) as Student;
@@ -94,13 +94,13 @@ describe('ScheduleService', () => {
 
   describe('package + summary', () => {
     it('resolves a configured package def', () => {
-      expect(service.resolveDef(student())).toEqual({
+      expect(service.resolveDef(student(), TEST_CATALOG)).toEqual({
         monthlyCost: 728, sessionsPerWeek: 2, sessionLengthMin: 60,
       });
     });
 
     it('returns null for an unconfigured custom package', () => {
-      expect(service.resolveDef(student({package: Package.CUSTOM}))).toBeNull();
+      expect(service.resolveDef(student({package: 'Custom'}), TEST_CATALOG)).toBeNull();
     });
 
     it('summarizes a schedule into day + time labels', () => {

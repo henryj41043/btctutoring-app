@@ -1,4 +1,3 @@
-import {Package} from '../enums/package.enum';
 import {StudentStatus} from '../enums/student-status.enum';
 import {ScheduleSlot} from '../utils/proration';
 
@@ -19,7 +18,7 @@ export class Student {
   /** True once the student has finished onboarding; gates status/package/tutor/schedule edits. */
   onboarding_complete?: boolean;
   assigned_tutor_id?: string;
-  package?: Package;
+  package?: string;
   scholarship?: boolean;
   /** Enrolled in the "BTC & Me" group program — bills a flat monthly fee. */
   btc_and_me?: boolean;
@@ -44,7 +43,7 @@ export class Student {
    * Scheduled package change, applied by the backend's 1st-of-month cron on
    * its effective date ('' on save = clear the pending change).
    */
-  pending_package?: Package | '';
+  pending_package?: string | '';
   pending_custom_monthly_cost?: number;
   pending_custom_sessions_per_week?: number;
   pending_custom_session_length_min?: number;

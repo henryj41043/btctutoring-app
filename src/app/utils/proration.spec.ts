@@ -1,6 +1,5 @@
 import {countRemainingSlots, countSlotsBeforeInMonth, proratedFirstMonthCost, ScheduleSlot, semiMonthlySplit} from './proration';
-import {PACKAGE_CONFIG} from './package-config';
-import {Package} from '../enums/package.enum';
+import {TEST_CATALOG} from '../../testing/package-catalog.fixture';
 import {Weekday} from '../enums/weekday.enum';
 
 // July 2026: the 1st falls on a Wednesday.
@@ -46,7 +45,7 @@ describe('proration', () => {
   });
 
   describe('proratedFirstMonthCost', () => {
-    const succeed = PACKAGE_CONFIG[Package.SUCCEED]; // $362/mo, 2×30/wk, perSession $41.77
+    const succeed = TEST_CATALOG['Succeed']; // $362/mo, 2×30/wk, perSession $41.77
 
     it('charges per-session cost × remaining sessions', () => {
       // Succeed: 362*12/52 = 83.54/wk → 41.77/session. One session left → 41.77.

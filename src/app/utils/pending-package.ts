@@ -1,10 +1,9 @@
 import {Student} from '../models/student.model';
-import {Package} from '../enums/package.enum';
 import {monthKey} from './billing-amount';
 
 /** The package-defining fields (current or pending) for one billing month. */
 export interface PackageFields {
-  package?: Package | '';
+  package?: string;
   custom_monthly_cost?: number;
   custom_sessions_per_week?: number;
   custom_session_length_min?: number;

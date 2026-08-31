@@ -92,7 +92,7 @@
             }
           </mat-select>
         </mat-form-field>
-        @if (studentForm.get('package')?.value === Package.CUSTOM) {
+        @if (studentForm.get('package')?.value === CUSTOM_PACKAGE) {
           <mat-form-field>
             <mat-label>Custom Monthly Cost</mat-label>
             <input matInput type="number" formControlName="custom_monthly_cost">
@@ -127,7 +127,7 @@
             </mat-select>
           </mat-form-field>
           @if (studentForm.get('pending_package')?.value) {
-            @if (studentForm.get('pending_package')?.value === Package.CUSTOM) {
+            @if (studentForm.get('pending_package')?.value === CUSTOM_PACKAGE) {
               <mat-form-field>
                 <mat-label>New Custom Monthly Cost</mat-label>
                 <input matInput type="number" formControlName="pending_custom_monthly_cost">

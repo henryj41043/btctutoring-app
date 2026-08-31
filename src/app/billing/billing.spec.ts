@@ -14,10 +14,11 @@ import { Student } from '../models/student.model';
 import { BillingRecord } from '../models/billing-record.model';
 import { BillingEntry } from '../models/billing-entry.model';
 import { StudentStatus } from '../enums/student-status.enum';
-import { Package } from '../enums/package.enum';
 import { BillingCycle } from '../enums/billing-cycle.enum';
 import { Weekday } from '../enums/weekday.enum';
 import { studentMonthlyCharge } from '../utils/billing-amount';
+import { PackageService } from '../services/package.service';
+import { TEST_CATALOG, TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
 
 jest.mock('jspdf', () => ({
   __esModule: true,
@@ -40,7 +41,7 @@ const student = (over: Partial<Student> = {}): Student =>
     contact_id: 'c-1',
     name: 'Pat',
     status: StudentStatus.ACTIVE_STUDENT,
-    package: Package.SUCCEED, // $362/mo
+    package: 'Succeed', // $362/mo
     package_start_date: '2026-05-01T00:00:00', // before the billing month → full month
     schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
     ...over,
@@ -57,6 +58,8 @@ describe('Billing', () => {
     contact: () => ({ id: 'c-admin', first_name: 'Ann' }),
   };
 
+  const packageService = { getPackages: () => of(TEST_CATALOG_ROWS) };
+
   const build = (): Billing => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -67,6 +70,7 @@ describe('Billing', () => {
         { provide: StudentService, useValue: studentService },
         { provide: BillingService, useValue: billingService },
         { provide: NoteService, useValue: noteService },
+        { provide: PackageService, useValue: packageService },
       ],
     });
     const c = TestBed.createComponent(Billing).componentInstance;
@@ -201,7 +205,7 @@ describe('Billing', () => {
     const c = build(); // viewing July 2026
     c.ngOnInit();
     const entry = (c as any).dataSource.data[0];
-    expect(studentMonthlyCharge(s, 2026, 6)).toBe(125.31);
+    expect(studentMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toBe(125.31);
     expect(entry.due_first).toBe(62.66);
     expect(entry.due_fifteenth).toBe(62.65);
     expect(entry.total).toBe(125.31);
@@ -522,6 +526,7 @@ describe('Billing', () => {
           { provide: StudentService, useValue: studentService },
           { provide: BillingService, useValue: billingService },
           { provide: NoteService, useValue: noteService },
+          { provide: PackageService, useValue: packageService },
         ],
       });
       const fixture = TestBed.createComponent(Billing);
@@ -597,7 +602,7 @@ describe('Billing', () => {
 
   describe('scheduled package changes', () => {
     const pendingStudent = () => student({
-      pending_package: Package.ACHIEVE, // $546/mo
+      pending_package: 'Achieve', // $546/mo
       pending_package_effective: '2026-09-01',
     });
 

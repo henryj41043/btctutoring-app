@@ -25,6 +25,8 @@
           <mat-spinner [diameter]="48"></mat-spinner>
           <span class="billing-spinner-label">Calculating billing…</span>
         </div>
+      } @else if (hasError) {
+        <p class="billing-empty billing-error">Billing couldn't load the package catalog — amounts can't be calculated. Reload to try again.</p>
       } @else if (!authService.isAdmin()) {
         <p class="billing-empty">Billing is available to administrators only.</p>
       } @else if (dataSource.data.length === 0) {

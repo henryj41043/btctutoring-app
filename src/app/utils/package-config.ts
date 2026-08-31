@@ -1,9 +1,23 @@
-import {Package} from '../enums/package.enum';
+import {PackageRow} from '../models/package-row.model';
+
+/**
+ * Package definitions resolve from the admin-managed catalog (the service's
+ * Packages table via PackageService) — no more hardcoded config. Pages and
+ * dialogs fetch the catalog in ngOnInit and thread it through these pure
+ * helpers. Mirror of the backend helpers
+ * (btctutoring-service/src/billing/package-config.ts). Keep the two in sync.
+ */
+
+/**
+ * The one package that never lives in the catalog: a code-level marker for
+ * per-student overrides (custom_monthly_cost / custom_sessions_per_week /
+ * custom_session_length_min).
+ */
+export const CUSTOM_PACKAGE = 'Custom';
 
 /**
  * The fixed definition of a tutoring package: a number of fixed-length sessions
- * per week at a flat monthly price. This replaces the old "available minutes"
- * bank — scheduling and billing now derive from these values.
+ * per week at a flat monthly price.
  */
 export interface PackageDef {
   /** Flat monthly price for a full month (USD). */
@@ -15,27 +29,48 @@ export interface PackageDef {
 }
 
 /**
- * Fixed package definitions. Monthly costs are the business's posted prices
- * (annualized over 52 weeks) and are authoritative — proration derives the
- * per-session and weekly rates from `monthlyCost`, never the other way round.
- *
- * `Package.CUSTOM` is intentionally absent: its values are entered per-student
- * and resolved via {@link resolvePackageDef}.
+ * Package name → definition, built from the Packages table. Retired entries
+ * are INCLUDED — they keep resolving for students still on them; `retired`
+ * only governs whether a package is offered for NEW selections.
  */
-export const PACKAGE_CONFIG: Record<Exclude<Package, Package.CUSTOM>, PackageDef> = {
-  [Package.THRIVE]:        {monthlyCost: 181,  sessionsPerWeek: 1, sessionLengthMin: 30},
-  [Package.EXCEL]:         {monthlyCost: 273,  sessionsPerWeek: 1, sessionLengthMin: 45},
-  [Package.SUCCEED]:       {monthlyCost: 362,  sessionsPerWeek: 2, sessionLengthMin: 30},
-  [Package.ACHIEVE]:       {monthlyCost: 546,  sessionsPerWeek: 3, sessionLengthMin: 30},
-  [Package.VICTORY]:       {monthlyCost: 546,  sessionsPerWeek: 2, sessionLengthMin: 45},
-  [Package.EMPOWER]:       {monthlyCost: 819,  sessionsPerWeek: 3, sessionLengthMin: 45},
-  [Package.DETERMINATION]: {monthlyCost: 728,  sessionsPerWeek: 2, sessionLengthMin: 60},
-  [Package.TRIUMPH]:       {monthlyCost: 728,  sessionsPerWeek: 4, sessionLengthMin: 30},
-  [Package.POWER_UP]:      {monthlyCost: 1092, sessionsPerWeek: 3, sessionLengthMin: 60},
-  [Package.CONQUEST]:      {monthlyCost: 1092, sessionsPerWeek: 4, sessionLengthMin: 45},
-  [Package.SUMMIT]:        {monthlyCost: 1456, sessionsPerWeek: 4, sessionLengthMin: 60},
-  [Package.APEX]:          {monthlyCost: 1820, sessionsPerWeek: 5, sessionLengthMin: 60},
-};
+export type PackageCatalog = Record<string, PackageDef & {retired?: boolean}>;
+
+/** Folds the fetched catalog rows into a name-keyed map (retired included). */
+export function toCatalog(rows: PackageRow[]): PackageCatalog {
+  const catalog: PackageCatalog = {};
+  for (const row of rows) {
+    if (!row.id) continue;
+    catalog[row.id] = {
+      monthlyCost: row.monthlyCost ?? 0,
+      sessionsPerWeek: row.sessionsPerWeek ?? 0,
+      sessionLengthMin: row.sessionLengthMin ?? 0,
+      retired: !!row.retired,
+    };
+  }
+  return catalog;
+}
+
+/**
+ * The names to offer in a package select: active packages ascending by monthly
+ * cost, then 'Custom', then any currently-stored value (a retired package)
+ * appended if missing — so an open form never blanks an existing selection.
+ */
+export function packageSelectOptions(
+  catalog: PackageCatalog,
+  currentValues: (string | undefined)[] = [],
+): string[] {
+  const active = Object.entries(catalog)
+    .filter(([, def]) => !def.retired)
+    .sort(([, a], [, b]) => a.monthlyCost - b.monthlyCost)
+    .map(([name]) => name);
+  const options = [...active, CUSTOM_PACKAGE];
+  for (const value of currentValues) {
+    if (value && !options.includes(value)) {
+      options.push(value);
+    }
+  }
+  return options;
+}
 
 /** Round to the nearest penny. */
 export function round2(value: number): number {
@@ -43,16 +78,17 @@ export function round2(value: number): number {
 }
 
 /**
- * Resolves a package's definition. For CUSTOM, the per-student `override` must
- * supply all three values; returns null if a CUSTOM student hasn't been
- * configured yet.
+ * Resolves a package's definition from the catalog. For CUSTOM, the
+ * per-student `override` must supply all three values; returns null if a
+ * CUSTOM student hasn't been configured yet, or the name isn't in the catalog.
  */
 export function resolvePackageDef(
-  pkg: Package | undefined,
+  pkg: string | undefined,
+  catalog: PackageCatalog,
   override?: Partial<PackageDef> | null,
 ): PackageDef | null {
   if (!pkg) return null;
-  if (pkg === Package.CUSTOM) {
+  if (pkg === CUSTOM_PACKAGE) {
     if (
       override &&
       override.monthlyCost != null &&
@@ -63,7 +99,13 @@ export function resolvePackageDef(
     }
     return null;
   }
-  return PACKAGE_CONFIG[pkg];
+  const entry = catalog[pkg];
+  if (!entry) return null;
+  return {
+    monthlyCost: entry.monthlyCost,
+    sessionsPerWeek: entry.sessionsPerWeek,
+    sessionLengthMin: entry.sessionLengthMin,
+  };
 }
 
 /**

@@ -2,8 +2,7 @@ import {Session} from '../models/session.model';
 import {Student} from '../models/student.model';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
-import {Package} from '../enums/package.enum';
-import {PackageDef} from './package-config';
+import {CUSTOM_PACKAGE, PackageDef} from './package-config';
 import {availableMakeupMinutes} from './makeup';
 import {durationOf} from './session-times';
 
@@ -47,7 +46,7 @@ export function validateSessionLength(
  * package length as before.
  */
 function maxSessionLength(def: PackageDef, student: Student | undefined): number {
-  if (student?.package !== Package.CUSTOM) {
+  if (student?.package !== CUSTOM_PACKAGE) {
     return def.sessionLengthMin;
   }
   const slotLengths = (student.schedule ?? [])

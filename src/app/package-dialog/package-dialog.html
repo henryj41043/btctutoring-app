@@ -1,0 +1,38 @@
+<h2 mat-dialog-title>Add Package</h2>
+<mat-dialog-content>
+  <form [formGroup]="packageForm" class="package-form">
+    <mat-form-field appearance="outline">
+      <mat-label>Package Name</mat-label>
+      <input matInput formControlName="id" placeholder="e.g. Pinnacle">
+      <mat-hint>Permanent — packages can't be renamed or edited after creation.</mat-hint>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Monthly Price (USD)</mat-label>
+      <input matInput type="number" min="1" formControlName="monthlyCost">
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Sessions per Week</mat-label>
+      <input matInput type="number" min="1" formControlName="sessionsPerWeek">
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Session Length (min)</mat-label>
+      <input matInput type="number" min="1" formControlName="sessionLengthMin">
+    </mat-form-field>
+    <p class="package-dialog-hint">
+      To change a package later, retire it and create a replacement — students on the
+      retired package keep billing at its price until they're moved.
+    </p>
+    @if (errorMessage) {
+      <p class="package-dialog-error">{{errorMessage}}</p>
+    }
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button matButton (click)="dialogRef.close()" [disabled]="submitting">Cancel</button>
+  @if (submitting) {
+    <mat-spinner [diameter]="24"></mat-spinner>
+  } @else {
+    <button matButton="filled" color="primary" (click)="save()"
+            [disabled]="packageForm.invalid">Create</button>
+  }
+</mat-dialog-actions>

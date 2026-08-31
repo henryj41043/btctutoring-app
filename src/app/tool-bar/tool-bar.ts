@@ -78,4 +78,8 @@ export class ToolBar {
   teamsNav(): void {
     void this.router.navigate(['/teams']);
   }
+
+  packagesNav(): void {
+    void this.router.navigate(['/packages']);
+  }
 }

@@ -24,7 +24,6 @@ import {HireType} from '../enums/hire-type.enum';
 import {StaffStatus, staffStatusLabel} from '../enums/staff-status.enum';
 import {ParentStatus} from '../enums/parent-status.enum';
 import {cascadeTargetFor} from '../utils/parent-status-cascade';
-import {Package} from '../enums/package.enum';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {BillingCycle} from '../enums/billing-cycle.enum';
@@ -48,6 +47,9 @@ import {TrialSessionDialog} from '../trial-session-dialog/trial-session-dialog';
 import {BillingService} from '../services/billing.service';
 import {BillingRecord} from '../models/billing-record.model';
 import {currentPeriodAmounts, recomputedBillingRecords} from '../utils/billing-recompute';
+import {PackageService} from '../services/package.service';
+import {PackageCatalog, toCatalog} from '../utils/package-config';
+import {PackageRow} from '../models/package-row.model';
 import {minNoteOrder, noteDateIso, noteGroup, sortNotes} from '../utils/note-forms';
 import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-forms';
 import {availableMakeupMinutes} from '../utils/makeup';
@@ -97,6 +99,7 @@ export class Contact implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private studentService: StudentService = inject(StudentService);
   private noteService: NoteService = inject(NoteService);
+  private packageService: PackageService = inject(PackageService);
   protected authService: AuthService = inject(AuthService);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
@@ -117,7 +120,6 @@ export class Contact implements OnInit {
   protected staffStatusOptions: string[] = Object.values(StaffStatus);
   protected parentStatusOptions: string[] = Object.values(ParentStatus);
   protected readonly staffStatusLabel = staffStatusLabel;
-  protected packageOptions: string[] = Object.values(Package);
   protected billingCycleOptions: string[] = Object.values(BillingCycle);
   protected groupOptions: string[] = Object.values(UserGroup);
   protected tutors: _Contact[] = [];
@@ -195,7 +197,6 @@ export class Contact implements OnInit {
   // The contact as last loaded/saved, used to discard unsaved form changes.
   private loadedContact?: _Contact;
   protected readonly Service = Service;
-  protected readonly Package = Package;
   protected readonly StudentStatus = StudentStatus;
   protected updatedSuccessfully: boolean = false;
   protected updateError: boolean = false;
@@ -206,7 +207,16 @@ export class Contact implements OnInit {
   protected students: Student[] = [];
   protected rosterDataSource = new MatTableDataSource<Student>([]);
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
+  /** The admin-managed package catalog for mid-month billing recomputes. */
+  private catalog: PackageCatalog = {};
+
   ngOnInit() {
+    // Catalog for recomputeCurrentPeriodBilling; a failed load degrades the
+    // recompute preview to $0 — the Billing page is the loud source of truth.
+    this.packageService.getPackages().pipe(
+      catchError(() => of([] as PackageRow[])),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(rows => (this.catalog = toCatalog(rows)));
     this.loadContact();
     // Family students are an admin view — tutors only ever see their own
     // (Hiring) page, where the roster loads via loadContact instead. The
@@ -629,7 +639,7 @@ export class Contact implements OnInit {
     const month = now.getMonth();
     const enrolled = this.students.filter(s =>
       s.status === StudentStatus.ACTIVE_STUDENT && (!!s.package || !!s.btc_and_me));
-    const computed = currentPeriodAmounts(contact, enrolled, year, month);
+    const computed = currentPeriodAmounts(contact, enrolled, year, month, this.catalog);
     if (!computed) {
       return;
     }
