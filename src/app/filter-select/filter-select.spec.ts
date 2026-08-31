@@ -63,29 +63,29 @@ describe('FilterSelect', () => {
     expect(c.filteredOptions).toHaveLength(3);
   });
 
-  it('blur with free text reverts to the selection (text never leaks)', () => {
+  it('panel close with free text reverts to the selection (text never leaks)', () => {
     const c = build();
     c.writeValue('c-1');
     c.onSearchChange('garbage typing');
-    c.onBlur();
+    c.onPanelClosed();
     expect(priv(c).searchText).toBe('Casey Lee');
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('blur with an exact label match selects that option', () => {
+  it('panel close with an exact label match selects that option', () => {
     const c = build();
     c.onSearchChange('jordan casey');
-    c.onBlur();
+    c.onPanelClosed();
     expect(onChange).toHaveBeenCalledWith('c-2');
     expect(priv(c).searchText).toBe('Jordan Casey');
   });
 
-  it('clearable: emptying the input clears the selection on blur', () => {
+  it('clearable: emptying the input clears the selection on panel close', () => {
     const c = build();
     c.clearable = true;
     c.writeValue('c-1');
     c.onSearchChange('');
-    c.onBlur();
+    c.onPanelClosed();
     expect(onChange).toHaveBeenCalledWith(null);
     expect(priv(c).searchText).toBe('');
   });
@@ -94,9 +94,28 @@ describe('FilterSelect', () => {
     const c = build();
     c.writeValue('c-1');
     c.onSearchChange('');
-    c.onBlur();
+    c.onPanelClosed();
     expect(onChange).not.toHaveBeenCalled();
     expect(priv(c).searchText).toBe('Casey Lee');
+  });
+
+  it('clicking a filtered option keeps the pick — the panel close after a selection never re-resolves', () => {
+    // Regression: live, a click emits optionSelected THEN closed. The old
+    // input-blur revert ran mid-click and ate the selection entirely.
+    const c = build();
+    c.onSearchChange('jos'); // free text that matches no label exactly
+    c.onOptionSelected(selectEvent('c-1'));
+    c.onPanelClosed();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('c-1');
+    expect(priv(c).searchText).toBe('Casey Lee');
+
+    // Only the close immediately after a pick is skipped: a later close with
+    // free text still resolves normally.
+    c.onSearchChange('garbage');
+    c.onPanelClosed();
+    expect(priv(c).searchText).toBe('Casey Lee');
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it('writeValue renders the label, even when options arrive later', () => {
