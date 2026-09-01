@@ -4,7 +4,7 @@ import {DatePipe} from '@angular/common';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatDialog} from '@angular/material/dialog';
-import {catchError, EMPTY} from 'rxjs';
+import {catchError, EMPTY, take} from 'rxjs';
 import {EmailService} from '../services/email.service';
 import {ContactService} from '../services/contact.service';
 import {AuthService} from '../services/auth.service';
@@ -77,6 +77,9 @@ export class ContactEmailsSection implements OnInit {
         console.log(error);
         return EMPTY;
       }),
+      // The summary is stale-while-revalidate: with a warm cache it emits
+      // TWICE (cached, then fresh). One emission = one dialog.
+      take(1),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(contacts => {
       const ref = this.dialog.open(AssignEmailDialog, {

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { concat, of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { ContactEmailsSection } from './contact-emails-section';
 import { EmailService } from '../services/email.service';
@@ -162,6 +162,19 @@ describe('ContactEmailsSection', () => {
       emailService.getEmailsForContact.mockClear();
       c.moveEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event);
       expect(emailService.getEmailsForContact).not.toHaveBeenCalled();
+    });
+
+    it('opens ONE dialog when the summary cache is warm (cached + fresh emissions)', () => {
+      // getContactsSummary is stale-while-revalidate: with a warm cache it
+      // emits twice. Regression: each emission opened its own stacked dialog.
+      afterClosed = undefined;
+      const contacts = [{id: 'c-2', first_name: 'Other'}];
+      contactService.getContactsSummary.mockReturnValue(concat(of(contacts), of(contacts)));
+      const c = build();
+      c.ngOnInit();
+      dialog.open.mockClear();
+      c.moveEmail(emailEntry, { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).toHaveBeenCalledTimes(1);
     });
 
     it('swallows a failed contacts load (no dialog opens)', () => {
