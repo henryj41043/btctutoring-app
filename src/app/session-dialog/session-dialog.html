@@ -13,7 +13,8 @@
   @if (dialogData.type !== 'delete') {
     <mat-form-field>
       <mat-label>Session Type</mat-label>
-      <mat-select [(ngModel)]="selectedType" [disabled]="isReadOnly || isMakeupLocked">
+      <mat-select [ngModel]="selectedType" (ngModelChange)="onTypeChange($event)"
+                  [disabled]="isReadOnly || isMakeupLocked">
         @for (type of sessionTypeOptions; track type) {
           <mat-option [value]="type">{{typeLabels[type]}}</mat-option>
         }

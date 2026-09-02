@@ -265,6 +265,41 @@ describe('SessionDialog', () => {
       expect(c.filteredStudents.map((s) => s.id)).toEqual(['s-1', 's-slot']);
     });
 
+    it('switching to Trial AFTER the load offers Onboarding students (client regression)', () => {
+      // The admin opens Add Session (default Tutoring), picks the tutor, THEN
+      // switches to Trial — the onboarding trial student must appear. The old
+      // load-time status filter had already stripped them permanently.
+      studentService.getStudents.mockReturnValue(of([
+        student(),
+        student({ id: 's-onb', name: 'Rebekah', status: StudentStatus.ONBOARDING }),
+      ]));
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      c.ngOnInit();
+      c.onTutorChange('t-1');
+      expect(c.filteredStudents.map(s => s.id)).toEqual(['s-1']); // Tutoring: active only
+      c.onTypeChange(SessionType.TRIAL);
+      expect(c.filteredStudents.map(s => s.id)).toEqual(['s-1', 's-onb']);
+    });
+
+    it('switching AWAY from Trial drops an onboarding selection', () => {
+      studentService.getStudents.mockReturnValue(of([
+        student(),
+        student({ id: 's-onb', status: StudentStatus.ONBOARDING }),
+      ]));
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      c.ngOnInit();
+      c.onTutorChange('t-1');
+      c.onTypeChange(SessionType.TRIAL);
+      c.selectedStudent = 's-onb';
+      c.onTypeChange(SessionType.TUTORING);
+      expect(c.filteredStudents.map(s => s.id)).toEqual(['s-1']);
+      expect(c.selectedStudent).toBeUndefined();
+      // An active selection survives the same switch.
+      c.selectedStudent = 's-1';
+      c.onTypeChange(SessionType.TRIAL);
+      expect(c.selectedStudent).toBe('s-1');
+    });
+
     it('cancel closes the dialog', () => {
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.cancel();

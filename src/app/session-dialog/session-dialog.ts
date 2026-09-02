@@ -122,8 +122,27 @@ export class SessionDialog implements OnInit {
       c => c.is_tutor !== false && c.currently_accepting_students,
     );
   }
-  students: Student[] = [];
+  /** Every loaded student, unfiltered — the status filter depends on the
+   *  CURRENT session type, so it must be re-derived, never baked in. */
+  private allLoadedStudents: Student[] = [];
   filteredStudents: Student[] = [];
+
+  /**
+   * Students pickable for the current session type: Active always; Onboarding
+   * only for trials (trial students are usually still onboarding). A getter —
+   * the admin typically opens the dialog on the default type and THEN
+   * switches to Trial, so a load-time filter would strip onboarding students
+   * before the switch ever happens.
+   */
+  get students(): Student[] {
+    return this.allLoadedStudents.filter(s =>
+      s.status === StudentStatus.ACTIVE_STUDENT ||
+      (this.selectedType === SessionType.TRIAL && s.status === StudentStatus.ONBOARDING));
+  }
+
+  set students(students: Student[]) {
+    this.allLoadedStudents = students;
+  }
   showStatusConfirm: boolean = false;
   // True while a backend call is in flight — the action buttons are replaced by
   // a spinner so the user can't submit the same session twice.
@@ -891,16 +910,30 @@ export class SessionDialog implements OnInit {
       catchError(error => { console.log(error); return EMPTY; }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(students => {
-      // Trial students are usually still Onboarding — include them when this
-      // dialog is working on a trial session.
-      this.students = students.filter(s =>
-        s.status === StudentStatus.ACTIVE_STUDENT ||
-        (this.selectedType === SessionType.TRIAL && s.status === StudentStatus.ONBOARDING));
+      this.allLoadedStudents = students;
       // Pre-filter for edit mode where tutor is already selected when students load
-      if (this.selectedTutor) {
-        this.filteredStudents = this.students.filter(
-          s => studentVisibleToTutor(s, this.selectedTutor));
-      }
+      this.refilterStudents();
     });
+  }
+
+  /** Re-derives the tutor-scoped pickable students for the current type. */
+  private refilterStudents(): void {
+    if (this.selectedTutor) {
+      this.filteredStudents = this.students.filter(
+        s => studentVisibleToTutor(s, this.selectedTutor));
+    }
+  }
+
+  /**
+   * Switching the session type changes WHICH students are pickable (trials
+   * include Onboarding students) — re-derive the list, and drop a selection
+   * that is no longer offered.
+   */
+  onTypeChange(type: SessionType): void {
+    this.selectedType = type;
+    this.refilterStudents();
+    if (this.selectedStudent && !this.filteredStudents.some(s => s.id === this.selectedStudent)) {
+      this.selectedStudent = undefined;
+    }
   }
 }
