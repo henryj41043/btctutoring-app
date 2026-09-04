@@ -233,7 +233,14 @@ export class ContactsTable implements OnInit {
     const seen = new Set<string>();
     const emails: string[] = [];
     let missing = 0;
+    let excluded = 0;
     for (const contact of rows) {
+      // Flagged contacts opt out of bulk email (their choice, not a data gap
+      // — reported separately from the missing-email count).
+      if (contact.exclude_bulk_email) {
+        excluded++;
+        continue;
+      }
       const email = contact.email?.trim();
       if (!email) {
         missing++;
@@ -248,7 +255,14 @@ export class ContactsTable implements OnInit {
       this.snackBar.open('No emails to copy in the current view.', undefined, {duration: 4000});
       return;
     }
-    const missingSuffix = missing > 0 ? ` (${missing} contact${missing === 1 ? '' : 's'} without an email)` : '';
+    const suffixParts: string[] = [];
+    if (missing > 0) {
+      suffixParts.push(`${missing} contact${missing === 1 ? '' : 's'} without an email`);
+    }
+    if (excluded > 0) {
+      suffixParts.push(`${excluded} excluded from bulk email`);
+    }
+    const missingSuffix = suffixParts.length > 0 ? ` (${suffixParts.join('; ')})` : '';
     navigator.clipboard.writeText(emails.join(', ')).then(
       () => this.snackBar.open(
         `${emails.length} email${emails.length === 1 ? '' : 's'} copied${missingSuffix}`,

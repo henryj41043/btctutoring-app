@@ -29,6 +29,9 @@
           <mat-error>Valid Phone Number Required</mat-error>
         }
       </mat-form-field>
+      <mat-checkbox formControlName="exclude_bulk_email" class="exclude-bulk-email">
+        Exclude from bulk email (skipped by the contacts table's Copy Emails)
+      </mat-checkbox>
       <mat-form-field>
         <mat-label>Select Service</mat-label>
         <mat-select formControlName="service">

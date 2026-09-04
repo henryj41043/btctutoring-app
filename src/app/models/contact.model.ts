@@ -39,6 +39,8 @@ export class Contact {
   currently_accepting_students?: boolean;
   /** Staff role: tutors appear in tutoring dropdowns; undefined = true (legacy staff). */
   is_tutor?: boolean;
+  /** Excluded from the contacts table's "copy all emails" bulk-email list. */
+  exclude_bulk_email?: boolean;
   availability?: AvailabilityBlock[];
   zoom_link?: string;
   hourly_rate?: number;
