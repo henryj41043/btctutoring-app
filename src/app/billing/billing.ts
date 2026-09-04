@@ -1,4 +1,5 @@
 import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit, ViewChild} from '@angular/core';
+import {Router} from '@angular/router';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -71,6 +72,7 @@ export class Billing implements OnInit {
   private packageService: PackageService = inject(PackageService);
   private noteService: NoteService = inject(NoteService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
+  private router: Router = inject(Router);
   // Cancels in-flight HTTP work when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
 
@@ -277,6 +279,13 @@ export class Billing implements OnInit {
     this.dataSource.data = entries;
     this.loading = false;
     this.cdr.markForCheck();
+  }
+
+  /** Row click: jump to the family's contact page. */
+  openContact(entry: BillingEntry): void {
+    if (entry.contact_id) {
+      void this.router.navigate(['/contacts', entry.contact_id]);
+    }
   }
 
   /** Persists a paid/unpaid toggle for one half of a contact's billing month. */

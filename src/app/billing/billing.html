@@ -88,7 +88,8 @@
         </ng-container>
         <ng-container matColumnDef="paid">
           <th mat-header-cell *matHeaderCellDef> Paid </th>
-          <td mat-cell *matCellDef="let item">
+          <!-- Checkbox clicks must not also trigger the row's contact navigation. -->
+          <td mat-cell *matCellDef="let item" (click)="$event.stopPropagation()">
             @if (item.due_first != null) {
               <mat-checkbox [checked]="item.paid_first"
                             (change)="togglePaid(item, 'first', $event.checked)">
@@ -105,7 +106,8 @@
           <td mat-footer-cell *matFooterCellDef></td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="billingColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: billingColumns;"></tr>
+        <tr mat-row *matRowDef="let row; columns: billingColumns;"
+            class="billing-row-link" (click)="openContact(row)"></tr>
         <tr mat-footer-row *matFooterRowDef="billingColumns"></tr>
       </table>
       <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>

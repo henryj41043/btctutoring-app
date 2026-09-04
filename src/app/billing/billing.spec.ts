@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import jsPDF from 'jspdf';
@@ -59,6 +60,7 @@ describe('Billing', () => {
   };
 
   const packageService = { getPackages: () => of(TEST_CATALOG_ROWS) };
+  const router = { navigate: jest.fn() };
 
   const build = (): Billing => {
     TestBed.resetTestingModule();
@@ -71,6 +73,7 @@ describe('Billing', () => {
         { provide: BillingService, useValue: billingService },
         { provide: NoteService, useValue: noteService },
         { provide: PackageService, useValue: packageService },
+        { provide: Router, useValue: router },
       ],
     });
     const c = TestBed.createComponent(Billing).componentInstance;
@@ -105,6 +108,15 @@ describe('Billing', () => {
     c2.onDateChange(new Date(2026, 4, 1));
     expect(JSON.parse(sessionStorage.getItem('btc-billing-view')!).extra.selectedDate)
       .toBe(new Date(2026, 4, 1).toISOString());
+  });
+
+  it('a row click navigates to the contact page; entries without an id are inert', () => {
+    const c = build();
+    c.openContact({ contact_id: 'c-1' } as never);
+    expect(router.navigate).toHaveBeenCalledWith(['/contacts', 'c-1']);
+    router.navigate.mockClear();
+    c.openContact({} as never);
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
   it('fetches only the selected month of billing records', () => {
@@ -527,6 +539,7 @@ describe('Billing', () => {
           { provide: BillingService, useValue: billingService },
           { provide: NoteService, useValue: noteService },
           { provide: PackageService, useValue: packageService },
+          { provide: Router, useValue: router },
         ],
       });
       const fixture = TestBed.createComponent(Billing);
