@@ -162,6 +162,30 @@ describe('ContactsTable', () => {
         '2 emails copied (1 contact without an email)', undefined, { duration: 4000 });
     });
 
+    it('skips contacts flagged exclude_bulk_email and reports the count', async () => {
+      const c = seed([
+        { first_name: 'Ada', email: 'ada@x.com' },
+        { first_name: 'OptOut', email: 'optout@x.com', exclude_bulk_email: true },
+        { first_name: 'NoMail' },
+      ]);
+      (c as any).copyFilteredEmails();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('ada@x.com');
+      expect(snackBar.open).toHaveBeenCalledWith(
+        '1 email copied (1 contact without an email; 1 excluded from bulk email)',
+        undefined, { duration: 4000 });
+    });
+
+    it('an all-excluded view copies nothing', () => {
+      const c = seed([
+        { first_name: 'OptOut', email: 'optout@x.com', exclude_bulk_email: true },
+      ]);
+      (c as any).copyFilteredEmails();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(snackBar.open).toHaveBeenCalledWith(
+        'No emails to copy in the current view.', undefined, { duration: 4000 });
+    });
+
     it('respects the active filters (copies filteredData, not all rows)', async () => {
       const c = seed([
         { first_name: 'Ada', email: 'ada@x.com', service: 'Tutoring' },

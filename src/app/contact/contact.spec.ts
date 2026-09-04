@@ -306,6 +306,7 @@ describe('Contact', () => {
     for (const key of [
       'cc_authorization_received', 'twenty_five_deducted', 'twenty_five_received',
       'scholarship_student', 'currently_accepting_students', 'user_profile_created',
+      'exclude_bulk_email',
     ]) {
       expect(f.controls[key].value).toBe(false);
     }
@@ -368,7 +369,7 @@ describe('Contact', () => {
       currently_accepting_students: true, zoom_link: 'http://z', hourly_rate: 42,
       hire_type: '1099',
       user_profile_created: true, user_group: 'Tutors', twenty_five_received: true,
-      scholarship_student: true,
+      scholarship_student: true, exclude_bulk_email: true,
       availability: [{ days: ['MONDAY'], start_time: '09:00', end_time: '10:00' }],
     });
     contactService.getContact.mockReturnValue(of([rich]));
@@ -382,6 +383,7 @@ describe('Contact', () => {
     expect(f.controls['phone_number'].value).toBe('1234567890');
     expect(f.controls['billing_cycle'].value).toBe('monthly');
     expect(f.controls['cc_authorization_received'].value).toBe(true);
+    expect(f.controls['exclude_bulk_email'].value).toBe(true);
     expect(f.controls['twenty_five_deducted'].value).toBe(true);
     expect(f.controls['special_circumstance'].value).toBe('note');
     // The month-scoped scholarship fields moved to ContactScholarshipSection

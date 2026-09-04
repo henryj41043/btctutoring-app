@@ -148,6 +148,8 @@ export class Contact implements OnInit {
     last_name: [''],
     email: ['', [Validators.required, Validators.email]],
     phone_number: ['', phoneValidator],
+    // Excluded from the contacts table's "copy all emails" bulk-email list.
+    exclude_bulk_email: false,
     service: ['', Validators.required],
     status: '',
     billing_cycle: '',
@@ -354,6 +356,7 @@ export class Contact implements OnInit {
     this.contactForm.controls['billing_cycle'].setValue(contact.billing_cycle);
     this.contactForm.controls['sibling_discount'].setValue(contact.sibling_discount ?? 0);
     this.contactForm.controls['cc_authorization_received'].setValue(contact.cc_authorization_received);
+    this.contactForm.controls['exclude_bulk_email'].setValue(contact.exclude_bulk_email ?? false);
     this.contactForm.controls['twenty_five_deducted'].setValue(contact.twenty_five_deducted);
     this.contactForm.controls['special_circumstance'].setValue(contact.special_circumstance);
     this.contactForm.controls['inquiry_received'].setValue(contact.inquiry_received);
