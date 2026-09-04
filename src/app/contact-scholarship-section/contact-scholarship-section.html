@@ -48,9 +48,15 @@
     @if (saving) {
       <mat-spinner [diameter]="24"></mat-spinner>
     } @else {
-      <button mat-raised-button color="primary" type="button" (click)="save()">
+      <button mat-raised-button color="primary" type="button" (click)="save()"
+              [class.scholarship-save-dirty]="scholarshipForm.dirty">
         Save {{ monthLabel(selectedMonth) }}
       </button>
+    }
+    @if (scholarshipForm.dirty && !saving) {
+      <span class="scholarship-dirty">
+        Unsaved changes — they're lost if you leave without saving.
+      </span>
     }
     @if (savedSuccessfully) {
       <span class="scholarship-saved">Saved!</span>

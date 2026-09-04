@@ -143,6 +143,8 @@ export class ContactScholarshipSection implements OnInit {
       this.refreshMonthOptions();
       this.saving = false;
       this.savedSuccessfully = true;
+      // The unsaved-changes hint must clear once the month is persisted.
+      this.scholarshipForm.markAsPristine();
       this.cdr.markForCheck();
       setTimeout(() => {
         this.savedSuccessfully = false;
