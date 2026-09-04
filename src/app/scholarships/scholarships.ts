@@ -20,6 +20,7 @@ import {StudentService} from '../services/student.service';
 import {ScholarshipService} from '../services/scholarship.service';
 import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
+import {StudentStatus} from '../enums/student-status.enum';
 import {ScholarshipRecord} from '../models/scholarship-record.model';
 import {downloadCsv, toCsvString} from '../utils/csv';
 import {TableStateStore} from '../utils/table-state';
@@ -32,8 +33,8 @@ export interface ScholarshipRow {
 
 /**
  * Admin Scholarships page: every scholarship family's monthly checklist at a
- * glance — current families (any scholarship-flagged student, matching the
- * contact page's gate) plus any family holding a record for the viewed month
+ * glance — current families (any ACTIVE scholarship-flagged student) plus
+ * any family holding a record for the viewed month
  * (so past months stay complete after a family loses the flag). Rows are
  * read-only; editing happens on the family's contact page. Export = CSV.
  */
@@ -136,8 +137,12 @@ export class Scholarships implements OnInit {
     const recordByContact = new Map(records
       .filter(r => !!r.contact_id)
       .map(r => [r.contact_id!, r]));
+    // Active students only (client request): a family whose scholarship
+    // student has left stops appearing for NEW months — but any family with a
+    // saved record for the viewed month still shows, so history never thins.
     const flaggedContactIds = new Set(students
-      .filter(s => !!s.scholarship && !!s.contact_id)
+      .filter(s => !!s.scholarship && !!s.contact_id
+        && s.status === StudentStatus.ACTIVE_STUDENT)
       .map(s => s.contact_id!));
     const rowContactIds = new Set([...flaggedContactIds, ...recordByContact.keys()]);
 
