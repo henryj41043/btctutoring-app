@@ -10,7 +10,7 @@ import {
 } from '@angular/material/dialog';
 import {MakeupEditDialog, MakeupEditResult} from '../makeup-edit-dialog/makeup-edit-dialog';
 import {catchError, EMPTY, of} from 'rxjs';
-import {FormBuilder, FormGroup, ReactiveFormsModule} from '@angular/forms';
+import {FormBuilder, FormGroup, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatSelectModule} from '@angular/material/select';
@@ -87,6 +87,7 @@ export interface StudentDialogData {
     MatIconModule,
     MatProgressSpinnerModule,
     ReactiveFormsModule,
+    FormsModule,
   ],
   templateUrl: './student-dialog.html',
   styleUrl: './student-dialog.scss',
@@ -167,6 +168,7 @@ export class StudentDialog implements OnInit {
       package_start_date: [student.package_start_date ?? null],
       auto_renew: [student.auto_renew ?? false],
     });
+    this.buildPlanningOverrideRows(student);
     this.pendingMonthOptions = nextMonthFirsts(new Date());
     // A stored effective date outside the rolling window must stay selectable.
     const storedEffective = student.pending_package_effective;
@@ -180,6 +182,43 @@ export class StudentDialog implements OnInit {
 
   /** Effective-month choices for a scheduled package change (next 6 firsts). */
   protected pendingMonthOptions: {value: string; label: string}[] = [];
+
+  /**
+   * Per-tutor extra-planning override rows (default + overrides model): one
+   * row per effective tutor (assigned + per-slot, live and pending schedules)
+   * plus any stored override's tutor. Shown only when the student actually
+   * has several tutors (or stored overrides) — single-tutor students just use
+   * the default field. Blank minutes = use the default.
+   */
+  protected planningOverrideRows: {tutor_id: string; label: string; minutes: number | null}[] = [];
+
+  private buildPlanningOverrideRows(student: Student): void {
+    const stored = new Map((student.extra_planning_by_tutor ?? [])
+      .filter(o => !!o?.tutor_id)
+      .map(o => [o.tutor_id, o.minutes]));
+    const effective = new Set<string>();
+    if (student.assigned_tutor_id) {
+      effective.add(student.assigned_tutor_id);
+    }
+    for (const slot of [...(student.schedule ?? []), ...(student.pending_schedule ?? [])]) {
+      if (slot?.tutor_id) {
+        effective.add(slot.tutor_id);
+      }
+    }
+    if (effective.size < 2 && stored.size === 0) {
+      this.planningOverrideRows = [];
+      return;
+    }
+    const ids = [...new Set([...effective, ...stored.keys()])];
+    this.planningOverrideRows = ids.map(id => {
+      const tutor = this.tutors.find(t => t.id === id);
+      return {
+        tutor_id: id,
+        label: tutor ? contactDisplayName(tutor) : '(former tutor)',
+        minutes: stored.get(id) ?? null,
+      };
+    });
+  }
 
   /** The current scheduled-change summary, e.g. '→ Achieve from Sep 1'. */
   get pendingNote(): string | null {
@@ -294,6 +333,19 @@ export class StudentDialog implements OnInit {
       name: (raw.name ?? '').trim(),
       birthday: this.toDateString(raw.birthday),
     };
+    // Per-tutor planning overrides: blank rows mean "use the default". An
+    // explicit [] only goes out when stored overrides are being cleared —
+    // otherwise the key is omitted so the backend leaves the field alone.
+    const overrides = this.planningOverrideRows
+      .filter(r => r.minutes !== null && r.minutes !== undefined && !isNaN(Number(r.minutes)))
+      .map(r => ({tutor_id: r.tutor_id, minutes: Number(r.minutes)}));
+    if (overrides.length > 0) {
+      student.extra_planning_by_tutor = overrides;
+    } else if ((this.data.student?.extra_planning_by_tutor ?? []).length > 0) {
+      student.extra_planning_by_tutor = [];
+    } else {
+      delete student.extra_planning_by_tutor;
+    }
     const pendingError = this.validatePendingChange(student);
     if (pendingError) {
       this.fail(pendingError);

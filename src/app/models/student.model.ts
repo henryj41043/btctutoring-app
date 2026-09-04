@@ -39,6 +39,8 @@ export class Student {
   make_up_never_expire?: boolean;
   /** Extra tutor planning minutes credited per counted session (payroll). */
   extra_planning_minutes?: number;
+  /** Per-tutor overrides of extra_planning_minutes ([] on save = clear all). */
+  extra_planning_by_tutor?: {tutor_id: string; minutes: number}[];
   /**
    * Scheduled package change, applied by the backend's 1st-of-month cron on
    * its effective date ('' on save = clear the pending change).

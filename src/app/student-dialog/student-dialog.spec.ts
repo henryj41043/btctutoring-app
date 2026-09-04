@@ -257,6 +257,84 @@ describe('StudentDialog', () => {
       expect(dialogRef.close).toHaveBeenCalledWith(true);
     });
 
+    describe('per-tutor extra planning overrides', () => {
+      const rows = (c: StudentDialog) =>
+        (c as unknown as { planningOverrideRows: { tutor_id: string; label: string; minutes: number | null }[] })
+          .planningOverrideRows;
+      const multiTutorStudent = (over: Partial<Student> = {}) => richStudent({
+        schedule: [
+          { weekday: 'MONDAY', start_time: '10:00', end_time: '11:00' },
+          { weekday: 'WEDNESDAY', start_time: '10:00', end_time: '11:00', tutor_id: 't-2' },
+        ] as never,
+        ...over,
+      });
+
+      it('shows one row per effective tutor for a multi-tutor student', () => {
+        const c = build({
+          mode: 'edit',
+          student: multiTutorStudent(),
+          tutors: [
+            { id: 't-1', first_name: 'Tess' }, { id: 't-2', first_name: 'Maria' },
+          ] as never,
+        });
+        expect(rows(c).map(r => [r.tutor_id, r.label, r.minutes])).toEqual([
+          ['t-1', 'Tess', null],
+          ['t-2', 'Maria', null],
+        ]);
+      });
+
+      it('hides the rows for a single-tutor student without stored overrides', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        expect(rows(c)).toEqual([]);
+      });
+
+      it('renders stored overrides, labeling former tutors', () => {
+        const c = build({
+          mode: 'edit',
+          student: richStudent({
+            extra_planning_by_tutor: [{ tutor_id: 't-gone', minutes: 30 }],
+          }),
+          tutors: [{ id: 't-1', first_name: 'Tess' }] as never,
+        });
+        const gone = rows(c).find(r => r.tutor_id === 't-gone');
+        expect(gone).toEqual({ tutor_id: 't-gone', label: '(former tutor)', minutes: 30 });
+      });
+
+      it('saves filled rows, omits blanks, and clears only when stored overrides vanish', () => {
+        const c = build({
+          mode: 'edit',
+          student: multiTutorStudent(),
+          tutors: [] as never,
+        });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        rows(c).find(r => r.tutor_id === 't-2')!.minutes = 25;
+        c.save();
+        let payload = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+        expect(payload.extra_planning_by_tutor).toEqual([{ tutor_id: 't-2', minutes: 25 }]);
+
+        // All-blank rows on a student WITH stored overrides -> explicit [] clear.
+        TestBed.resetTestingModule();
+        const c2 = build({
+          mode: 'edit',
+          student: multiTutorStudent({
+            extra_planning_by_tutor: [{ tutor_id: 't-2', minutes: 25 }],
+          }),
+          tutors: [] as never,
+        });
+        rows(c2).forEach(r => (r.minutes = null));
+        c2.save();
+        payload = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+        expect(payload.extra_planning_by_tutor).toEqual([]);
+
+        // Never stored + all blank -> the key is omitted entirely.
+        TestBed.resetTestingModule();
+        const c3 = build({ mode: 'edit', student: multiTutorStudent(), tutors: [] as never });
+        c3.save();
+        payload = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+        expect(payload).not.toHaveProperty('extra_planning_by_tutor');
+      });
+    });
+
     describe('scheduled package change', () => {
       it('a new pending change closes with the pending-schedule signal', () => {
         const c = build({ mode: 'edit', student: richStudent() });

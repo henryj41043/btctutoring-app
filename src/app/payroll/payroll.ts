@@ -29,6 +29,7 @@ import {StaffStatus} from '../enums/staff-status.enum';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {round2} from '../utils/package-config';
+import {extraPlanningMinutesFor} from '../utils/planning';
 import {TableStateStore} from '../utils/table-state';
 
 @Component({
@@ -271,7 +272,6 @@ export class Payroll implements OnInit {
       }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({contacts, students, sessions}) => {
         const staff = contacts.filter(contact =>
           contact.service === Service.HIRING && contact.status === StaffStatus.ACTIVE_STAFF);
-        const extraByStudent = this.extraMinutesByStudent(students);
         const sessionsByTutor = new Map<string, Session[]>();
         sessions.forEach(session => {
           if (session.tutor_id) {
@@ -281,7 +281,8 @@ export class Payroll implements OnInit {
           }
         });
         this.finishLoading(staff.map(contact =>
-          this.buildPayrollEntry(contact, sessionsByTutor.get(contact.id!) ?? [], extraByStudent)));
+          this.buildPayrollEntry(contact, sessionsByTutor.get(contact.id!) ?? [],
+            this.extraMinutesByStudent(students, contact.id))));
       });
     } else {
       // Tutors only ever see their own payroll. Use the already-loaded contact
@@ -294,7 +295,7 @@ export class Payroll implements OnInit {
             takeUntilDestroyed(this.destroyRef),
           )
           .subscribe(students => {
-            this.buildPayrollEntry$(self, this.extraMinutesByStudent(students))
+            this.buildPayrollEntry$(self, this.extraMinutesByStudent(students, self.id))
               .pipe(takeUntilDestroyed(this.destroyRef))
               .subscribe(entry => this.finishLoading([entry]));
           });
@@ -312,11 +313,21 @@ export class Payroll implements OnInit {
     };
   }
 
-  /** student id → extra planning minutes credited per counted session. */
-  private extraMinutesByStudent(students: Student[]): Map<string, number> {
-    return new Map(students
-      .filter(s => !!s.id && (s.extra_planning_minutes ?? 0) > 0)
-      .map(s => [s.id!, s.extra_planning_minutes!]));
+  /**
+   * student id → extra planning minutes credited per counted session, FOR one
+   * tutor: their per-tutor override when set, else the student's default —
+   * students with several tutors can credit each differently.
+   */
+  private extraMinutesByStudent(students: Student[], tutorId: string | undefined): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const s of students) {
+      if (!s.id) continue;
+      const minutes = extraPlanningMinutesFor(s, tutorId);
+      if (minutes > 0) {
+        map.set(s.id, minutes);
+      }
+    }
+    return map;
   }
 
   private finishLoading(entries: PayrollEntry[]): void {
