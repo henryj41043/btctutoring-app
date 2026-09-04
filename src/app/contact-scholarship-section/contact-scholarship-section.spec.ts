@@ -135,6 +135,30 @@ describe('ContactScholarshipSection', () => {
     expect(priv(c).scholarshipForm.value['invoice_number']).toBe('INV-NEW');
   });
 
+  it('the dirty flag drives the unsaved hint: set by edits, cleared by save and month switch', () => {
+    scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([]));
+    const c = build();
+    const form = (c as never as {
+      scholarshipForm: {
+        dirty: boolean;
+        patchValue(v: Record<string, unknown>): void;
+        markAsDirty(): void;
+      };
+    }).scholarshipForm;
+    expect(form.dirty).toBe(false);
+    // User edits (real inputs mark controls dirty; simulated here).
+    form.patchValue({scholarship_state: 'PA'});
+    form.markAsDirty();
+    expect(form.dirty).toBe(true);
+    // A successful save marks the form pristine — the hint clears.
+    c.save();
+    expect(form.dirty).toBe(false);
+    // A month switch resets the form — no stale dirty flag.
+    form.markAsDirty();
+    c.onMonthChange('2026-07');
+    expect(form.dirty).toBe(false);
+  });
+
   it('a failed save flags the error and keeps the form', () => {
     scholarshipService.upsertScholarshipRecord.mockReturnValue(throwError(() => new Error('boom')));
     const c = build();

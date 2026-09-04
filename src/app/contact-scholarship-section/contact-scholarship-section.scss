@@ -31,6 +31,16 @@
   margin-bottom: 8px;
 }
 
+.scholarship-dirty {
+  color: #8a5a00;
+  font-weight: 500;
+}
+
+.scholarship-save-dirty {
+  // A gentle nudge that this month has pending edits.
+  box-shadow: 0 0 0 3px rgba(255, 171, 0, 0.45);
+}
+
 .scholarship-saved {
   color: #1c7a45;
   font-weight: 500;
