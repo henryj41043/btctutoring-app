@@ -18,8 +18,11 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatButtonModule} from '@angular/material/button';
 import {Router} from '@angular/router';
-import {catchError, EMPTY, of} from 'rxjs';
+import {catchError, EMPTY, of, forkJoin} from 'rxjs';
 import {StudentService} from '../services/student.service';
+import {ContactService} from '../services/contact.service';
+import {Contact} from '../models/contact.model';
+import {contactDisplayName} from '../utils/contact-name';
 import {SessionsService} from '../services/sessions.service';
 import {AuthService} from '../services/auth.service';
 import {Student} from '../models/student.model';
@@ -73,6 +76,7 @@ export interface RosterHistoryRow {
 export class StudentRoster implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private sessionsService: SessionsService = inject(SessionsService);
+  private contactService: ContactService = inject(ContactService);
   protected authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   // Cancels in-flight HTTP work when the user navigates away.
@@ -108,7 +112,9 @@ export class StudentRoster implements OnInit {
     }
   }
 
-  protected rosterColumns: string[] = ['contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship', 'actions'];
+  protected rosterColumns: string[] = ['contact_name', 'name', 'tutor', 'status', 'package', 'make_up_minutes', 'scholarship', 'actions'];
+  /** assigned_tutor_id → display name (staff list + individually fetched former staff). */
+  private tutorNamesById = new Map<string, string>();
   protected dataSource = new MatTableDataSource<Student>([]);
   protected readonly studentDisplayName = studentDisplayName;
   protected readonly statusChipClass = studentStatusChipClass;
@@ -132,11 +138,16 @@ export class StudentRoster implements OnInit {
     }
     // Case-insensitive search across the visible columns (mirrors the contacts table).
     this.dataSource.filterPredicate = (student, filter) => {
-      const haystack = [student.contact_name, student.name, student.status, student.package]
+      const haystack = [student.contact_name, student.name, this.tutorName(student), student.status, student.package]
         .join(' ')
         .toLowerCase();
       return haystack.includes(filter);
     };
+    // 'tutor' is derived (id → name); every other column sorts on its field.
+    this.dataSource.sortingDataAccessor = (student, column) =>
+      column === 'tutor'
+        ? this.tutorName(student)
+        : (student as unknown as Record<string, string | number>)[column];
     this.historyDataSource.filterPredicate = (row, filter) => {
       const haystack = [row.family, row.student, row.tutors].join(' ').toLowerCase();
       return haystack.includes(filter);
@@ -164,7 +175,11 @@ export class StudentRoster implements OnInit {
       ? this.studentService.getStudents(true)
       : this.studentService.getStudentsByTutor(tutorId!, true);
 
-    source$.pipe(
+    forkJoin({
+      students: source$,
+      // Names for the Tutor column; a failed load just shows dashes.
+      staff: this.contactService.getStaff().pipe(catchError(() => of([] as Contact[]))),
+    }).pipe(
       catchError(error => {
         console.log(error);
         this.loading = false;
@@ -172,8 +187,12 @@ export class StudentRoster implements OnInit {
         return EMPTY;
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(students => {
+    ).subscribe(({students, staff}) => {
       this.allStudents = students;
+      this.tutorNamesById = new Map(staff
+        .filter(c => !!c.id)
+        .map(c => [c.id!, contactDisplayName(c)]));
+      this.resolveMissingTutorNames(students);
       // The roster is the ACTIVE roster (other statuses live on the contact
       // page), listed by parent name per the client's request.
       this.dataSource.data = students
@@ -187,6 +206,37 @@ export class StudentRoster implements OnInit {
       }
       this.cdr.markForCheck();
     });
+  }
+
+  /** The Tutor column's display value ('—' when unassigned or unresolvable). */
+  tutorName(student: Student): string {
+    if (!student.assigned_tutor_id) {
+      return '—';
+    }
+    return this.tutorNamesById.get(student.assigned_tutor_id) ?? '—';
+  }
+
+  /**
+   * Former staff aren't in the active-staff list — fetch any assigned tutor
+   * the roster references but the map can't resolve, so their students don't
+   * show a dash (manage-schedule precedent).
+   */
+  private resolveMissingTutorNames(students: Student[]): void {
+    const missing = [...new Set(students
+      .filter(s => s.status === StudentStatus.ACTIVE_STUDENT)
+      .map(s => s.assigned_tutor_id)
+      .filter((id): id is string => !!id && !this.tutorNamesById.has(id)))];
+    for (const id of missing) {
+      this.contactService.getContact(id).pipe(
+        catchError(() => of([] as Contact[])),
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe(found => {
+        if (found[0]) {
+          this.tutorNamesById.set(id, contactDisplayName(found[0]));
+          this.cdr.markForCheck();
+        }
+      });
+    }
   }
 
   onHistoryToggle(on: boolean): void {

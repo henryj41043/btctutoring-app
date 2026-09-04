@@ -7,6 +7,8 @@ import { MatSort } from '@angular/material/sort';
 import { MatPaginator } from '@angular/material/paginator';
 import { StudentRoster, RosterHistoryRow } from './student-roster';
 import { StudentService } from '../services/student.service';
+import { ContactService } from '../services/contact.service';
+import { Contact } from '../models/contact.model';
 import { SessionsService } from '../services/sessions.service';
 import { AuthService } from '../services/auth.service';
 import { StudentSessionsDialog } from '../student-sessions-dialog/student-sessions-dialog';
@@ -26,6 +28,7 @@ describe('StudentRoster', () => {
     getStudentsByTutor: jest.fn(),
   };
   const sessionsService = { getAllSessions: jest.fn() };
+  const contactService = { getStaff: jest.fn(), getContact: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
     contact: () => ({ id: contactId }),
@@ -40,6 +43,7 @@ describe('StudentRoster', () => {
       providers: [
         { provide: StudentService, useValue: studentService },
         { provide: SessionsService, useValue: sessionsService },
+        { provide: ContactService, useValue: contactService },
         { provide: AuthService, useValue: authService },
         { provide: MatDialog, useValue: dialog },
         { provide: MatSnackBar, useValue: snackBar },
@@ -55,6 +59,10 @@ describe('StudentRoster', () => {
     contactId = 'contact-1';
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     sessionsService.getAllSessions.mockReturnValue(of([]));
+    contactService.getStaff.mockReturnValue(of([
+      { id: 't-1', first_name: 'Tess', last_name: 'Ng' } as Contact,
+    ]));
+    contactService.getContact.mockReturnValue(of([]));
   });
 
   it('loads all students (with parent names) for an admin on init', () => {
@@ -194,8 +202,38 @@ describe('StudentRoster', () => {
     studentService.getStudents.mockReturnValue(of([]));
     const component = build();
     expect((component as unknown as { rosterColumns: string[] }).rosterColumns).toEqual([
-      'contact_name', 'name', 'status', 'package', 'make_up_minutes', 'scholarship', 'actions',
+      'contact_name', 'name', 'tutor', 'status', 'package', 'make_up_minutes', 'scholarship', 'actions',
     ]);
+  });
+
+  it('resolves the Tutor column from staff, fetches former staff, dashes the rest', () => {
+    studentService.getStudents.mockReturnValue(of([
+      { ...student, assigned_tutor_id: 't-1' },
+      { ...student, id: 's-2', assigned_tutor_id: 't-gone' },
+      { ...student, id: 's-3' }, // unassigned
+    ] as Student[]));
+    contactService.getContact.mockReturnValue(
+      of([{ id: 't-gone', email: 'former@example.com' } as Contact]));
+    const component = build();
+    component.ngOnInit();
+    const rows = (component as unknown as { dataSource: { data: Student[] } }).dataSource.data;
+    expect(component.tutorName(rows.find(s => s.id === 's-1')!)).toBe('Tess Ng');
+    // Former staff resolve by individual fetch — name-less contacts fall back to email.
+    expect(contactService.getContact).toHaveBeenCalledWith('t-gone');
+    expect(component.tutorName(rows.find(s => s.id === 's-2')!)).toBe('former@example.com');
+    expect(component.tutorName(rows.find(s => s.id === 's-3')!)).toBe('—');
+  });
+
+  it('the free-text search matches tutor names', () => {
+    studentService.getStudents.mockReturnValue(of([
+      { ...student, assigned_tutor_id: 't-1' },
+      { ...student, id: 's-2', name: 'Sam' },
+    ] as Student[]));
+    const component = build();
+    component.ngOnInit();
+    const ds = (component as unknown as { dataSource: { filter: string; filteredData: Student[] } }).dataSource;
+    ds.filter = 'tess';
+    expect(ds.filteredData.map(s => s.id)).toEqual(['s-1']);
   });
 
   it('opens the sessions dialog from the icon without triggering row navigation', () => {
