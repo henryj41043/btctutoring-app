@@ -7,13 +7,15 @@ import {StudentService} from '../services/student.service';
 import {ScholarshipService} from '../services/scholarship.service';
 import {Contact} from '../models/contact.model';
 import {Student} from '../models/student.model';
+import {StudentStatus} from '../enums/student-status.enum';
 import {ScholarshipRecord} from '../models/scholarship-record.model';
 import * as csv from '../utils/csv';
 
 const contact = (over: Partial<Contact> = {}): Contact =>
   ({id: 'c-1', first_name: 'Casey', last_name: 'Lee', scholarship_name: 'Fund A', ...over}) as Contact;
 const scholarshipStudent = (over: Partial<Student> = {}): Student =>
-  ({id: 's-1', contact_id: 'c-1', scholarship: true, ...over}) as Student;
+  ({id: 's-1', contact_id: 'c-1', scholarship: true,
+    status: StudentStatus.ACTIVE_STUDENT, ...over}) as Student;
 const record = (over: Partial<ScholarshipRecord> = {}): ScholarshipRecord => ({
   contact_id: 'c-1',
   month: '2026-08',
@@ -104,6 +106,25 @@ describe('Scholarships', () => {
     expect(rows(c)[0].record?.invoice_number).toBe('INV-8');
     expect(rows(c)[1].record).toBeUndefined();
     expect(rows(c)[2].record?.invoice_number).toBe('INV-3');
+  });
+
+  it('only ACTIVE flagged students list their family — unless it holds a month record', () => {
+    contactService.getContacts.mockReturnValue(of([
+      contact({id: 'c-1', first_name: 'ActiveFam'}),
+      contact({id: 'c-2', first_name: 'InactiveFam'}),      // flagged but inactive, no record
+      contact({id: 'c-3', first_name: 'InactiveWithRec'}),  // inactive, but has this month's record
+    ]));
+    studentService.getStudents.mockReturnValue(of([
+      scholarshipStudent({contact_id: 'c-1'}),
+      scholarshipStudent({id: 's-2', contact_id: 'c-2', status: StudentStatus.PAST_STUDENT}),
+      scholarshipStudent({id: 's-3', contact_id: 'c-3', status: StudentStatus.PAST_STUDENT}),
+    ]));
+    scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(of([
+      record({contact_id: 'c-3', invoice_number: 'INV-3'}),
+    ]));
+    const c = build();
+    c.ngOnInit();
+    expect(rows(c).map(r => r.contact.first_name)).toEqual(['ActiveFam', 'InactiveWithRec']);
   });
 
   it('paid means the month record carries an invoice-paid date', () => {
