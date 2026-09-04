@@ -32,6 +32,23 @@
   font-size: 0.9rem;
 }
 
+.planning-overrides {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px 2px;
+  margin: 4px 0 12px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.planning-overrides-hint {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
 .pending-change-note {
   margin: 0 0 8px;
   font-size: 0.85rem;

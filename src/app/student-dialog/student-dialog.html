@@ -110,6 +110,21 @@
           <mat-label>Extra Planning (min/session)</mat-label>
           <input matInput type="number" min="0" formControlName="extra_planning_minutes">
         </mat-form-field>
+        @if (planningOverrideRows.length > 0) {
+          <div class="planning-overrides">
+            <p class="pending-change-title">Per-Tutor Extra Planning</p>
+            <p class="planning-overrides-hint">
+              Blank = the default above. Set a value to credit that tutor differently.
+            </p>
+            @for (row of planningOverrideRows; track row.tutor_id) {
+              <mat-form-field>
+                <mat-label>{{ row.label }} (min/session)</mat-label>
+                <input matInput type="number" min="0"
+                       [(ngModel)]="row.minutes" [ngModelOptions]="{standalone: true}">
+              </mat-form-field>
+            }
+          </div>
+        }
         <!-- Scheduled package change: entered now, applied automatically by
              the backend on the effective 1st (billing + schedule follow). -->
         <div class="pending-change-section">

@@ -8,6 +8,7 @@ import { AuthService } from '../services/auth.service';
 import { SessionsService } from '../services/sessions.service';
 import { ContactService } from '../services/contact.service';
 import { StudentService } from '../services/student.service';
+import { Student } from '../models/student.model';
 import { Contact } from '../models/contact.model';
 import { Session } from '../models/session.model';
 import { PayrollEntry } from '../models/payroll-entry.model';
@@ -325,6 +326,63 @@ describe('Payroll', () => {
     // (0.67 + 0.67) x $15
     expect(entry.planning_compensation).toBeCloseTo(20.1, 2);
     expect(entry.total_compensation).toBeCloseTo(160 + 20.1, 2);
+  });
+
+  it('a per-tutor override wins over the student default for THIS tutor', () => {
+    // self is 'c-1'; the student's default is 20 but c-1's override is 45.
+    studentService.getStudentsByTutor.mockReturnValue(
+      of([
+        {
+          id: 's-1', name: 'Pat', extra_planning_minutes: 20,
+          extra_planning_by_tutor: [
+            { tutor_id: 'c-1', minutes: 45 },
+            { tutor_id: 'c-other', minutes: 5 }, // someone else's override — ignored
+          ],
+        },
+      ] as Student[]),
+    );
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-06-06T09:00:00',
+          end_datetime: '2026-06-06T10:00:00',
+        },
+      ] as Session[]),
+    );
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+    const entry = data(p)[0];
+    // 1 counted session x 45 min override = 0.75 h (not 20 min = 0.33 h).
+    expect(entry.extra_planning_time).toBeCloseTo(0.75, 2);
+  });
+
+  it('a tutor without an override earns the student default (other tutors overridden)', () => {
+    studentService.getStudentsByTutor.mockReturnValue(
+      of([
+        {
+          id: 's-1', name: 'Pat', extra_planning_minutes: 20,
+          extra_planning_by_tutor: [{ tutor_id: 'c-other', minutes: 45 }],
+        },
+      ] as Student[]),
+    );
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-06-06T09:00:00',
+          end_datetime: '2026-06-06T10:00:00',
+        },
+      ] as Session[]),
+    );
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+    // 1 session x 20 min default = 0.33 h.
+    expect(data(p)[0].extra_planning_time).toBeCloseTo(0.33, 2);
   });
 
   it('degrades to zero extra credit when the student fetch fails', () => {
