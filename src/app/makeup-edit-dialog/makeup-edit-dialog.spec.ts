@@ -140,6 +140,35 @@ describe('MakeupEditDialog', () => {
     expect(dialogRef.close).not.toHaveBeenCalled();
   });
 
+  it('Save commits an uncommitted "Add minutes" value instead of dropping it (client regression)', () => {
+    // Adam Miksa: 270 typed into the add box, Save clicked without Add ->
+    // the ledger was written EMPTY. Now Save adds the row first.
+    const c = build({});
+    (c as unknown as { addMinutes: number }).addMinutes = 270;
+    expect(c.projectedTotal).toBe(270); // the preview already counts it
+    c.save();
+    const payload = saved();
+    expect(payload.make_up_minutes).toBe(270);
+    expect(payload.make_up_batches).toEqual([
+      { minutes: 270, earned_date: '2026-08-20T15:00:00.000Z' },
+    ]);
+    expect(dialogRef.close).toHaveBeenCalledWith({
+      make_up_batches: [{ minutes: 270, earned_date: '2026-08-20T15:00:00.000Z' }],
+      make_up_minutes: 270,
+    });
+  });
+
+  it('an empty or non-positive add box adds nothing on Save', () => {
+    const c = build({ make_up_batches: [{ minutes: 30, earned_date: '2026-08-01T00:00:00.000Z' }] });
+    (c as unknown as { addMinutes: number | null }).addMinutes = null;
+    expect(c.pendingAddMinutes).toBe(0);
+    (c as unknown as { addMinutes: number }).addMinutes = -5;
+    expect(c.pendingAddMinutes).toBe(0);
+    c.save();
+    expect(saved().make_up_batches).toHaveLength(1);
+    expect(saved().make_up_minutes).toBe(30);
+  });
+
   it('cancel closes with null', () => {
     const c = build({});
     c.cancel();

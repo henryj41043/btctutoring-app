@@ -74,6 +74,10 @@
     </button>
   </div>
 
+  @if (pendingAddMinutes > 0) {
+    <p class="makeup-pending-add">{{pendingAddMinutes}} min will be added when you save.</p>
+  }
+
   <p class="makeup-total">New balance: <strong>{{projectedTotal}} min</strong></p>
 
   @if (!valid) {
