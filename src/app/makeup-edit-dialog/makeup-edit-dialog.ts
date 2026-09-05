@@ -128,11 +128,17 @@ export class MakeupEditDialog {
     row.removed = !row.removed;
   }
 
-  /** The balance as it will be after saving. */
+  /** Minutes typed into "Add minutes" but not yet clicked in — Save commits them. */
+  get pendingAddMinutes(): number {
+    return this.addMinutes && this.addMinutes > 0 ? this.addMinutes : 0;
+  }
+
+  /** The balance as it will be after saving (including an uncommitted add). */
   get projectedTotal(): number {
     return this.rows
       .filter(r => !r.removed)
-      .reduce((sum, r) => sum + (r.minutes > 0 ? r.minutes : 0), 0);
+      .reduce((sum, r) => sum + (r.minutes > 0 ? r.minutes : 0), 0)
+      + this.pendingAddMinutes;
   }
 
   get valid(): boolean {
@@ -143,6 +149,10 @@ export class MakeupEditDialog {
     if (this.submitting || !this.valid) {
       return;
     }
+    // A number typed into "Add minutes" without clicking Add must not be
+    // silently dropped (client lost a 270-minute entry this way): commit it
+    // as a row first — addRow is a no-op for an empty/non-positive value.
+    this.addRow();
     const now = new Date().toISOString();
     const batches: MakeupBatch[] = this.rows
       .filter(r => !r.removed)
