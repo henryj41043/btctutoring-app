@@ -1,6 +1,9 @@
 import {
+  makeupMinutesLeftToSchedule,
   mutatesStudent,
   pendingMakeupMinutesFor,
+  scheduledMakeupMinutesByStudent,
+  scheduledMakeupRange,
   validateMakeupPendingBalance,
   validateSessionLength,
 } from './session-rules';
@@ -116,6 +119,44 @@ describe('session-rules', () => {
       const existing = [pendingMakeup('m1', 30, {id: undefined})];
       expect(pendingMakeupMinutesFor(existing, 's-1', new Set())).toBe(30);
       expect(pendingMakeupMinutesFor(existing, 's-1', new Set(['']))).toBe(0);
+    });
+  });
+
+  describe('scheduledMakeupMinutesByStudent', () => {
+    it('sums PENDING make-up minutes per student, ignoring other types/statuses', () => {
+      const map = scheduledMakeupMinutesByStudent([
+        pendingMakeup('m1', 30),
+        pendingMakeup('m2', 90),
+        pendingMakeup('other', 60, {student_id: 's-2'}),
+        pendingMakeup('done', 60, {status: SessionStatus.COMPLETED}),
+        pendingMakeup('cancelled', 60, {status: SessionStatus.CANCELLED}),
+        pendingMakeup('tutoring', 60, {type: SessionType.TUTORING}),
+        pendingMakeup('no-student', 60, {student_id: undefined}),
+      ]);
+      expect(map.get('s-1')).toBe(120);
+      expect(map.get('s-2')).toBe(60);
+      expect(map.size).toBe(2);
+    });
+
+    it('is empty with no sessions', () => {
+      expect(scheduledMakeupMinutesByStudent([]).size).toBe(0);
+    });
+  });
+
+  describe('makeupMinutesLeftToSchedule', () => {
+    it('is the balance less what is scheduled, floored at zero', () => {
+      expect(makeupMinutesLeftToSchedule(270, 120)).toBe(150);
+      expect(makeupMinutesLeftToSchedule(60, 60)).toBe(0);
+      expect(makeupMinutesLeftToSchedule(30, 90)).toBe(0);
+    });
+  });
+
+  describe('scheduledMakeupRange', () => {
+    it('spans one year either side of today', () => {
+      const now = new Date(2026, 8, 8, 12, 0, 0);
+      const range = scheduledMakeupRange(now);
+      expect(new Date(range.from).getTime()).toBe(new Date(2026 - 1, 8, 8).getTime());
+      expect(new Date(range.to).getTime()).toBe(new Date(2026 + 1, 8, 8).getTime());
     });
   });
 

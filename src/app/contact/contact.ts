@@ -53,6 +53,8 @@ import {PackageRow} from '../models/package-row.model';
 import {minNoteOrder, noteDateIso, noteGroup, sortNotes} from '../utils/note-forms';
 import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-forms';
 import {availableMakeupMinutes} from '../utils/makeup';
+import {makeupMinutesLeftToSchedule, scheduledMakeupMinutesByStudent, scheduledMakeupRange} from '../utils/session-rules';
+import {SessionsService} from '../services/sessions.service';
 import {studentDisplayName} from '../utils/student-name';
 import {pendingPackageNote} from '../utils/pending-package';
 import {studentStatusChipClass} from '../utils/status-chip';
@@ -108,6 +110,9 @@ export class Contact implements OnInit {
   private dialog: MatDialog = inject(MatDialog);
   private scheduleService: ScheduleService = inject(ScheduleService);
   private billingService: BillingService = inject(BillingService);
+  private sessionsService: SessionsService = inject(SessionsService);
+  /** Pending make-up minutes per student id; null until loaded (or when the read failed). */
+  private scheduledMakeupById: Map<string, number> | null = null;
   private router: Router = inject(Router);
 
   @ViewChild('rosterSort') set rosterSort(sort: MatSort) {
@@ -226,6 +231,9 @@ export class Contact implements OnInit {
     // load (and admin-gate) themselves.
     if (this.authService.isAdmin()) {
       this.loadStudents();
+      // Scheduled make-up tallies (admin-only sessions read) for both the
+      // family cards and a tutor's roster.
+      this.loadScheduledMakeup();
     } else {
       this.studentsLoading = false;
     }
@@ -499,6 +507,39 @@ export class Contact implements OnInit {
   /** A student's currently-available make-up minutes (expired batches excluded). */
   availableMakeup(student: Student): number {
     return availableMakeupMinutes(student);
+  }
+
+  /** Minutes already committed to the student's PENDING make-up sessions; null while unknown. */
+  scheduledMakeup(student: Student): number | null {
+    if (!this.scheduledMakeupById) return null;
+    return this.scheduledMakeupById.get(student.id ?? '') ?? 0;
+  }
+
+  /**
+   * "270 · 120 scheduled · 150 left" — the available balance with what is
+   * already scheduled and what remains to book. Just the balance until the
+   * sessions read completes (or when it isn't available, e.g. a tutor's view).
+   */
+  makeupSummary(student: Student): string {
+    const available = this.availableMakeup(student);
+    const scheduled = this.scheduledMakeup(student);
+    if (scheduled === null) return `${available}`;
+    const left = makeupMinutesLeftToSchedule(available, scheduled);
+    return `${available} · ${scheduled} scheduled · ${left} left`;
+  }
+
+  /** Loads pending make-up minutes for every student (one ranged sessions read). */
+  private loadScheduledMakeup(): void {
+    this.sessionsService.getAllSessions(scheduledMakeupRange()).pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(sessions => {
+      this.scheduledMakeupById = scheduledMakeupMinutesByStudent(sessions);
+      this.cdr.markForCheck();
+    });
   }
 
   /** True when the family has 3+ active, enrolled students — the sibling-discount condition. */
@@ -1060,9 +1101,13 @@ export class Contact implements OnInit {
   }
 
   openSessionsDialog(student: Student): void {
-    this.dialog.open(StudentSessionsDialog, {
+    const ref = this.dialog.open(StudentSessionsDialog, {
       data: student,
       width: '700px',
+    });
+    // Make-ups may have been scheduled or finalized inside — refresh the tallies.
+    ref.afterClosed().subscribe(() => {
+      if (this.authService.isAdmin()) this.loadScheduledMakeup();
     });
   }
 

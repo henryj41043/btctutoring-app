@@ -81,6 +81,39 @@ export function pendingMakeupMinutesFor(
 }
 
 /**
+ * Pending (scheduled but not yet finalized) make-up minutes per student id —
+ * the same "committed" rule validateMakeupPendingBalance uses, aggregated for
+ * the contact page and the Make-up Report. Students with no pending make-up
+ * are absent from the map (read with `?? 0`).
+ */
+export function scheduledMakeupMinutesByStudent(sessions: Session[]): Map<string, number> {
+  const byStudent = new Map<string, number>();
+  for (const s of sessions) {
+    if (!s.student_id || s.type !== SessionType.MAKE_UP || s.status !== SessionStatus.PENDING) {
+      continue;
+    }
+    byStudent.set(s.student_id, (byStudent.get(s.student_id) ?? 0) + durationOf(s));
+  }
+  return byStudent;
+}
+
+/** Make-up minutes still to be scheduled: the available balance less what is already pending (never negative). */
+export function makeupMinutesLeftToSchedule(available: number, scheduled: number): number {
+  return Math.max(0, available - scheduled);
+}
+
+/**
+ * The start_datetime window used to fetch sessions for the scheduled make-up
+ * tallies: a year either side of today. Pending make-ups outside it are stale
+ * enough that a full-table read isn't worth the cost.
+ */
+export function scheduledMakeupRange(now: Date = new Date()): {from: string; to: string} {
+  const from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  const to = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+  return {from: from.toISOString(), to: to.toISOString()};
+}
+
+/**
  * Validates that a student's total pending make-up minutes stay within their
  * make-up balance after adding `addMinutes`. Returns an error message or null.
  */

@@ -11,18 +11,25 @@ import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatDialog} from '@angular/material/dialog';
-import {catchError, EMPTY} from 'rxjs';
+import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {MakeupEditDialog} from '../makeup-edit-dialog/makeup-edit-dialog';
 import {StudentService} from '../services/student.service';
+import {SessionsService} from '../services/sessions.service';
+import {Session} from '../models/session.model';
 import {Student} from '../models/student.model';
 import {availableMakeupMinutes, MakeupBatchView, unexpiredBatchViews} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
+import {makeupMinutesLeftToSchedule, scheduledMakeupMinutesByStudent, scheduledMakeupRange} from '../utils/session-rules';
 import {TableStateStore} from '../utils/table-state';
 
 /** One report row: a student holding an available make-up balance. */
 export interface MakeupReportRow {
   student: Student;
   available: number;
+  /** Minutes already committed to PENDING make-up sessions; null = sessions failed to load. */
+  scheduled: number | null;
+  /** available − scheduled (floored at 0); null when scheduled is unknown. */
+  left: number | null;
   batches: MakeupBatchView[];
   /** Soonest batch expiry; null = never expires (exempt) or legacy scalar. */
   soonestExpiry: Date | null;
@@ -32,8 +39,9 @@ export interface MakeupReportRow {
 
 /**
  * Admin-only report of every student with available make-up minutes: totals,
- * when they expire, and the cancelled sessions they came from — the at-a-glance
- * reference for parent questions. Rows expand to per-batch detail.
+ * how much is already scheduled (pending make-ups) and still left to schedule,
+ * when they expire, and the cancelled sessions they came from — the
+ * at-a-glance reference for parent questions. Rows expand to per-batch detail.
  */
 @Component({
   selector: 'app-makeup-report',
@@ -56,6 +64,7 @@ export interface MakeupReportRow {
 })
 export class MakeupReport implements OnInit {
   private studentService: StudentService = inject(StudentService);
+  private sessionsService: SessionsService = inject(SessionsService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   // Cancels the in-flight load when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
@@ -69,7 +78,7 @@ export class MakeupReport implements OnInit {
     }
   }
 
-  protected reportColumns: string[] = ['contact_name', 'name', 'available', 'soonest_expiry', 'actions'];
+  protected reportColumns: string[] = ['contact_name', 'name', 'available', 'scheduled', 'left', 'soonest_expiry', 'actions'];
   private dialog: MatDialog = inject(MatDialog);
   protected dataSource = new MatTableDataSource<MakeupReportRow>([]);
   protected readonly studentDisplayName = studentDisplayName;
@@ -94,7 +103,17 @@ export class MakeupReport implements OnInit {
   private load(): void {
     this.loading = true;
     this.cdr.markForCheck();
-    this.studentService.getStudents(true).pipe(
+    forkJoin({
+      students: this.studentService.getStudents(true),
+      // Pending make-ups drive the Scheduled / Left columns. A failed sessions
+      // read must not hide the balances — those columns just show '—'.
+      sessions: this.sessionsService.getAllSessions(scheduledMakeupRange()).pipe(
+        catchError(error => {
+          console.log(error);
+          return of(null as Session[] | null);
+        }),
+      ),
+    }).pipe(
       catchError(error => {
         console.log(error);
         this.loading = false;
@@ -102,16 +121,17 @@ export class MakeupReport implements OnInit {
         return EMPTY;
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(students => {
-      this.dataSource.data = this.buildRows(students);
+    ).subscribe(({students, sessions}) => {
+      this.dataSource.data = this.buildRows(students, sessions);
       this.loading = false;
       this.cdr.markForCheck();
     });
   }
 
   /** Rows for every student with a balance, soonest-to-expire first. */
-  private buildRows(students: Student[]): MakeupReportRow[] {
+  private buildRows(students: Student[], sessions: Session[] | null): MakeupReportRow[] {
     const now = new Date();
+    const scheduledById = sessions ? scheduledMakeupMinutesByStudent(sessions) : null;
     return students
       .map(student => {
         const available = availableMakeupMinutes(student, now);
@@ -119,9 +139,12 @@ export class MakeupReport implements OnInit {
         const expiries = batches
           .map(b => b.expires)
           .filter((d): d is Date => d !== null);
+        const scheduled = scheduledById ? (scheduledById.get(student.id ?? '') ?? 0) : null;
         return {
           student,
           available,
+          scheduled,
+          left: scheduled === null ? null : makeupMinutesLeftToSchedule(available, scheduled),
           batches,
           soonestExpiry: expiries.length
             ? new Date(Math.min(...expiries.map(d => d.getTime())))
