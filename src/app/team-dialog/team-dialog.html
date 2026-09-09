@@ -36,14 +36,13 @@
         <mat-label>Members</mat-label>
         <mat-select formControlName="member_contact_ids" multiple>
           @for (memberOption of memberOptions; track memberOption.id) {
-            <mat-option [value]="memberOption.id"
-                        [disabled]="isAssignedElsewhere(memberOption.id)">
-              {{ displayName(memberOption) }}
+            <mat-option [value]="memberOption.id">
+              {{ displayName(memberOption) }}@if (memberOption.user_group === 'LeadTutors') { (Lead Tutor) }
             </mat-option>
           }
         </mat-select>
       </mat-form-field>
-      <p class="team-hint">A tutor can belong to only one team. The lead sees the whole team's sessions, read-only.</p>
+      <p class="team-hint">The lead sees the whole team's sessions, read-only. A tutor may be on several teams, and adding a Lead Tutor as a member includes their entire team.</p>
     </form>
   }
 
