@@ -107,6 +107,8 @@ export function mutatesStudent(type: SessionType, status: SessionStatus): boolea
     return false;
   }
   if (type === SessionType.MAKE_UP) {
+    // A cancelled make-up neither banks nor deducts — the session just leaves
+    // Pending, releasing its committed minutes back to the schedulable balance.
     return status === SessionStatus.COMPLETED || status === SessionStatus.NO_CALL_NO_SHOW;
   }
   // Regular tutoring only mutates the student when cancelled (minutes are banked).
