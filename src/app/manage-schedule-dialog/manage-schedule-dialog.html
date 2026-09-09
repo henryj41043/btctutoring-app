@@ -26,6 +26,7 @@
         <input matInput [matDatepicker]="startpicker" [(ngModel)]="startDate">
         <mat-datepicker #startpicker/>
         <mat-datepicker-toggle [for]="startpicker" matSuffix/>
+        <mat-hint>Starting on or before the first scheduled session of the month bills the full month; later starts are prorated per session.</mat-hint>
       </mat-form-field>
       <br/>
     }

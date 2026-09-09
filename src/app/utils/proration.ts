@@ -33,6 +33,19 @@ export function countRemainingSlots(schedule: ScheduleSlot[], startDate: Date): 
 }
 
 /**
+ * True when a start date misses none of the month's scheduled sessions — the
+ * student receives every slot from the 1st through month end, so the month is
+ * billed in full (client policy 2026-09: a start within the first week is a
+ * full-month charge; the exact rule is "on or before the first scheduled
+ * session"). Callers guard the empty-schedule case themselves. Mirror of the
+ * backend helper.
+ */
+export function startMissesNoSlots(schedule: ScheduleSlot[], startDate: Date): boolean {
+  const monthStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  return countRemainingSlots(schedule, startDate) === countRemainingSlots(schedule, monthStart);
+}
+
+/**
  * Counts the package session slots occurring from the 1st of `date`'s month up
  * to (but not including) `date`. Used at a mid-month package change to price the
  * old package's portion by the sessions received before the change.

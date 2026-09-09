@@ -6,6 +6,14 @@ import {Weekday} from '../enums/weekday.enum';
 const succeed = (over: Partial<Student> = {}): Student =>
   ({ package: 'Succeed', ...over }) as Student;
 
+// An Excel ($273, 1/wk) student on Thursdays — September 2026 Thursdays: 3, 10, 17, 24.
+const excelThursday = (start: string): Student =>
+  ({
+    package: 'Excel',
+    package_start_date: start,
+    schedule: [{ weekday: Weekday.THURSDAY, start_time: '15:00', end_time: '15:45' }],
+  }) as Student;
+
 // A Succeed student with a Monday schedule, so mid-month starts actually prorate.
 const prorating = (start: string): Student =>
   succeed({
@@ -89,9 +97,49 @@ describe('studentMonthlyCharge', () => {
     });
     expect(studentMonthlyCharge(student, 2026, 5, TEST_CATALOG)).toBe(41.77);
   });
+
+  it('charges the full month when the start misses no scheduled session (client policy)', () => {
+    // Excel $273, Thursdays. September 2026 Thursdays: 3, 10, 17, 24. A start
+    // on (or before) the first Thursday receives every session → full month
+    // (Tiffany Owens / Kloepfer case: Sept 3 start).
+    expect(studentMonthlyCharge(excelThursday('2026-09-03T00:00:00'), 2026, 8, TEST_CATALOG)).toBe(273);
+    expect(studentMonthlyCharge(excelThursday('2026-09-02T00:00:00'), 2026, 8, TEST_CATALOG)).toBe(273);
+  });
+
+  it('still prorates a start after the first scheduled session', () => {
+    // Start Sept 4 → Thursdays 10, 17, 24 remain → 3 × $63 (273*12/52) = $189.
+    expect(studentMonthlyCharge(excelThursday('2026-09-04T00:00:00'), 2026, 8, TEST_CATALOG)).toBe(189);
+  });
+
+  it('prorates a first-week start that missed one of a multi-slot week', () => {
+    // Succeed (2/wk, $41.77/session), Tue/Thu. Sept 2026: Tue 1,8,15,22,29;
+    // Thu 3,10,17,24. Starting Wed Sept 2 missed Tuesday the 1st → 8 slots
+    // remain → 334.16 (not the full $362).
+    const student = succeed({
+      package_start_date: '2026-09-02T00:00:00',
+      schedule: [
+        { weekday: Weekday.TUESDAY, start_time: '10:00', end_time: '10:30' },
+        { weekday: Weekday.THURSDAY, start_time: '10:00', end_time: '10:30' },
+      ],
+    });
+    expect(studentMonthlyCharge(student, 2026, 8, TEST_CATALOG)).toBe(334.16);
+  });
 });
 
 describe('studentSemiMonthlyCharge', () => {
+  it('splits a full first month 50/50 when the start misses no scheduled session', () => {
+    // Sept 3 start, Thursdays → full $273 → 136.50 / 136.50, then normal.
+    const s = excelThursday('2026-09-03T00:00:00');
+    expect(studentSemiMonthlyCharge(s, 2026, 8, TEST_CATALOG)).toEqual({ first: 136.5, fifteenth: 136.5 });
+    expect(studentSemiMonthlyCharge(s, 2026, 9, TEST_CATALOG)).toEqual({ first: 136.5, fifteenth: 136.5 });
+  });
+
+  it('still prorates the semi-monthly first month after a missed session', () => {
+    // Sept 4 start → $189 prorated, split across the 1st and 15th.
+    expect(studentSemiMonthlyCharge(excelThursday('2026-09-04T00:00:00'), 2026, 8, TEST_CATALOG))
+      .toEqual({ first: 94.5, fifteenth: 94.5 });
+  });
+
   it('splits an ongoing month 50/50', () => {
     expect(studentSemiMonthlyCharge(succeed({ package_start_date: '2026-05-01T00:00:00' }), 2026, 6, TEST_CATALOG))
       .toEqual({ first: 181, fifteenth: 181 });

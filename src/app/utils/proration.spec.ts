@@ -1,4 +1,4 @@
-import {countRemainingSlots, countSlotsBeforeInMonth, proratedFirstMonthCost, ScheduleSlot, semiMonthlySplit} from './proration';
+import {countRemainingSlots, countSlotsBeforeInMonth, proratedFirstMonthCost, ScheduleSlot, semiMonthlySplit, startMissesNoSlots} from './proration';
 import {TEST_CATALOG} from '../../testing/package-catalog.fixture';
 import {Weekday} from '../enums/weekday.enum';
 
@@ -98,5 +98,24 @@ describe('countSlotsBeforeInMonth', () => {
 
   it('returns zero for an empty schedule', () => {
     expect(countSlotsBeforeInMonth([], new Date(2026, 6, 20))).toBe(0);
+  });
+});
+
+describe('startMissesNoSlots', () => {
+  // September 2026: Thursdays 3, 10, 17, 24; Tuesdays 1, 8, 15, 22, 29.
+  const thursday = [slot(Weekday.THURSDAY)];
+  const tueThu = [slot(Weekday.TUESDAY), slot(Weekday.THURSDAY)];
+
+  it('is true on the 1st and on/before the first scheduled slot', () => {
+    expect(startMissesNoSlots(thursday, new Date(2026, 8, 1))).toBe(true);
+    expect(startMissesNoSlots(thursday, new Date(2026, 8, 2))).toBe(true);
+    expect(startMissesNoSlots(thursday, new Date(2026, 8, 3))).toBe(true);
+  });
+
+  it('is false once a scheduled slot has been missed', () => {
+    expect(startMissesNoSlots(thursday, new Date(2026, 8, 4))).toBe(false);
+    // Multi-slot week: a start on the 2nd already missed Tuesday the 1st.
+    expect(startMissesNoSlots(tueThu, new Date(2026, 8, 2))).toBe(false);
+    expect(startMissesNoSlots(tueThu, new Date(2026, 8, 1))).toBe(true);
   });
 });

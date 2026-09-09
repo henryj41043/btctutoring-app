@@ -1,6 +1,6 @@
 import {Student} from '../models/student.model';
 import {PackageCatalog, PackageDef, resolvePackageDef, round2} from './package-config';
-import {countRemainingSlots, proratedFirstMonthCost, semiMonthlySplit} from './proration';
+import {countRemainingSlots, proratedFirstMonthCost, semiMonthlySplit, startMissesNoSlots} from './proration';
 import {packageFieldsForMonth} from './pending-package';
 
 /** Flat monthly fee per student enrolled in the "BTC & Me" group program. */
@@ -41,14 +41,24 @@ export interface SemiMonthlyCharge {
 
 /**
  * The prorated charge for a mid-month start: per-session cost times the slots
- * the student receives from their start date through month end. Without a
- * schedule the slots can't be counted, so fall back to the full monthly cost
- * rather than silently billing $0 (studentNeedsAttention flags these).
+ * the student receives from their start date through month end. A start that
+ * misses none of the month's sessions (on or before the first scheduled slot)
+ * is a full month, not a proration. Without a schedule the slots can't be
+ * counted, so fall back to the full monthly cost rather than silently billing
+ * $0 (studentNeedsAttention flags these).
  */
 function proratedCharge(def: PackageDef, student: Student, start: Date): number {
   const schedule = student.schedule ?? [];
   if (schedule.length === 0) return def.monthlyCost;
+  if (startMissesNoSlots(schedule, start)) return def.monthlyCost;
   return proratedFirstMonthCost(def, countRemainingSlots(schedule, start));
+}
+
+/** True when a first month bills in full: started on the 1st, or before any scheduled session was missed. */
+function isFullFirstMonth(student: Student, start: Date): boolean {
+  if (start.getDate() <= 1) return true;
+  const schedule = student.schedule ?? [];
+  return schedule.length > 0 && startMissesNoSlots(schedule, start);
 }
 
 /** A month key 'YYYY-MM' (month is 0-indexed) — the mid-month-change tag format. */
@@ -89,9 +99,10 @@ function baseMonthlyCharge(def: PackageDef, student: Student, year: number, mont
 
 /**
  * The amount to charge a student for a given billing month (`month` is
- * 0-indexed). Returns the prorated cost for their first partial month, the full
- * monthly cost for ongoing months, or 0 if the package hasn't started by
- * month-end or isn't configured (e.g. an unconfigured CUSTOM student).
+ * 0-indexed). Returns the prorated cost for their first partial month (full
+ * when the start misses no scheduled session), the full monthly cost for
+ * ongoing months, or 0 if the package hasn't started by month-end or isn't
+ * configured (e.g. an unconfigured CUSTOM student).
  */
 export function studentMonthlyCharge(
   student: Student,
@@ -157,8 +168,9 @@ export function studentSemiMonthlyCharge(
   if (displayedIdx < startIdx) return {first: 0, fifteenth: 0}; // package hasn't started
   if (displayedIdx > startIdx) return normalSplit(); // ongoing month after the first
 
-  // Starting on the 1st is a full month — no proration.
-  if (start.getDate() <= 1) return normalSplit();
+  // Starting on the 1st, or before the month's first scheduled session, is a
+  // full month — no proration, normal 50/50 split.
+  if (isFullFirstMonth(student, start)) return normalSplit();
 
   // Prorated first month, billed in the start month: starts on/after the 15th
   // land entirely on the 15th; earlier starts split evenly across both dates.
