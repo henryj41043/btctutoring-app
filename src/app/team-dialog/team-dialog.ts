@@ -12,6 +12,8 @@ import {Team} from '../models/team.model';
 import {Contact} from '../models/contact.model';
 import {contactDisplayName} from '../utils/contact-name';
 import {UserGroup} from '../enums/user-group.enum';
+import {Service} from '../enums/service.enum';
+import {StaffStatus} from '../enums/staff-status.enum';
 
 export type TeamDialogMode = 'create' | 'edit' | 'delete';
 
@@ -20,7 +22,7 @@ export interface TeamDialogData {
   team?: Team;
   /** Every existing team — used to disable already-assigned picker options. */
   teams: Team[];
-  /** Contact summaries (id/name/user_group) backing the lead/member pickers. */
+  /** Contact summaries (id/name/user_group/service/status) backing the lead/member pickers. */
   contacts: Contact[];
 }
 
@@ -70,14 +72,29 @@ export class TeamDialog implements OnInit {
     });
   }
 
-  /** Lead Tutor contacts for the lead picker. */
-  get leadOptions(): Contact[] {
-    return this.data.contacts.filter(c => c.user_group === UserGroup.LEAD_TUTORS);
+  /**
+   * Current staff only: the Tutors/LeadTutors account group is also carried
+   * by Employment Inquiry applicants and former staff (it's set whenever a
+   * user profile was ever created), which flooded the pickers with names
+   * that can't be on a team. A contact already on THIS team stays listed
+   * even after lapsing so it renders and can be removed — never silently dropped.
+   */
+  private isCurrentStaff(contact: Contact): boolean {
+    return contact.service === Service.HIRING && contact.status === StaffStatus.ACTIVE_STAFF;
   }
 
-  /** Plain tutor contacts for the members picker. */
+  /** Active Lead Tutor contacts (plus this team's current lead) for the lead picker. */
+  get leadOptions(): Contact[] {
+    const currentLead = this.data.team?.lead_contact_id;
+    return this.data.contacts.filter(c =>
+      c.user_group === UserGroup.LEAD_TUTORS && (this.isCurrentStaff(c) || c.id === currentLead));
+  }
+
+  /** Active plain-tutor contacts (plus this team's current members) for the members picker. */
   get memberOptions(): Contact[] {
-    return this.data.contacts.filter(c => c.user_group === UserGroup.TUTORS);
+    const currentMembers = new Set(this.data.team?.member_contact_ids ?? []);
+    return this.data.contacts.filter(c =>
+      c.user_group === UserGroup.TUTORS && (this.isCurrentStaff(c) || currentMembers.has(c.id ?? '')));
   }
 
   /** Disables picker options already assigned to a different team. */
