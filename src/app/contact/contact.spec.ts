@@ -20,6 +20,9 @@ import { Service } from '../enums/service.enum';
 import { StudentStatus } from '../enums/student-status.enum';
 import { StaffStatus } from '../enums/staff-status.enum';
 import { ScheduleService } from '../services/schedule.service';
+import { SessionsService } from '../services/sessions.service';
+import { SessionType } from '../enums/session-type.enum';
+import { SessionStatus } from '../enums/session-status.enum';
 import { ReminderService } from '../services/reminder.service';
 import { EmailService } from '../services/email.service';
 import { PackageService } from '../services/package.service';
@@ -74,6 +77,7 @@ describe('Contact', () => {
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
   const router = { navigate: jest.fn() };
   const scheduleService = { scheduleSummary: jest.fn().mockReturnValue([]) };
+  const sessionsService = { getAllSessions: jest.fn() };
   const billingService = {
     getBillingRecordsByContact: jest.fn(),
     upsertBillingRecord: jest.fn(),
@@ -93,6 +97,7 @@ describe('Contact', () => {
     contactService.updateContact.mockReturnValue(of({} as ContactModel));
     billingService.getBillingRecordsByContact.mockReturnValue(of([]));
     billingService.upsertBillingRecord.mockReturnValue(of({}));
+    sessionsService.getAllSessions.mockReturnValue(of([]));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -110,6 +115,7 @@ describe('Contact', () => {
         { provide: ReminderService, useValue: reminderService },
         { provide: EmailService, useValue: emailService },
         { provide: PackageService, useValue: packageServiceStub },
+        { provide: SessionsService, useValue: sessionsService },
       ],
     });
     const c = TestBed.createComponent(Contact).componentInstance;
@@ -722,6 +728,56 @@ describe('Contact', () => {
         ],
       } as Student;
       expect(c.availableMakeup(s)).toBe(25);
+    });
+
+    it('makeupSummary shows available · scheduled · left once pending make-ups load (admin)', () => {
+      const s = { id: 's-1', make_up_minutes: 270 } as Student;
+      const makeup = (minutes: number, over: object = {}) => ({
+        id: `m-${minutes}`,
+        student_id: 's-1',
+        type: SessionType.MAKE_UP,
+        status: SessionStatus.PENDING,
+        start_datetime: '2026-09-10T10:00:00.000Z',
+        end_datetime: new Date(new Date('2026-09-10T10:00:00.000Z').getTime() + minutes * 60000).toISOString(),
+        ...over,
+      });
+      sessionsService.getAllSessions.mockReturnValue(of([
+        makeup(60),
+        makeup(60, { id: 'm-b' }),
+        makeup(60, { id: 'done', status: SessionStatus.COMPLETED }),
+      ]));
+      const c = build();
+      seedStudent(c);
+      expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+      expect(c.scheduledMakeup(s)).toBe(120);
+      expect(c.makeupSummary(s)).toBe('270 · 120 scheduled · 150 left');
+      // A student with no pending make-ups: everything is left to schedule.
+      expect(c.makeupSummary({ id: 's-2', make_up_minutes: 45 } as Student)).toBe('45 · 0 scheduled · 45 left');
+    });
+
+    it('makeupSummary is just the balance until (or unless) the sessions read completes', () => {
+      const c = build();
+      expect(c.scheduledMakeup({ id: 's-1' } as Student)).toBeNull();
+      expect(c.makeupSummary({ id: 's-1', make_up_minutes: 270 } as Student)).toBe('270');
+      // A failed read leaves it that way rather than showing false zeros.
+      sessionsService.getAllSessions.mockReturnValue(throwError(() => new Error('boom')));
+      seedStudent(c);
+      expect(c.makeupSummary({ id: 's-1', make_up_minutes: 270 } as Student)).toBe('270');
+    });
+
+    it('does not read sessions for a non-admin (tutor) view', () => {
+      isAdmin = false;
+      const c = build();
+      c.ngOnInit();
+      expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+    });
+
+    it('re-reads the scheduled tallies after the sessions dialog closes', () => {
+      const c = build();
+      seedStudent(c);
+      sessionsService.getAllSessions.mockClear();
+      c.openSessionsDialog({ id: 's-1' } as Student);
+      expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
     });
 
     it('qualifiesForSiblingDiscount is true with 3+ active packaged students', () => {

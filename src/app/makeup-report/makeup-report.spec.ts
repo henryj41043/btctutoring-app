@@ -4,6 +4,10 @@ import { MatDialog } from '@angular/material/dialog';
 import { MakeupReport, MakeupReportRow } from './makeup-report';
 import { MakeupEditDialog } from '../makeup-edit-dialog/makeup-edit-dialog';
 import { StudentService } from '../services/student.service';
+import { SessionsService } from '../services/sessions.service';
+import { Session } from '../models/session.model';
+import { SessionType } from '../enums/session-type.enum';
+import { SessionStatus } from '../enums/session-status.enum';
 import { Student } from '../models/student.model';
 
 /** earned_date `days` ago as ISO. */
@@ -21,6 +25,7 @@ const student = (over: Partial<Student> = {}): Student =>
 
 describe('MakeupReport', () => {
   const studentService = { getStudents: jest.fn() };
+  const sessionsService = { getAllSessions: jest.fn() };
   let editDialogResult: unknown;
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(editDialogResult) })) };
 
@@ -29,6 +34,7 @@ describe('MakeupReport', () => {
       imports: [MakeupReport],
       providers: [
         { provide: StudentService, useValue: studentService },
+        { provide: SessionsService, useValue: sessionsService },
         { provide: MatDialog, useValue: dialog },
       ],
     });
@@ -42,6 +48,56 @@ describe('MakeupReport', () => {
     sessionStorage.clear();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     studentService.getStudents.mockReturnValue(of([]));
+    sessionsService.getAllSessions.mockReturnValue(of([]));
+  });
+
+  const pendingMakeup = (student_id: string, minutes: number, over: Partial<Session> = {}): Session =>
+    ({
+      id: `m-${student_id}-${minutes}`,
+      student_id,
+      type: SessionType.MAKE_UP,
+      status: SessionStatus.PENDING,
+      start_datetime: '2026-09-10T10:00:00.000Z',
+      end_datetime: new Date(new Date('2026-09-10T10:00:00.000Z').getTime() + minutes * 60000).toISOString(),
+      ...over,
+    }) as Session;
+
+  it('tallies scheduled (pending make-up) minutes and what is left to schedule', () => {
+    studentService.getStudents.mockReturnValue(of([
+      student({ id: 'adam', make_up_batches: [{ minutes: 270, earned_date: daysAgo(5) }] }),
+      student({ id: 'none-scheduled', make_up_batches: [{ minutes: 60, earned_date: daysAgo(5) }] }),
+    ]));
+    sessionsService.getAllSessions.mockReturnValue(of([
+      pendingMakeup('adam', 60),
+      pendingMakeup('adam', 60),
+      pendingMakeup('adam', 60, { status: SessionStatus.COMPLETED }), // finalized — not scheduled
+      pendingMakeup('adam', 60, { type: SessionType.TUTORING }),
+    ]));
+    const c = build();
+    c.ngOnInit();
+    const adam = rows(c).find(r => r.student.id === 'adam')!;
+    expect(adam.scheduled).toBe(120);
+    expect(adam.left).toBe(150);
+    const none = rows(c).find(r => r.student.id === 'none-scheduled')!;
+    expect(none.scheduled).toBe(0);
+    expect(none.left).toBe(60);
+    // The sessions read is bounded to a from/to window (never a full scan).
+    const range = sessionsService.getAllSessions.mock.calls[0][0];
+    expect(range.from).toBeTruthy();
+    expect(range.to).toBeTruthy();
+  });
+
+  it('keeps the balances and blanks the scheduled columns when the sessions read fails', () => {
+    studentService.getStudents.mockReturnValue(of([
+      student({ id: 'adam', make_up_batches: [{ minutes: 270, earned_date: daysAgo(5) }] }),
+    ]));
+    sessionsService.getAllSessions.mockReturnValue(throwError(() => new Error('boom')));
+    const c = build();
+    c.ngOnInit();
+    expect(rows(c)).toHaveLength(1);
+    expect(rows(c)[0].available).toBe(270);
+    expect(rows(c)[0].scheduled).toBeNull();
+    expect(rows(c)[0].left).toBeNull();
   });
 
   it('lists only students with an available balance, soonest expiry first', () => {
