@@ -53,16 +53,15 @@ export class TeamDialog implements OnInit {
   protected submitting: boolean = false;
   protected hasError: boolean = false;
   protected errorMessage: string = '';
-  /** Contact ids on OTHER teams (lead or member) — one team max per person. */
-  private assignedElsewhere = new Set<string>();
+  /** Contact ids that LEAD another team — a lead heads at most one team. */
+  private leadsElsewhere = new Set<string>();
 
   ngOnInit(): void {
     this.mode = this.data.mode;
     const team: Team = this.data.team ?? {};
     for (const other of this.data.teams ?? []) {
       if (team.id && other.id === team.id) continue;
-      if (other.lead_contact_id) this.assignedElsewhere.add(other.lead_contact_id);
-      for (const id of other.member_contact_ids ?? []) this.assignedElsewhere.add(id);
+      if (other.lead_contact_id) this.leadsElsewhere.add(other.lead_contact_id);
     }
     this.teamForm = this.formBuilder.group({
       id: [team.id ?? null],
@@ -90,16 +89,25 @@ export class TeamDialog implements OnInit {
       c.user_group === UserGroup.LEAD_TUTORS && (this.isCurrentStaff(c) || c.id === currentLead));
   }
 
-  /** Active plain-tutor contacts (plus this team's current members) for the members picker. */
+  /**
+   * Members picker: active tutors AND active Lead Tutors (nested teams — a
+   * lead listed as a member brings their whole team into this lead's view),
+   * plus this team's current members. The team's own lead is never offered
+   * as a member. Membership is not exclusive: a contact may be on several
+   * teams, so nothing here is disabled for being "assigned elsewhere".
+   */
   get memberOptions(): Contact[] {
     const currentMembers = new Set(this.data.team?.member_contact_ids ?? []);
+    const selectedLead: string | null = this.teamForm?.get('lead_contact_id')?.value ?? null;
     return this.data.contacts.filter(c =>
-      c.user_group === UserGroup.TUTORS && (this.isCurrentStaff(c) || currentMembers.has(c.id ?? '')));
+      (c.user_group === UserGroup.TUTORS || c.user_group === UserGroup.LEAD_TUTORS)
+      && c.id !== selectedLead
+      && (this.isCurrentStaff(c) || currentMembers.has(c.id ?? '')));
   }
 
-  /** Disables picker options already assigned to a different team. */
+  /** Disables lead-picker options that already head a different team (a lead heads at most one). */
   isAssignedElsewhere(contactId: string | undefined): boolean {
-    return !!contactId && this.assignedElsewhere.has(contactId);
+    return !!contactId && this.leadsElsewhere.has(contactId);
   }
 
   displayName(contact: Contact): string {
@@ -138,8 +146,8 @@ export class TeamDialog implements OnInit {
     request$.pipe(
       catchError(error => {
         console.log(error);
-        // Surface the server's one-team-max message when present — it names
-        // the conflicting contact ids.
+        // Surface the server's validation message when present (e.g. the
+        // chosen lead already heads another team).
         const serverMessage = typeof error?.error?.message === 'string'
           ? error.error.message
           : undefined;

@@ -70,21 +70,28 @@ describe('TeamDialog', () => {
     const team = { id: 't-1', name: 'T', lead_contact_id: 'c-former-lead', member_contact_ids: ['c-m1', 'c-former'] };
     const c = build({ mode: 'edit', team, teams: [team], contacts });
     expect(c.leadOptions.map(o => o.id)).toEqual(['c-lead-a', 'c-lead-b', 'c-former-lead']);
-    expect(c.memberOptions.map(o => o.id)).toEqual(['c-m1', 'c-m2', 'c-former']);
+    // Leads are members-eligible too; the team's own (lapsed) lead is not.
+    expect(c.memberOptions.map(o => o.id)).toEqual(['c-lead-a', 'c-lead-b', 'c-m1', 'c-m2', 'c-former']);
     // Still never an applicant who isn't on the team.
     expect(c.memberOptions.map(o => o.id)).not.toContain('c-app');
   });
 
-  it('offers only LeadTutors as leads and only Tutors as members', () => {
+  it('offers LeadTutors as leads, and Tutors AND LeadTutors as members (nested teams)', () => {
     const c = build({ mode: 'create' });
     expect(c.leadOptions.map(o => o.id)).toEqual(['c-lead-a', 'c-lead-b']);
-    expect(c.memberOptions.map(o => o.id)).toEqual(['c-m1', 'c-m2']);
+    expect(c.memberOptions.map(o => o.id)).toEqual(['c-lead-a', 'c-lead-b', 'c-m1', 'c-m2']);
   });
 
-  it('marks contacts on other teams as assigned elsewhere (one team max)', () => {
+  it('never offers the selected lead as a member of their own team', () => {
+    const c = build({ mode: 'create' });
+    form(c).get('lead_contact_id').setValue('c-lead-a');
+    expect(c.memberOptions.map(o => o.id)).toEqual(['c-lead-b', 'c-m1', 'c-m2']);
+  });
+
+  it('disables only leads who already head another team; members are never exclusive', () => {
     const c = build({ mode: 'create', teams: [otherTeam] });
-    expect(c.isAssignedElsewhere('c-lead-b')).toBe(true); // other team's lead
-    expect(c.isAssignedElsewhere('c-m2')).toBe(true); // other team's member
+    expect(c.isAssignedElsewhere('c-lead-b')).toBe(true); // heads the other team
+    expect(c.isAssignedElsewhere('c-m2')).toBe(false); // member elsewhere — still allowed here
     expect(c.isAssignedElsewhere('c-m1')).toBe(false);
     expect(c.isAssignedElsewhere(undefined)).toBe(false);
   });
@@ -113,10 +120,12 @@ describe('TeamDialog', () => {
     );
   });
 
-  it('does not lock a team against its own members in edit mode', () => {
+  it('does not lock a team against its own lead in edit mode', () => {
     const c = build({ mode: 'edit', team: otherTeam, teams: [otherTeam] });
     expect(c.isAssignedElsewhere('c-lead-b')).toBe(false);
     expect(c.isAssignedElsewhere('c-m2')).toBe(false);
+    // Its own lead is excluded from the member options, other leads are offered.
+    expect(c.memberOptions.map(o => o.id)).toEqual(['c-lead-a', 'c-m1', 'c-m2']);
   });
 
   describe('create', () => {
