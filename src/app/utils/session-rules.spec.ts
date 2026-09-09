@@ -155,6 +155,8 @@ describe('session-rules', () => {
       expect(mutatesStudent(SessionType.MAKE_UP, SessionStatus.COMPLETED)).toBe(true);
       expect(mutatesStudent(SessionType.MAKE_UP, SessionStatus.NO_CALL_NO_SHOW)).toBe(true);
       expect(mutatesStudent(SessionType.MAKE_UP, SessionStatus.PENDING)).toBe(false);
+      // Cancelled make-up: no deduction, no banking (client policy 2026-09).
+      expect(mutatesStudent(SessionType.MAKE_UP, SessionStatus.CANCELLED)).toBe(false);
     });
 
     it('tutoring mutates only on cancelled', () => {

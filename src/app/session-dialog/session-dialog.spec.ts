@@ -118,12 +118,13 @@ describe('SessionDialog', () => {
   });
 
   describe('getters', () => {
-    it('attendanceOptions excludes Cancelled for make-up sessions', () => {
+    it('attendanceOptions offers every status, including Cancelled for make-up sessions', () => {
       const c = build({ type: 'create', session: new Session() } as SessionDialogData);
       c.selectedType = SessionType.MAKE_UP;
-      expect(c.attendanceOptions).not.toContain(SessionStatus.CANCELLED);
-      c.selectedType = SessionType.TUTORING;
       expect(c.attendanceOptions).toContain(SessionStatus.CANCELLED);
+      expect(c.attendanceOptions).toEqual(Object.values(SessionStatus));
+      c.selectedType = SessionType.TUTORING;
+      expect(c.attendanceOptions).toEqual(Object.values(SessionStatus));
     });
 
     it('availableMakeup returns the unexpired make-up balance', () => {
@@ -749,6 +750,32 @@ describe('SessionDialog', () => {
       expect(c.errorMessage).toContain('make-up');
     });
 
+    it('cancelling a make-up session finalizes it without touching the make-up bank', () => {
+      const c = primedEdit(editData());
+      c.selectedType = SessionType.MAKE_UP;
+      c.selectedAttendance = SessionStatus.CANCELLED;
+      c.updateSession();
+      // Still a finalizing status change (locks the session) …
+      expect(c.showStatusConfirm).toBe(true);
+      expect(c.hasError).toBe(false);
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      c.confirmStatusChange();
+      // … but no student write: nothing banked, nothing deducted.
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      const savedSession = sessionsService.updateSession.mock.calls.at(-1)![0] as Session;
+      expect(savedSession.status).toBe(SessionStatus.CANCELLED);
+    });
+
+    it('cancelling a make-up ignores the balance check (a 10-minute bank still cancels a 60-minute session)', () => {
+      const c = primedEdit(editData());
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 10 })];
+      c.selectedAttendance = SessionStatus.CANCELLED;
+      c.updateSession();
+      expect(c.hasError).toBe(false);
+      expect(c.showStatusConfirm).toBe(true);
+    });
+
     it('deducts make-up minutes when completing a make-up session', () => {
       const c = primedEdit(editData());
       c.selectedType = SessionType.MAKE_UP;
@@ -1133,6 +1160,27 @@ describe('SessionDialog', () => {
       // A second attempt warns again (the confirmation is not sticky).
       c.deleteSession();
       expect(c.showCancelledDeleteWarning).toBe(true);
+    });
+
+    it('does not warn when deleting a cancelled MAKE-UP session (it banked nothing)', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1', type: SessionType.MAKE_UP, status: SessionStatus.CANCELLED } as Session,
+      } as SessionDialogData);
+      sessionsService.deleteSession.mockReturnValue(of({ message: 'ok' }));
+      c.deleteSession();
+      expect(c.showCancelledDeleteWarning).toBe(false);
+      expect(sessionsService.deleteSession).toHaveBeenCalledWith('sess-1');
+    });
+
+    it('still warns when deleting a cancelled TUTORING session', () => {
+      const c = build({
+        type: 'delete',
+        session: { id: 'sess-1', type: SessionType.TUTORING, status: SessionStatus.CANCELLED } as Session,
+      } as SessionDialogData);
+      c.deleteSession();
+      expect(c.showCancelledDeleteWarning).toBe(true);
+      expect(sessionsService.deleteSession).not.toHaveBeenCalled();
     });
 
     it('does not warn when deleting a non-cancelled session', () => {

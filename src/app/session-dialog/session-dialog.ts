@@ -197,12 +197,14 @@ export class SessionDialog implements OnInit {
     });
   }
 
-  /** The "Cancelled" attendance status only applies to regular tutoring sessions. */
+  /**
+   * Every attendance status applies to every session type. A cancelled
+   * make-up (client policy 2026-09) finalizes the session without touching
+   * the make-up bank — its pending minutes simply return to the schedulable
+   * balance — whereas a cancelled tutoring session banks its minutes.
+   */
   get attendanceOptions(): SessionStatus[] {
-    const all = Object.values(SessionStatus);
-    return this.selectedType === SessionType.MAKE_UP
-      ? all.filter(s => s !== SessionStatus.CANCELLED)
-      : all;
+    return Object.values(SessionStatus);
   }
 
   /** Sessions with a student (TUTORING or MAKE_UP) — ADMIN has none. */
@@ -680,10 +682,12 @@ export class SessionDialog implements OnInit {
       this.deleteSeriesFuture();
       return;
     }
-    // Single delete of a cancelled session: the minutes it banked stay on the
-    // student's balance with no source session left to trace them to.
+    // Single delete of a cancelled session that BANKED minutes (tutoring): they
+    // stay on the student's balance with no source session left to trace them
+    // to. A cancelled make-up banked nothing, so it deletes without the warning.
     if (
       this.dialogData.session.status === SessionStatus.CANCELLED &&
+      mutatesStudent(this.dialogData.session.type as SessionType, SessionStatus.CANCELLED) &&
       !this.cancelledDeleteConfirmed
     ) {
       this.showCancelledDeleteWarning = true;
