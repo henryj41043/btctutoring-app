@@ -6,12 +6,18 @@ import { TeamService } from '../services/team.service';
 import { Team } from '../models/team.model';
 import { Contact } from '../models/contact.model';
 
-const leadA = { id: 'c-lead-a', first_name: 'Lea', last_name: 'A', user_group: 'LeadTutors' } as Contact;
-const leadB = { id: 'c-lead-b', first_name: 'Lou', last_name: 'B', user_group: 'LeadTutors' } as Contact;
-const tutor1 = { id: 'c-m1', first_name: 'Tess', last_name: 'One', user_group: 'Tutors' } as Contact;
-const tutor2 = { id: 'c-m2', first_name: 'Tim', last_name: 'Two', user_group: 'Tutors' } as Contact;
-const adminC = { id: 'c-adm', first_name: 'Ann', last_name: 'Admin', user_group: 'Admins' } as Contact;
-const contacts = [leadA, leadB, tutor1, tutor2, adminC];
+// Active staff carry service 'Hiring' + status 'Staff' (StaffStatus.ACTIVE_STAFF).
+const staff = { service: 'Hiring', status: 'Staff' };
+const leadA = { id: 'c-lead-a', first_name: 'Lea', last_name: 'A', user_group: 'LeadTutors', ...staff } as Contact;
+const leadB = { id: 'c-lead-b', first_name: 'Lou', last_name: 'B', user_group: 'LeadTutors', ...staff } as Contact;
+const tutor1 = { id: 'c-m1', first_name: 'Tess', last_name: 'One', user_group: 'Tutors', ...staff } as Contact;
+const tutor2 = { id: 'c-m2', first_name: 'Tim', last_name: 'Two', user_group: 'Tutors', ...staff } as Contact;
+const adminC = { id: 'c-adm', first_name: 'Ann', last_name: 'Admin', user_group: 'Admins', ...staff } as Contact;
+// Not current staff, yet they carry the Tutors/LeadTutors group (prod: 83 of 91 "Tutors" contacts).
+const applicant = { id: 'c-app', first_name: 'Ivy', last_name: 'Inquiry', user_group: 'Tutors', service: 'Employment Inquiry', status: 'Inquiry submitted' } as Contact;
+const formerTutor = { id: 'c-former', first_name: 'Fay', last_name: 'Former', user_group: 'Tutors', service: 'Hiring', status: 'Former Staff' } as Contact;
+const formerLead = { id: 'c-former-lead', first_name: 'Len', last_name: 'Left', user_group: 'LeadTutors', service: 'Hiring', status: 'Former Staff' } as Contact;
+const contacts = [leadA, leadB, tutor1, tutor2, adminC, applicant, formerTutor, formerLead];
 
 const otherTeam: Team = {
   id: 'team-other',
@@ -51,6 +57,22 @@ describe('TeamDialog', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  it('hides applicants and former staff from both pickers (current staff only)', () => {
+    const c = build({ mode: 'create', teams: [], contacts });
+    expect(c.leadOptions.map(o => o.id)).not.toContain('c-former-lead');
+    expect(c.memberOptions.map(o => o.id)).not.toContain('c-app');
+    expect(c.memberOptions.map(o => o.id)).not.toContain('c-former');
+  });
+
+  it('keeps a lapsed lead/member who is already on THIS team so they can be removed', () => {
+    const team = { id: 't-1', name: 'T', lead_contact_id: 'c-former-lead', member_contact_ids: ['c-m1', 'c-former'] };
+    const c = build({ mode: 'edit', team, teams: [team], contacts });
+    expect(c.leadOptions.map(o => o.id)).toEqual(['c-lead-a', 'c-lead-b', 'c-former-lead']);
+    expect(c.memberOptions.map(o => o.id)).toEqual(['c-m1', 'c-m2', 'c-former']);
+    // Still never an applicant who isn't on the team.
+    expect(c.memberOptions.map(o => o.id)).not.toContain('c-app');
   });
 
   it('offers only LeadTutors as leads and only Tutors as members', () => {
