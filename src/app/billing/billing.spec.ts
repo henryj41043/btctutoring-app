@@ -503,6 +503,58 @@ describe('Billing', () => {
       expect(entry.override_first).toBeNull();
     });
 
+    it('handles the 15th half: dialog data, persistence, patching, and clearing back to a blank derived half', () => {
+      contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(c.overrideTooltip(entry, 'fifteenth')).toBe('Overridden — calculated amount $181.00');
+
+      dialogResult = { amount_override: 0 };
+      c.openOverrideDialog(entry, 'fifteenth', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        data: { contactName: 'Casey Lee', periodLabel: 'Due 15th — July 2026', derived: 181, current: null },
+      }));
+      expect(billingService.setAmountOverride).toHaveBeenCalledWith({
+        contact_id: 'c-1', period_start: '2026-07-15', cycle: BillingCycle.SEMI_MONTHLY, amount_override: 0,
+      });
+      expect(entry.due_fifteenth).toBe(0);
+      expect(entry.override_fifteenth).toBe(0);
+      expect(entry.total).toBe(181);
+
+      // Clearing when the derived half is blank leaves the cell blank.
+      entry.derived_fifteenth = null;
+      dialogResult = { amount_override: null };
+      c.openOverrideDialog(entry, 'fifteenth', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(entry.due_fifteenth).toBeNull();
+      expect(entry.total).toBe(181);
+    });
+
+    it('tolerates sparse entries: no contact id skips the dialog; blank name, blank derived, missing cycle default', () => {
+      const c = build();
+      c.ngOnInit();
+      c.openOverrideDialog({ name: 'X' } as BillingEntry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).not.toHaveBeenCalled();
+
+      const sparse = { contact_id: 'c-9', derived_first: null, override_first: null } as BillingEntry;
+      expect(c.overrideTooltip(sparse, 'first')).toBe('Overridden — calculated amount —');
+      dialogResult = { amount_override: 25 };
+      c.openOverrideDialog(sparse, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        data: expect.objectContaining({ contactName: '', derived: null, current: null }),
+      }));
+      expect(billingService.setAmountOverride).toHaveBeenCalledWith(expect.objectContaining({
+        contact_id: 'c-9', cycle: BillingCycle.MONTHLY, amount_override: 25,
+      }));
+      expect(sparse.due_first).toBe(25);
+      expect(sparse.total).toBe(25);
+      // Clearing with no derived amount blanks the cell.
+      dialogResult = { amount_override: null };
+      c.openOverrideDialog(sparse, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(sparse.due_first).toBeNull();
+      expect(sparse.total).toBe(0);
+    });
+
     it('exports overridden dues with a marker, "No charge" for zero, and a footnote', () => {
       contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
       billingService.getBillingRecordsByMonth.mockReturnValue(of([
