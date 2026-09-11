@@ -73,6 +73,20 @@ describe('billing-recompute', () => {
       }]);
     });
 
+    it('preserves an admin amount override (0 included) and omits the key when absent', () => {
+      const existing: BillingRecord[] = [
+        {contact_id: 'c-1', period_start: '2026-08-01', cycle: BillingCycle.MONTHLY, amount: 999, paid: false, amount_override: 0},
+      ];
+      const [rec] = recomputedBillingRecords(existing, 'c-1', computed, 2026, 7);
+      expect(rec.amount).toBe(362); // derived snapshot still refreshed
+      expect(rec.amount_override).toBe(0);
+      const [plain] = recomputedBillingRecords(
+        [{contact_id: 'c-1', period_start: '2026-08-01', cycle: BillingCycle.MONTHLY, amount: 1, paid: false, amount_override: null}],
+        'c-1', computed, 2026, 7,
+      );
+      expect('amount_override' in plain).toBe(false);
+    });
+
     it('creates nothing where no record exists', () => {
       expect(recomputedBillingRecords([], 'c-1', computed, 2026, 7)).toEqual([]);
     });

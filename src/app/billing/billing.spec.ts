@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import jsPDF from 'jspdf';
@@ -52,7 +53,9 @@ describe('Billing', () => {
   let isAdmin: boolean;
   const contactService = { getContacts: jest.fn() };
   const studentService = { getStudents: jest.fn() };
-  const billingService = { getBillingRecords: jest.fn(), getBillingRecordsByMonth: jest.fn(), upsertBillingRecord: jest.fn() };
+  const billingService = { getBillingRecords: jest.fn(), getBillingRecordsByMonth: jest.fn(), upsertBillingRecord: jest.fn(), setAmountOverride: jest.fn() };
+  let dialogResult: unknown;
+  const dialog = { open: jest.fn(() => ({ afterClosed: () => of(dialogResult) })) };
   const noteService = { createNote: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
@@ -74,6 +77,7 @@ describe('Billing', () => {
         { provide: NoteService, useValue: noteService },
         { provide: PackageService, useValue: packageService },
         { provide: Router, useValue: router },
+        { provide: MatDialog, useValue: dialog },
       ],
     });
     const c = TestBed.createComponent(Billing).componentInstance;
@@ -89,7 +93,9 @@ describe('Billing', () => {
     contactService.getContacts.mockReturnValue(of([contact()]));
     studentService.getStudents.mockReturnValue(of([student()]));
     billingService.getBillingRecordsByMonth.mockReturnValue(of([]));
+    billingService.setAmountOverride.mockReturnValue(of({ id: 'c-1#2026-07-01' }));
     noteService.createNote.mockReturnValue(of({ id: 'n-1' }));
+    dialogResult = undefined;
   });
 
   it('restores the saved month and ignores corrupt saved dates', () => {
@@ -367,6 +373,213 @@ describe('Billing', () => {
     const c = build();
     c.ngOnInit();
     expect((c as any).dataSource.data).toHaveLength(0);
+  });
+
+  describe('amount overrides', () => {
+    const record = (over: Partial<BillingRecord>): BillingRecord =>
+      ({ contact_id: 'c-1', period_start: '2026-07-01', cycle: 'monthly', amount: 362, paid: false, ...over }) as BillingRecord;
+
+    it('replaces the derived due with a stored override and keeps the derived amount alongside', () => {
+      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 150 })]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(150);
+      expect(entry.derived_first).toBe(362);
+      expect(entry.override_first).toBe(150);
+      expect(entry.total).toBe(150);
+      expect(c.isOverridden(entry, 'first')).toBe(true);
+      expect(c.isOverridden(entry, 'fifteenth')).toBe(false);
+      expect(c.overrideTooltip(entry, 'first')).toBe('Overridden — calculated amount $362.00');
+      expect((c as any).grandTotal).toBe(150);
+    });
+
+    it('treats an override of 0 as "no charge"', () => {
+      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 0 })]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(0);
+      expect(entry.total).toBe(0);
+      expect(c.isOverridden(entry, 'first')).toBe(true);
+    });
+
+    it('overrides each semi-monthly half independently', () => {
+      contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+      billingService.getBillingRecordsByMonth.mockReturnValue(of([
+        record({ period_start: '2026-07-15', cycle: 'semi_monthly', amount_override: 100 }),
+      ]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(181);
+      expect(entry.override_first).toBeNull();
+      expect(entry.due_fifteenth).toBe(100);
+      expect(entry.derived_fifteenth).toBe(181);
+      expect(entry.total).toBe(281);
+    });
+
+    it('ignores a monthly record on the 15th and non-numeric override values', () => {
+      billingService.getBillingRecordsByMonth.mockReturnValue(of([
+        record({ amount_override: null }),
+        record({ period_start: '2026-07-15', amount_override: 50 }),
+      ]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.override_first).toBeNull();
+      expect(entry.due_first).toBe(362);
+      expect(entry.due_fifteenth).toBeNull();
+      expect(entry.total).toBe(362);
+    });
+
+    it('a paid toggle carries the loaded override so the full-record upsert never drops it', () => {
+      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 150 })]));
+      billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      c.togglePaid(entry, 'first', true);
+      const saved = billingService.upsertBillingRecord.mock.calls.at(-1)![0] as BillingRecord;
+      expect(saved.amount).toBe(150);
+      expect(saved.amount_override).toBe(150);
+    });
+
+    it('a paid toggle without an override sends no amount_override key', () => {
+      billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
+      const c = build();
+      c.ngOnInit();
+      c.togglePaid((c as any).dataSource.data[0], 'first', true);
+      const saved = billingService.upsertBillingRecord.mock.calls.at(-1)![0] as BillingRecord;
+      expect('amount_override' in saved).toBe(false);
+    });
+
+    it('opens the override dialog with the derived/current amounts and never navigates', () => {
+      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 150 })]));
+      const c = build();
+      c.ngOnInit();
+      const event = { stopPropagation: jest.fn() } as unknown as Event;
+      c.openOverrideDialog((c as any).dataSource.data[0], 'first', event);
+      expect(event.stopPropagation).toHaveBeenCalled();
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        data: { contactName: 'Casey Lee', periodLabel: 'Due 1st — July 2026', derived: 362, current: 150 },
+      }));
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('persists a dialog result and patches the row (custom amount, then clear)', () => {
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      dialogResult = { amount_override: 200 };
+      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(billingService.setAmountOverride).toHaveBeenCalledWith({
+        contact_id: 'c-1', period_start: '2026-07-01', cycle: BillingCycle.MONTHLY, amount_override: 200,
+      });
+      expect(entry.due_first).toBe(200);
+      expect(entry.override_first).toBe(200);
+      expect(entry.total).toBe(200);
+      expect((c as any).grandTotal).toBe(200);
+
+      dialogResult = { amount_override: null };
+      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(billingService.setAmountOverride).toHaveBeenLastCalledWith(expect.objectContaining({ amount_override: null }));
+      expect(entry.due_first).toBe(362);
+      expect(entry.override_first).toBeNull();
+      expect(entry.total).toBe(362);
+    });
+
+    it('a cancelled dialog or a failed save changes nothing', () => {
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      dialogResult = undefined;
+      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(billingService.setAmountOverride).not.toHaveBeenCalled();
+      dialogResult = { amount_override: 0 };
+      billingService.setAmountOverride.mockReturnValue(throwError(() => new Error('x')));
+      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(entry.due_first).toBe(362);
+      expect(entry.override_first).toBeNull();
+    });
+
+    it('handles the 15th half: dialog data, persistence, patching, and clearing back to a blank derived half', () => {
+      contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+      const c = build();
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(c.overrideTooltip(entry, 'fifteenth')).toBe('Overridden — calculated amount $181.00');
+
+      dialogResult = { amount_override: 0 };
+      c.openOverrideDialog(entry, 'fifteenth', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        data: { contactName: 'Casey Lee', periodLabel: 'Due 15th — July 2026', derived: 181, current: null },
+      }));
+      expect(billingService.setAmountOverride).toHaveBeenCalledWith({
+        contact_id: 'c-1', period_start: '2026-07-15', cycle: BillingCycle.SEMI_MONTHLY, amount_override: 0,
+      });
+      expect(entry.due_fifteenth).toBe(0);
+      expect(entry.override_fifteenth).toBe(0);
+      expect(entry.total).toBe(181);
+
+      // Clearing when the derived half is blank leaves the cell blank.
+      entry.derived_fifteenth = null;
+      dialogResult = { amount_override: null };
+      c.openOverrideDialog(entry, 'fifteenth', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(entry.due_fifteenth).toBeNull();
+      expect(entry.total).toBe(181);
+    });
+
+    it('tolerates sparse entries: no contact id skips the dialog; blank name, blank derived, missing cycle default', () => {
+      const c = build();
+      c.ngOnInit();
+      c.openOverrideDialog({ name: 'X' } as BillingEntry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).not.toHaveBeenCalled();
+
+      const sparse = { contact_id: 'c-9', derived_first: null, override_first: null } as BillingEntry;
+      expect(c.overrideTooltip(sparse, 'first')).toBe('Overridden — calculated amount —');
+      dialogResult = { amount_override: 25 };
+      c.openOverrideDialog(sparse, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        data: expect.objectContaining({ contactName: '', derived: null, current: null }),
+      }));
+      expect(billingService.setAmountOverride).toHaveBeenCalledWith(expect.objectContaining({
+        contact_id: 'c-9', cycle: BillingCycle.MONTHLY, amount_override: 25,
+      }));
+      expect(sparse.due_first).toBe(25);
+      expect(sparse.total).toBe(25);
+      // Clearing with no derived amount blanks the cell.
+      dialogResult = { amount_override: null };
+      c.openOverrideDialog(sparse, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      expect(sparse.due_first).toBeNull();
+      expect(sparse.total).toBe(0);
+    });
+
+    it('exports overridden dues with a marker, "No charge" for zero, and a footnote', () => {
+      contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
+      billingService.getBillingRecordsByMonth.mockReturnValue(of([
+        record({ cycle: 'semi_monthly', amount_override: 150 }),
+        record({ period_start: '2026-07-15', cycle: 'semi_monthly', amount_override: 0 }),
+      ]));
+      const c = build();
+      c.ngOnInit();
+      c.exportPDF();
+      const options = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
+      expect(options.body[0][3]).toBe('$150.00*');
+      expect(options.body[0][4]).toBe('No charge');
+      const doc = (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
+      expect(doc.text).toHaveBeenCalledWith('* manually overridden amount', 120, 23);
+    });
+
+    it('exports plain dues without the footnote when nothing is overridden', () => {
+      const c = build();
+      c.ngOnInit();
+      c.exportPDF();
+      const options = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
+      expect(options.body[0][3]).toBe('$362.00');
+      const doc = (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
+      expect(doc.text).not.toHaveBeenCalledWith('* manually overridden amount', 120, 23);
+    });
   });
 
   it('isSemiMonthly reflects the entry cycle', () => {

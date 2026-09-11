@@ -75,7 +75,7 @@ export function recomputedBillingRecords(
     if (!prior) {
       continue; // only adjust records that already exist
     }
-    records.push({
+    const record: BillingRecord = {
       contact_id: contactId,
       period_start: period,
       cycle: computed.cycle,
@@ -83,7 +83,12 @@ export function recomputedBillingRecords(
       paid: prior.paid,
       paid_date: prior.paid_date,
       invoice_number: prior.invoice_number,
-    });
+    };
+    // The upsert is a full replace — an admin's override must survive a recompute.
+    if (prior.amount_override !== undefined && prior.amount_override !== null) {
+      record.amount_override = prior.amount_override;
+    }
+    records.push(record);
   }
   return records;
 }

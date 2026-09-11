@@ -5,8 +5,15 @@ export class BillingEntry {
   /** Summary of the contact's students and packages, e.g. "Pat: Succeed; Sam: Thrive". */
   packages?: string;
   cycle?: string; // 'monthly' | 'semi_monthly'
+  /** Effective amounts (the override when one is set, else the derived amount). */
   due_first?: number | null; // null when no charge falls on the 1st (blank half of a prorated month)
   due_fifteenth?: number | null; // null for monthly contacts or a blank 15th half
+  /** The package-derived amounts, kept for the override dialog / tooltips. */
+  derived_first?: number | null;
+  derived_fifteenth?: number | null;
+  /** Admin overrides stored on the period records (0 = no charge); null = none. */
+  override_first?: number | null;
+  override_fifteenth?: number | null;
   total?: number;
   /** Dollar amount taken off by the family's sibling discount (0 when none applies). */
   discount?: number;

@@ -2,7 +2,7 @@ import {inject, Injectable} from '@angular/core';
 import {environment} from '../../environments/environment';
 import {HttpClient, HttpParams} from '@angular/common/http';
 import {Observable} from 'rxjs';
-import {BillingRecord} from '../models/billing-record.model';
+import {AmountOverrideRequest, BillingRecord} from '../models/billing-record.model';
 import {Response} from '../models/response.model';
 
 @Injectable({
@@ -34,5 +34,10 @@ export class BillingService {
 
   upsertBillingRecord(record: BillingRecord): Observable<Response> {
     return this.httpClient.post<Response>(`${this.baseUrl}/billing`, record);
+  }
+
+  /** Sets (number, 0 = no charge) or clears (null) a period's amount override. */
+  setAmountOverride(request: AmountOverrideRequest): Observable<Response> {
+    return this.httpClient.put<Response>(`${this.baseUrl}/billing/override`, request);
   }
 }
