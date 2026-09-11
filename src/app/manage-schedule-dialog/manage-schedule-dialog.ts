@@ -17,7 +17,7 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {catchError, EMPTY, of, take} from 'rxjs';
-import {Student} from '../models/student.model';
+import {PendingChange, Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
@@ -28,7 +28,7 @@ import {ContactService} from '../services/contact.service';
 import {AuthService} from '../services/auth.service';
 import {PackageService} from '../services/package.service';
 import {PackageRow} from '../models/package-row.model';
-import {pendingPackageNote} from '../utils/pending-package';
+import {findPendingChange, pendingChangeNote, pendingChangesOf, withPendingSchedule} from '../utils/pending-package';
 import {groupSlotsByEffectiveTutor} from '../utils/slot-tutor';
 import {contactDisplayName} from '../utils/contact-name';
 import {StaffStatus} from '../enums/staff-status.enum';
@@ -39,12 +39,13 @@ export interface ManageScheduleDialogData {
   student: Student;
   tutor?: Contact;
   /**
-   * Pending mode: edit the slots for a SCHEDULED package change. Validates
-   * against the pending package's definition and persists only
-   * pending_schedule — no sessions are created or deleted, and the live
+   * Pending mode: the effective date ('YYYY-MM-01') of the SCHEDULED package
+   * change whose slots are being edited. Validates against that change's
+   * package definition and persists only that change's schedule inside
+   * pending_changes — no sessions are created or deleted, and the live
    * schedule/package_start_date/auto_renew stay untouched.
    */
-  pendingMode?: boolean;
+  pendingEffective?: string;
 }
 
 /** A schedule slot being edited (weekday not chosen yet until picked). */
@@ -95,6 +96,8 @@ export class ManageScheduleDialog implements OnInit {
   protected catalog: PackageCatalog = {};
   isEdit: boolean = false;
   pendingMode: boolean = false;
+  /** The scheduled change being edited in pending mode (undefined when it no longer exists). */
+  protected change: PendingChange | undefined;
 
   scheduleSlots: ScheduleSlotInput[] = [];
   startDate: Date | undefined;
@@ -128,14 +131,20 @@ export class ManageScheduleDialog implements OnInit {
 
   /** CUSTOM packages may vary each slot's length; fixed packages never do. */
   get isCustomPackage(): boolean {
-    const pkg = this.pendingMode ? this.student.pending_package : this.student.package;
+    const pkg = this.pendingMode ? this.change?.package : this.student.package;
     return pkg === CUSTOM_PACKAGE;
+  }
+
+  /** Pending mode opened for a change that is no longer on the student. */
+  get missingChange(): boolean {
+    return this.pendingMode && !this.change;
   }
 
   ngOnInit(): void {
     this.student = this.data.student;
     this.tutor = this.data.tutor;
-    this.pendingMode = this.data.pendingMode ?? false;
+    this.pendingMode = !!this.data.pendingEffective;
+    this.change = findPendingChange(this.student, this.data.pendingEffective);
     this.loadTutorOptions();
     // The whole slot setup needs the resolved def (slotLength reads it), so it
     // runs once the catalog lands — synchronously on reopen (SWR cache).
@@ -152,13 +161,18 @@ export class ManageScheduleDialog implements OnInit {
 
   private setUpSlots(): void {
     if (this.pendingMode) {
-      // The slots being edited belong to the FUTURE package.
-      this.def = resolvePackageDef(this.student.pending_package || undefined, this.catalog, {
-        monthlyCost: this.student.pending_custom_monthly_cost,
-        sessionsPerWeek: this.student.pending_custom_sessions_per_week,
-        sessionLengthMin: this.student.pending_custom_session_length_min,
+      // The slots being edited belong to the FUTURE package of ONE change.
+      if (!this.change) {
+        this.def = null;
+        this.scheduleSlots = [];
+        return;
+      }
+      this.def = resolvePackageDef(this.change.package || undefined, this.catalog, {
+        monthlyCost: this.change.custom_monthly_cost,
+        sessionsPerWeek: this.change.custom_sessions_per_week,
+        sessionLengthMin: this.change.custom_session_length_min,
       });
-      this.scheduleSlots = (this.student.pending_schedule ?? []).map(
+      this.scheduleSlots = (this.change.schedule ?? []).map(
         s => ({weekday: s.weekday, start_time: s.start_time, tutor_id: s.tutor_id ?? null,
                length_min: this.slotLength(s)}));
       this.seedScheduleSlots();
@@ -193,7 +207,7 @@ export class ManageScheduleDialog implements OnInit {
         && c.is_tutor !== false);
       this.staffById = new Map(this.tutorOptions.map(c => [c.id!, c]));
       const slots = this.pendingMode
-        ? this.student.pending_schedule ?? []
+        ? this.change?.schedule ?? []
         : this.student.schedule ?? [];
       const missing = [...new Set(slots.map(s => s.tutor_id).filter(
         (id): id is string => !!id && !this.staffById.has(id)))];
@@ -212,12 +226,12 @@ export class ManageScheduleDialog implements OnInit {
 
   /** The pending-mode header line, e.g. '→ Achieve from Sep 1'. */
   get pendingNote(): string | null {
-    return pendingPackageNote(this.student);
+    return pendingChangeNote(this.change);
   }
 
   /** The package name governing this dialog's slot rules. */
   get packageLabel(): string {
-    return (this.pendingMode ? this.student.pending_package : this.student.package) || '';
+    return (this.pendingMode ? this.change?.package : this.student.package) || '';
   }
 
   /**
@@ -331,7 +345,7 @@ export class ManageScheduleDialog implements OnInit {
 
   /** The effective date as a local Date (component parse — never new Date(string)). */
   private effectiveAnchor(): Date {
-    const [y, m, d] = (this.student.pending_package_effective ?? '').split('-').map(Number);
+    const [y, m, d] = (this.change?.effective ?? '').split('-').map(Number);
     if (!y || !m || !d) {
       return new Date();
     }
@@ -341,9 +355,14 @@ export class ManageScheduleDialog implements OnInit {
   private persist(slots: ScheduleSlot[]): void {
     this.saving = true;
     if (this.pendingMode) {
-      // Only the pending slots change — no sessions, no live-schedule fields.
+      // Only this change's slots change — no sessions, no live-schedule
+      // fields. The whole list is rewritten (the backend replaces it and
+      // drops any legacy single-change scalars still on the record).
+      const pendingChanges = withPendingSchedule(
+        pendingChangesOf(this.student), this.data.pendingEffective!, slots);
+      const updated: Student = {...this.student, pending_changes: pendingChanges};
       this.studentService
-        .updateStudent({...this.student, pending_schedule: slots})
+        .updateStudent(updated)
         .pipe(
           catchError(() => {
             this.saving = false;
@@ -353,7 +372,7 @@ export class ManageScheduleDialog implements OnInit {
         )
         .subscribe(() => {
           this.saving = false;
-          this.dialogRef.close({...this.student, pending_schedule: slots});
+          this.dialogRef.close(updated);
         });
       return;
     }

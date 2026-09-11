@@ -125,48 +125,64 @@
             }
           </div>
         }
-        <!-- Scheduled package change: entered now, applied automatically by
-             the backend on the effective 1st (billing + schedule follow). -->
-        <div class="pending-change-section">
-          <p class="pending-change-title">Scheduled Package Change</p>
-          @if (pendingNote) {
-            <p class="pending-change-note">{{ pendingNote }}</p>
-          }
-          <mat-form-field>
-            <mat-label>New Package</mat-label>
-            <mat-select formControlName="pending_package">
-              <mat-option value="">None</mat-option>
-              @for (packageOption of packageOptions; track packageOption) {
-                <mat-option [value]="packageOption">{{ packageOption }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-          @if (studentForm.get('pending_package')?.value) {
-            @if (studentForm.get('pending_package')?.value === CUSTOM_PACKAGE) {
-              <mat-form-field>
-                <mat-label>New Custom Monthly Cost</mat-label>
-                <input matInput type="number" formControlName="pending_custom_monthly_cost">
-              </mat-form-field>
-              <mat-form-field>
-                <mat-label>New Custom Sessions / Week</mat-label>
-                <input matInput type="number" formControlName="pending_custom_sessions_per_week">
-              </mat-form-field>
-              <mat-form-field>
-                <mat-label>New Custom Session Length (min)</mat-label>
-                <input matInput type="number" formControlName="pending_custom_session_length_min">
-              </mat-form-field>
-            }
-            <mat-form-field>
-              <mat-label>Takes Effect</mat-label>
-              <mat-select formControlName="pending_package_effective">
-                @for (option of pendingMonthOptions; track option.value) {
-                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-            <button matButton type="button" class="pending-clear-button" (click)="clearPending()">
-              Clear Scheduled Change
+        <!-- Scheduled package changes: entered now, each applied automatically
+             by the backend on its effective 1st (billing + schedule follow). -->
+        <div class="pending-change-section" formArrayName="pending_changes">
+          <div class="pending-change-header">
+            <p class="pending-change-title">Scheduled Package Changes</p>
+            <button matButton type="button" class="pending-add-button" (click)="addPendingChange()">
+              <mat-icon>add</mat-icon>
+              Add scheduled change
             </button>
+          </div>
+          @if (pendingRows.length === 0) {
+            <p class="pending-change-note">None scheduled.</p>
+          }
+          @for (row of pendingRows.controls; track row; let i = $index) {
+            <div class="pending-change-row" [formGroupName]="i">
+              <div class="pending-change-row-header">
+                <span class="pending-change-note">
+                  {{ pendingNoteAt(i) || 'New scheduled change' }}
+                  @if (pendingNoteAt(i)) {
+                    · {{ hasPendingScheduleAt(i) ? 'schedule set' : 'no schedule yet' }}
+                  }
+                </span>
+                <button matIconButton type="button" aria-label="Remove scheduled change"
+                        (click)="removePendingChange(i)">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              <mat-form-field>
+                <mat-label>New Package</mat-label>
+                <mat-select formControlName="package">
+                  @for (packageOption of packageOptions; track packageOption) {
+                    <mat-option [value]="packageOption">{{ packageOption }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              @if (row.get('package')?.value === CUSTOM_PACKAGE) {
+                <mat-form-field>
+                  <mat-label>New Custom Monthly Cost</mat-label>
+                  <input matInput type="number" formControlName="custom_monthly_cost">
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>New Custom Sessions / Week</mat-label>
+                  <input matInput type="number" formControlName="custom_sessions_per_week">
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>New Custom Session Length (min)</mat-label>
+                  <input matInput type="number" formControlName="custom_session_length_min">
+                </mat-form-field>
+              }
+              <mat-form-field>
+                <mat-label>Takes Effect</mat-label>
+                <mat-select formControlName="effective">
+                  @for (option of pendingMonthOptions; track option.value) {
+                    <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            </div>
           }
         </div>
 

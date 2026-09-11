@@ -7,6 +7,7 @@ import { StudentDialog, StudentDialogData } from './student-dialog';
 import { StudentService } from '../services/student.service';
 import { PackageService } from '../services/package.service';
 import { TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
+import { nextMonthFirsts } from '../utils/pending-package';
 import { Student } from '../models/student.model';
 import { StudentStatus } from '../enums/student-status.enum';
 import { Weekday } from '../enums/weekday.enum';
@@ -335,108 +336,150 @@ describe('StudentDialog', () => {
       });
     });
 
-    describe('scheduled package change', () => {
-      it('a new pending change closes with the pending-schedule signal', () => {
+    describe('scheduled package changes', () => {
+      const rows = (c: StudentDialog) => c.pendingRows;
+      const row = (c: StudentDialog, i: number) => rows(c).at(i);
+      const setRow = (c: StudentDialog, i: number, values: Record<string, unknown>) => row(c, i).patchValue(values);
+      // Rolling window from today; the first two options are used by tests.
+      const months = () => nextMonthFirsts(new Date());
+
+      it('adding a change saves a list and closes with the pending-schedule signal for it', () => {
         const c = build({ mode: 'edit', student: richStudent() });
         studentService.updateStudent.mockReturnValue(of({} as Student));
-        form(c).get('pending_package').setValue('Succeed');
-        form(c).get('pending_package_effective').setValue('2026-09-01');
+        c.addPendingChange();
+        expect(rows(c)).toHaveLength(1);
+        expect(row(c, 0).get('effective')!.value).toBe(months()[0].value); // defaulted
+        setRow(c, 0, { package: 'Succeed' });
         c.save();
         const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-        expect(payload.pending_package).toBe('Succeed');
-        expect(payload.pending_package_effective).toBe('2026-09-01');
-        expect(dialogRef.close).toHaveBeenCalledWith({ openPendingScheduleForStudentId: 's-1' });
-      });
-
-      it('an unchanged pending change closes with plain true', () => {
-        const c = build({
-          mode: 'edit',
-          student: richStudent({
-            pending_package: 'Succeed',
-            pending_package_effective: '2026-09-01',
-          }),
-        });
-        studentService.updateStudent.mockReturnValue(of({} as Student));
-        c.save();
-        expect(dialogRef.close).toHaveBeenCalledWith(true);
-      });
-
-      it('blocks a pending change without an effective month', () => {
-        const c = build({ mode: 'edit', student: richStudent() });
-        form(c).get('pending_package').setValue('Succeed');
-        c.save();
-        expect(studentService.updateStudent).not.toHaveBeenCalled();
-        expect(priv(c).hasError).toBe(true);
-      });
-
-      it('blocks a pending change equal to the current package', () => {
-        const c = build({ mode: 'edit', student: richStudent() });
-        form(c).get('pending_package').setValue('Determination');
-        form(c).get('pending_package_effective').setValue('2026-09-01');
-        c.save();
-        expect(studentService.updateStudent).not.toHaveBeenCalled();
-        expect(priv(c).hasError).toBe(true);
-      });
-
-      it('blocks a pending CUSTOM missing its overrides', () => {
-        const c = build({ mode: 'edit', student: richStudent() });
-        form(c).get('pending_package').setValue('Custom');
-        form(c).get('pending_package_effective').setValue('2026-09-01');
-        form(c).get('pending_custom_monthly_cost').setValue(500);
-        c.save();
-        expect(studentService.updateStudent).not.toHaveBeenCalled();
-        expect(priv(c).hasError).toBe(true);
-      });
-
-      it('Clear sends the empty-string removal signal', () => {
-        const c = build({
-          mode: 'edit',
-          student: richStudent({
-            pending_package: 'Succeed',
-            pending_package_effective: '2026-09-01',
-            pending_custom_monthly_cost: 500,
-          }),
-        });
-        studentService.updateStudent.mockReturnValue(of({} as Student));
-        c.clearPending();
-        c.save();
-        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-        expect(payload.pending_package).toBe('');
-        expect(payload.pending_custom_monthly_cost).toBeNull();
-        expect(dialogRef.close).toHaveBeenCalledWith(true);
-      });
-
-      it('omits the pending keys entirely when nothing was ever pending', () => {
-        const c = build({ mode: 'edit', student: richStudent() });
-        studentService.updateStudent.mockReturnValue(of({} as Student));
-        c.save();
-        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_changes).toEqual([{ package: 'Succeed', effective: months()[0].value }]);
         expect('pending_package' in payload).toBe(false);
-        expect('pending_package_effective' in payload).toBe(false);
-        expect('pending_schedule' in payload).toBe(false);
+        expect(dialogRef.close).toHaveBeenCalledWith({
+          openPendingScheduleFor: { studentId: 's-1', effective: months()[0].value },
+        });
       });
 
-      it('a mid-month current-package change wins over a simultaneous pending change', () => {
+      it('a second added change defaults to the next unused month and the OLDEST new one is the schedule target', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        c.addPendingChange();
+        c.addPendingChange();
+        expect(row(c, 1).get('effective')!.value).toBe(months()[1].value);
+        setRow(c, 0, { package: 'Succeed', effective: months()[1].value });
+        setRow(c, 1, { package: 'Achieve', effective: months()[0].value });
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_changes!.map(p => p.package)).toEqual(['Succeed', 'Achieve']); // as entered; backend sorts
+        expect(dialogRef.close).toHaveBeenCalledWith({
+          openPendingScheduleFor: { studentId: 's-1', effective: months()[0].value },
+        });
+      });
+
+      it('an unchanged list closes with plain true and carries schedule + notice stamp through', () => {
+        const stored = {
+          package: 'Succeed', effective: '2026-09-01', notice_sent: '2026-09-01',
+          schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
+        };
+        const c = build({ mode: 'edit', student: richStudent({ pending_changes: [stored] }) });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        expect(c.hasPendingScheduleAt(0)).toBe(true);
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_changes).toEqual([stored]);
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+
+      it('editing a row\'s package drops its carried schedule so it re-opens the pending-schedule dialog', () => {
+        const stored = {
+          package: 'Succeed', effective: '2026-09-01',
+          schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
+        };
+        const c = build({ mode: 'edit', student: richStudent({ pending_changes: [stored] }) });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        row(c, 0).get('package')!.setValue('Achieve');
+        expect(c.hasPendingScheduleAt(0)).toBe(false);
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_changes).toEqual([{ package: 'Achieve', effective: '2026-09-01' }]);
+        expect(dialogRef.close).toHaveBeenCalledWith({
+          openPendingScheduleFor: { studentId: 's-1', effective: '2026-09-01' },
+        });
+      });
+
+      it('removing every row clears the list ([]), while a never-scheduled student omits the key', () => {
+        const c = build({ mode: 'edit', student: richStudent({ pending_changes: [{ package: 'Succeed', effective: '2026-09-01' }] }) });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        c.removePendingChange(0);
+        c.save();
+        expect((studentService.updateStudent.mock.calls[0][0] as Student).pending_changes).toEqual([]);
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+
+        TestBed.resetTestingModule();
+        const c2 = build({ mode: 'edit', student: richStudent() });
+        c2.save();
+        const payload = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+        expect('pending_changes' in payload).toBe(false);
+      });
+
+      it('surfaces each validation error and never saves', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        c.addPendingChange();
+        setRow(c, 0, { package: '' });
+        c.save();
+        expect(priv(c).errorMessage).toBe('Pick a package for every scheduled change.');
+        setRow(c, 0, { package: 'Determination' }); // equals the current package
+        c.save();
+        expect(priv(c).errorMessage).toContain('matches the step before it');
+        setRow(c, 0, { package: 'Custom', custom_monthly_cost: 500 });
+        c.save();
+        expect(priv(c).errorMessage).toBe('A scheduled Custom package needs all three custom values.');
+        c.addPendingChange();
+        setRow(c, 0, { package: 'Succeed', custom_monthly_cost: null });
+        setRow(c, 1, { package: 'Achieve', effective: months()[0].value });
+        c.save();
+        expect(priv(c).errorMessage).toContain('share the same month');
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+        expect(priv(c).hasError).toBe(true);
+      });
+
+      it('a mid-month current-package change wins over a simultaneous new scheduled change', () => {
         const c = build({ mode: 'edit', student: richStudent() });
         studentService.updateStudent.mockReturnValue(of({} as Student));
         form(c).get('package').setValue('Succeed'); // mid-month change
-        form(c).get('pending_package').setValue('Achieve');
-        form(c).get('pending_package_effective').setValue('2026-09-01');
+        c.addPendingChange();
+        setRow(c, 0, { package: 'Achieve' });
         c.save();
         expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
       });
 
-      it('shows the pending note from the form state', () => {
+      it('shows per-row notes, keeps a stored out-of-window month selectable, and reads a legacy single change', () => {
+        const c = build({
+          mode: 'edit',
+          student: richStudent({ pending_package: 'Achieve', pending_package_effective: '2020-01-01' }),
+        });
+        expect(rows(c)).toHaveLength(1);
+        expect(c.pendingNoteAt(0)).toBe('→ Achieve from Jan 1');
+        expect(c.hasPendingScheduleAt(0)).toBe(false);
+        expect(priv(c).pendingMonthOptions[0]).toEqual({ value: '2020-01-01', label: 'January 2020' });
+        c.addPendingChange();
+        expect(c.pendingNoteAt(1)).toBeNull(); // no package yet
+        expect(c.pendingNoteAt(9)).toBeNull(); // no such row
+      });
+
+      it('includes stored change packages in the package options and their slot tutors in planning rows', () => {
         const c = build({
           mode: 'edit',
           student: richStudent({
-            pending_package: 'Achieve',
-            pending_package_effective: '2026-09-01',
+            assigned_tutor_id: 't-1',
+            pending_changes: [{
+              package: 'Achieve', effective: '2026-09-01',
+              schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30', tutor_id: 't-2' }],
+            }],
           }),
+          tutors: [{ id: 't-1', first_name: 'Tess', last_name: 'One' }, { id: 't-2', first_name: 'Tim', last_name: 'Two' }] as never,
         });
-        expect(c.pendingNote).toBe('→ Achieve from Sep 1');
-        c.clearPending();
-        expect(c.pendingNote).toBeNull();
+        expect(priv(c).packageOptions).toContain('Achieve');
+        expect(priv(c).planningOverrideRows.map((r: { tutor_id: string }) => r.tutor_id)).toEqual(['t-1', 't-2']);
       });
     });
 

@@ -962,10 +962,13 @@ describe('Contact', () => {
       expect(billingService.getBillingRecordsByContact).toHaveBeenCalled();
     });
 
-    it('opens the pending-schedule dialog after a scheduled package change', () => {
-      afterClosed = { openPendingScheduleForStudentId: 's-1' };
+    it('opens the pending-schedule dialog for THAT change after a scheduled package change', () => {
+      afterClosed = { openPendingScheduleFor: { studentId: 's-1', effective: '2027-01-01' } };
       studentService.getStudentsByContact.mockReturnValue(
-        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 't-1', pending_package: 'Achieve', pending_package_effective: '2026-09-01' }]),
+        of([{
+          id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 't-1',
+          pending_changes: [{ package: 'Achieve', effective: '2026-09-01' }, { package: 'Excel', effective: '2027-01-01' }],
+        }]),
       );
       contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
       billingService.getBillingRecordsByContact.mockReturnValue(of([]));
@@ -974,16 +977,30 @@ describe('Contact', () => {
       c.openStudentDialog('edit', { id: 's-1' } as Student);
       const scheduleCall = dialog.open.mock.calls.find(call => call[0] === ManageScheduleDialog);
       expect(scheduleCall).toBeDefined();
-      expect((scheduleCall![1] as { data: { pendingMode?: boolean } }).data.pendingMode).toBe(true);
+      expect((scheduleCall![1] as { data: { pendingEffective?: string } }).data.pendingEffective).toBe('2027-01-01');
       // Pending changes affect a future month only — no billing recompute.
       expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
     });
 
-    it('renders the scheduled-change note for a student card', () => {
+    it('lists each scheduled change on the student card and opens the pending-schedule dialog per change', () => {
+      contactService.getContact.mockReturnValue(of([{ id: 't-1', first_name: 'Tess' }]));
       const c = build();
-      expect(c.pendingNote({ pending_package: 'Achieve', pending_package_effective: '2026-09-01' } as Student))
-        .toBe('→ Achieve from Sep 1');
-      expect(c.pendingNote({} as Student)).toBeNull();
+      const student = {
+        id: 's-1', assigned_tutor_id: 't-1',
+        pending_changes: [
+          { package: 'Excel', effective: '2027-01-01', schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '10:30' }] },
+          { package: 'Achieve', effective: '2026-09-01' },
+        ],
+      } as Student;
+      const changes = c.pendingChanges(student);
+      expect(changes.map(ch => c.pendingChangeNote(ch))).toEqual(['→ Achieve from Sep 1', '→ Excel from Jan 1']);
+      expect(c.pendingChanges({} as Student)).toEqual([]);
+      // Legacy single change still renders.
+      expect(c.pendingChanges({ pending_package: 'Achieve', pending_package_effective: '2026-09-01' } as Student))
+        .toHaveLength(1);
+      c.openManageScheduleDialog(student, false, '2027-01-01');
+      const scheduleCall = dialog.open.mock.calls.find(call => call[0] === ManageScheduleDialog);
+      expect((scheduleCall![1] as { data: { pendingEffective?: string } }).data.pendingEffective).toBe('2027-01-01');
     });
 
     it('opens Manage Schedule after a mid-month package change', () => {

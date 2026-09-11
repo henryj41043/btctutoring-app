@@ -314,8 +314,7 @@ describe('groupSessionFee', () => {
 describe('scheduled package changes (month-aware charges)', () => {
   const pending = (over: Partial<Student> = {}): Student => succeed({
     package_start_date: '2026-01-01T00:00:00',
-    pending_package: 'Achieve', // $546/mo
-    pending_package_effective: '2026-09-01',
+    pending_changes: [{ package: 'Achieve', effective: '2026-09-01' }], // $546/mo
     ...over,
   });
 
@@ -336,11 +335,23 @@ describe('scheduled package changes (month-aware charges)', () => {
 
   it('resolves pending CUSTOM overrides for the effective month', () => {
     const s = pending({
-      pending_package: 'Custom',
-      pending_custom_monthly_cost: 400,
-      pending_custom_sessions_per_week: 2,
-      pending_custom_session_length_min: 30,
+      pending_changes: [{
+        package: 'Custom', effective: '2026-09-01',
+        custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 30,
+      }],
     });
     expect(studentMonthlyCharge(s, 2026, 8, TEST_CATALOG)).toBe(400);
+  });
+
+  it('charges each queued step in turn (Oct Achieve, Jan Apex)', () => {
+    const s = pending({
+      pending_changes: [
+        { package: 'Achieve', effective: '2026-10-01' },
+        { package: 'Apex', effective: '2027-01-01' },
+      ],
+    });
+    expect(studentMonthlyCharge(s, 2026, 8, TEST_CATALOG)).toBe(362); // September: current
+    expect(studentMonthlyCharge(s, 2026, 11, TEST_CATALOG)).toBe(546); // December: Achieve
+    expect(studentMonthlyCharge(s, 2027, 0, TEST_CATALOG)).toBe(1820); // January: Apex
   });
 });

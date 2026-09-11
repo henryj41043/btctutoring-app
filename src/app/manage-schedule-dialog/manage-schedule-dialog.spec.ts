@@ -273,13 +273,13 @@ describe('ManageScheduleDialog', () => {
         {weekday: Weekday.WEDNESDAY, start_time: '10:00', end_time: '11:00'},
       ],
       auto_renew: true,
-      pending_package: 'Achieve',
-      pending_package_effective: '2026-09-01',
+      pending_changes: [{package: 'Achieve', effective: '2026-09-01'}],
       ...over,
     } as Student);
+    const PENDING = {pendingEffective: '2026-09-01'};
 
     const primedPending = (over: Partial<Student> = {}): ManageScheduleDialog => {
-      const c = build({student: pendingStudent(over), tutor, pendingMode: true});
+      const c = build({student: pendingStudent(over), tutor, ...PENDING});
       c.scheduleSlots = [
         {weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: null},
         {weekday: Weekday.TUESDAY, start_time: '09:00', tutor_id: null},
@@ -294,7 +294,7 @@ describe('ManageScheduleDialog', () => {
     });
 
     it('resolves the def from the PENDING package, not the current one', () => {
-      const c = build({student: pendingStudent(), tutor, pendingMode: true});
+      const c = build({student: pendingStudent(), tutor, ...PENDING});
       expect(scheduleService.resolveDef).not.toHaveBeenCalled();
       expect(c.def).toEqual({monthlyCost: 546, sessionsPerWeek: 3, sessionLengthMin: 30});
       // Seeded to the pending def's slot count with blank rows.
@@ -304,12 +304,13 @@ describe('ManageScheduleDialog', () => {
     it('seeds from an existing pending_schedule', () => {
       const c = build({
         student: pendingStudent({
-          pending_schedule: [
-            {weekday: Weekday.FRIDAY, start_time: '14:00', end_time: '14:30'},
-          ],
+          pending_changes: [{
+            package: 'Achieve', effective: '2026-09-01',
+            schedule: [{weekday: Weekday.FRIDAY, start_time: '14:00', end_time: '14:30'}],
+          }],
         }),
         tutor,
-        pendingMode: true,
+        ...PENDING,
       });
       expect(c.scheduleSlots[0]).toEqual(
         {weekday: Weekday.FRIDAY, start_time: '14:00', tutor_id: null, length_min: null});
@@ -317,23 +318,33 @@ describe('ManageScheduleDialog', () => {
     });
 
     it('validates the slot count against the pending package', () => {
-      const c = build({student: pendingStudent(), tutor, pendingMode: true});
+      const c = build({student: pendingStudent(), tutor, ...PENDING});
       c.scheduleSlots = [{weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: null}];
       c.save();
       expect(c.errorMessage).toBe('Achieve requires 3 session(s) per week.');
       expect(studentService.updateStudent).not.toHaveBeenCalled();
     });
 
-    it('saves ONLY pending_schedule — no sessions, no live-schedule fields', () => {
-      const c = primedPending();
+    it('saves ONLY that change\'s schedule inside pending_changes — no sessions, no live-schedule fields', () => {
+      const c = primedPending({
+        pending_changes: [
+          {package: 'Achieve', effective: '2026-09-01'},
+          {package: 'Excel', effective: '2027-01-01', schedule: [{weekday: Weekday.FRIDAY, start_time: '14:00', end_time: '14:45'}]},
+        ],
+      });
       c.save();
       expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
       const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-      expect(payload.pending_schedule).toEqual([
+      const slots = [
         {weekday: Weekday.MONDAY, start_time: '09:00', end_time: '09:30'},
         {weekday: Weekday.TUESDAY, start_time: '09:00', end_time: '09:30'},
         {weekday: Weekday.THURSDAY, start_time: '09:00', end_time: '09:30'},
+      ];
+      expect(payload.pending_changes).toEqual([
+        {package: 'Achieve', effective: '2026-09-01', schedule: slots},
+        {package: 'Excel', effective: '2027-01-01', schedule: [{weekday: Weekday.FRIDAY, start_time: '14:00', end_time: '14:45'}]},
       ]);
+      expect('pending_schedule' in payload).toBe(false);
       // The live schedule and its owners are untouched.
       expect(payload.schedule).toEqual(pendingStudent().schedule);
       expect(payload.auto_renew).toBe(true);
@@ -341,8 +352,32 @@ describe('ManageScheduleDialog', () => {
       expect(scheduleService.updateSchedule).not.toHaveBeenCalled();
       expect(scheduleService.deleteSchedule).not.toHaveBeenCalled();
       expect(dialogRef.close).toHaveBeenCalledWith(
-        expect.objectContaining({pending_schedule: payload.pending_schedule}),
+        expect.objectContaining({pending_changes: payload.pending_changes}),
       );
+    });
+
+    it('a change that no longer exists blocks with a message (no def, no save)', () => {
+      const c = build({student: pendingStudent(), tutor, pendingEffective: '2028-01-01'});
+      expect(c.missingChange).toBe(true);
+      expect(c.def).toBeNull();
+      expect(c.pendingNote).toBeNull();
+      expect(c.packageLabel).toBe('');
+      expect(c.isCustomPackage).toBe(false);
+      c.save();
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('edits a legacy single change (read fallback) and writes the list back', () => {
+      const c = primedPending({
+        pending_changes: undefined,
+        pending_package: 'Achieve',
+        pending_package_effective: '2026-09-01',
+      });
+      expect(c.def).toEqual({monthlyCost: 546, sessionsPerWeek: 3, sessionLengthMin: 30});
+      c.save();
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      expect(payload.pending_changes![0].package).toBe('Achieve');
+      expect(payload.pending_changes![0].schedule).toHaveLength(3);
     });
 
     it('anchors the availability check at the effective date', () => {
@@ -374,7 +409,16 @@ describe('ManageScheduleDialog', () => {
     });
 
     it('falls back to today as the availability anchor when the effective date is malformed', () => {
-      const c = primedPending({pending_package_effective: 'garbage'});
+      const c = build({
+        student: pendingStudent({pending_changes: [{package: 'Achieve', effective: 'garbage'}]}),
+        tutor,
+        pendingEffective: 'garbage',
+      });
+      c.scheduleSlots = [
+        {weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: null},
+        {weekday: Weekday.TUESDAY, start_time: '09:00', tutor_id: null},
+        {weekday: Weekday.THURSDAY, start_time: '09:00', tutor_id: null},
+      ];
       c.save();
       const anchor = scheduleService.buildOccurrences.mock.calls.at(-1)![1] as Date;
       expect(anchor.toDateString()).toBe(new Date().toDateString());
@@ -391,9 +435,9 @@ describe('ManageScheduleDialog', () => {
 
     it('an unconfigured pending CUSTOM blocks with the package error', () => {
       const c = build({
-        student: pendingStudent({pending_package: 'Custom'}),
+        student: pendingStudent({pending_changes: [{package: 'Custom', effective: '2026-09-01'}]}),
         tutor,
-        pendingMode: true,
+        ...PENDING,
       });
       expect(c.def).toBeNull();
       c.save();
@@ -496,11 +540,10 @@ describe('ManageScheduleDialog', () => {
       const c = build({
         student: {
           id: 's-1', name: 'Pat', package: 'Determination',
-          pending_package: 'Achieve',
-          pending_package_effective: '2026-09-01',
+          pending_changes: [{package: 'Achieve', effective: '2026-09-01'}],
         } as Student,
         tutor,
-        pendingMode: true,
+        pendingEffective: '2026-09-01',
       });
       c.scheduleSlots = [
         {weekday: Weekday.MONDAY, start_time: '09:00', tutor_id: 't-2'},
@@ -509,8 +552,8 @@ describe('ManageScheduleDialog', () => {
       ];
       c.save();
       const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-      expect(payload.pending_schedule![0].tutor_id).toBe('t-2');
-      expect('tutor_id' in (payload.pending_schedule![1] as object)).toBe(false);
+      expect(payload.pending_changes![0].schedule![0].tutor_id).toBe('t-2');
+      expect('tutor_id' in (payload.pending_changes![0].schedule![1] as object)).toBe(false);
     });
   });
 
@@ -576,14 +619,13 @@ describe('ManageScheduleDialog', () => {
       const c = build({
         student: customStudent({
           package: 'Determination',
-          pending_package: 'Custom',
-          pending_custom_monthly_cost: 400,
-          pending_custom_sessions_per_week: 2,
-          pending_custom_session_length_min: 30,
-          pending_package_effective: '2026-10-01',
+          pending_changes: [{
+            package: 'Custom', effective: '2026-10-01',
+            custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 30,
+          }],
         }),
         tutor,
-        pendingMode: true,
+        pendingEffective: '2026-10-01',
       });
       expect(c.isCustomPackage).toBe(true);
       c.scheduleSlots = [
@@ -592,8 +634,8 @@ describe('ManageScheduleDialog', () => {
       ];
       c.save();
       const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-      expect(payload.pending_schedule![0].end_time).toBe('09:45');
-      expect(payload.pending_schedule![1].end_time).toBe('09:30');
+      expect(payload.pending_changes![0].schedule![0].end_time).toBe('09:45');
+      expect(payload.pending_changes![0].schedule![1].end_time).toBe('09:30');
     });
   });
 });

@@ -16,7 +16,7 @@ import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
 import {StudentService} from '../services/student.service';
 import {NoteService} from '../services/note.service';
-import {Student} from '../models/student.model';
+import {PendingChange, Student} from '../models/student.model';
 import {Note} from '../models/note.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {TwentyFiveStatus} from '../enums/twenty-five-status.enum';
@@ -56,7 +56,7 @@ import {availableMakeupMinutes} from '../utils/makeup';
 import {makeupMinutesLeftToSchedule, scheduledMakeupMinutesByStudent, scheduledMakeupRange} from '../utils/session-rules';
 import {SessionsService} from '../services/sessions.service';
 import {studentDisplayName} from '../utils/student-name';
-import {pendingPackageNote} from '../utils/pending-package';
+import {pendingChangeNote, pendingChangesOf} from '../utils/pending-package';
 import {studentStatusChipClass} from '../utils/status-chip';
 import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
@@ -624,9 +624,14 @@ export class Contact implements OnInit {
     return this.students.some(s => !!s.scholarship);
   }
 
-  /** The student's scheduled-change note, e.g. '→ Achieve from Sep 1'. */
-  pendingNote(student: Student): string | null {
-    return pendingPackageNote(student);
+  /** The student's scheduled package changes, oldest first. */
+  pendingChanges(student: Student): PendingChange[] {
+    return pendingChangesOf(student);
+  }
+
+  /** A change's note, e.g. '→ Achieve from Sep 1'. */
+  pendingChangeNote(change: PendingChange): string | null {
+    return pendingChangeNote(change);
   }
 
   /** True once a student has both an assigned tutor and a package — required to schedule. */
@@ -647,7 +652,7 @@ export class Contact implements OnInit {
   openManageScheduleDialog(
     student: Student,
     recomputeBilling: boolean = false,
-    pendingMode: boolean = false,
+    pendingEffective?: string,
   ): void {
     this.contactService.getContact(student.assigned_tutor_id!).pipe(
       catchError(error => {
@@ -656,7 +661,7 @@ export class Contact implements OnInit {
       })
     ).subscribe(contacts => {
       const ref = this.dialog.open(ManageScheduleDialog, {
-        data: {student, tutor: contacts[0], pendingMode},
+        data: {student, tutor: contacts[0], pendingEffective},
         width: '520px',
       });
       ref.afterClosed().subscribe((updated?: Student) => {
@@ -748,7 +753,7 @@ export class Contact implements OnInit {
         return;
       }
       const openScheduleFor = typeof result === 'object' ? result.openScheduleForStudentId : undefined;
-      const openPendingFor = typeof result === 'object' ? result.openPendingScheduleForStudentId : undefined;
+      const openPendingFor = typeof result === 'object' ? result.openPendingScheduleFor : undefined;
       this.loadStudents(() => {
         if (openScheduleFor) {
           const changed = this.students.find(s => s.id === openScheduleFor);
@@ -757,11 +762,11 @@ export class Contact implements OnInit {
           }
         }
         if (openPendingFor) {
-          // Define the FUTURE package's slots; affects only pending_schedule,
-          // so no billing recompute (the change bills a future month).
-          const changed = this.students.find(s => s.id === openPendingFor);
+          // Define the FUTURE package's slots for that change; affects only
+          // its entry, so no billing recompute (it bills a future month).
+          const changed = this.students.find(s => s.id === openPendingFor.studentId);
           if (changed) {
-            this.openManageScheduleDialog(changed, false, true);
+            this.openManageScheduleDialog(changed, false, openPendingFor.effective);
           }
         }
         const groupFlagAfter = editedId

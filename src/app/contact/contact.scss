@@ -280,3 +280,23 @@
   margin: 2px 0 6px;
   font-size: 0.85rem;
 }
+
+.pending-change-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+  color: var(--btc-teal-deep);
+
+  .pending-change-button {
+    width: 28px;
+    height: 28px;
+    padding: 2px;
+
+    mat-icon {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+    }
+  }
+}

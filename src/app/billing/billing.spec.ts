@@ -828,8 +828,10 @@ describe('Billing', () => {
 
   describe('scheduled package changes', () => {
     const pendingStudent = () => student({
-      pending_package: 'Achieve', // $546/mo
-      pending_package_effective: '2026-09-01',
+      pending_changes: [
+        { package: 'Achieve', effective: '2026-09-01' }, // $546/mo
+        { package: 'Apex', effective: '2027-01-01' }, // $1820/mo
+      ],
     });
 
     it('a September view bills and labels the future package', () => {
@@ -840,6 +842,16 @@ describe('Billing', () => {
       const entry = (c as any).dataSource.data[0] as BillingEntry;
       expect(entry.due_first).toBe(546);
       expect(entry.packages).toBe('Pat: Achieve');
+    });
+
+    it('a January view bills and labels the second queued package', () => {
+      studentService.getStudents.mockReturnValue(of([pendingStudent()]));
+      const c = build();
+      c.selectedDate = new Date(2027, 0, 10); // January 2027
+      c.ngOnInit();
+      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      expect(entry.due_first).toBe(1820);
+      expect(entry.packages).toBe('Pat: Apex');
     });
 
     it('the August view still bills and labels the current package', () => {

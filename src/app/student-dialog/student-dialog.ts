@@ -10,7 +10,7 @@ import {
 } from '@angular/material/dialog';
 import {MakeupEditDialog, MakeupEditResult} from '../makeup-edit-dialog/makeup-edit-dialog';
 import {catchError, EMPTY, of} from 'rxjs';
-import {FormBuilder, FormGroup, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatSelectModule} from '@angular/material/select';
@@ -20,7 +20,7 @@ import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {provideNativeDateAdapter} from '@angular/material/core';
-import {Student} from '../models/student.model';
+import {PendingChange, Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {StudentService} from '../services/student.service';
@@ -38,7 +38,14 @@ import {
 import {countSlotsBeforeInMonth} from '../utils/proration';
 import {monthKey} from '../utils/billing-amount';
 import {availableMakeupMinutes} from '../utils/makeup';
-import {nextMonthFirsts, pendingChanged, pendingPackageNote} from '../utils/pending-package';
+import {
+  effectiveMonthLabel,
+  newChangesWithoutSchedule,
+  nextMonthFirsts,
+  pendingChangeNote,
+  pendingChangesOf,
+  validatePendingChanges,
+} from '../utils/pending-package';
 import {studentDisplayName} from '../utils/student-name';
 import {contactDisplayName} from '../utils/contact-name';
 
@@ -47,11 +54,16 @@ export type StudentDialogMode = 'create' | 'edit' | 'delete';
 /**
  * What the Student dialog closes with. `true` for a plain create/edit/delete;
  * an object when a mid-month package change needs the caller to open Manage
- * Schedule so the admin redefines the new package's slots.
+ * Schedule so the admin redefines the new package's slots, or when a new
+ * scheduled change still needs its schedule defined (pending-schedule dialog
+ * for that change's effective date).
  */
 export type StudentDialogResult =
   | true
-  | {openScheduleForStudentId?: string; openPendingScheduleForStudentId?: string};
+  | {
+      openScheduleForStudentId?: string;
+      openPendingScheduleFor?: {studentId: string; effective: string};
+    };
 
 /** Data needed to open the Student dialog. */
 export interface StudentDialogData {
@@ -134,7 +146,7 @@ export class StudentDialog implements OnInit {
       this.catalog = toCatalog(rows);
       this.packageOptions = packageSelectOptions(this.catalog, [
         student.package,
-        student.pending_package || undefined,
+        ...pendingChangesOf(student).map(c => c.package),
       ]);
     });
     this.startedInOnboarding =
@@ -152,13 +164,8 @@ export class StudentDialog implements OnInit {
       scholarship: [student.scholarship ?? false],
       btc_and_me: [student.btc_and_me ?? false],
       make_up_never_expire: [student.make_up_never_expire ?? false],
-      pending_package: [student.pending_package ?? ''],
-      pending_custom_monthly_cost: [student.pending_custom_monthly_cost ?? null],
-      pending_custom_sessions_per_week: [student.pending_custom_sessions_per_week ?? null],
-      pending_custom_session_length_min: [student.pending_custom_session_length_min ?? null],
-      pending_package_effective: [student.pending_package_effective ?? ''],
-      // Carried through untouched — owned by the pending-schedule dialog.
-      pending_schedule: [student.pending_schedule ?? null],
+      // One row per scheduled change (schedule/notice stamp carried through).
+      pending_changes: this.formBuilder.array(pendingChangesOf(student).map(c => this.pendingRow(c))),
       extra_planning_minutes: [student.extra_planning_minutes ?? null],
       custom_monthly_cost: [student.custom_monthly_cost ?? null],
       custom_sessions_per_week: [student.custom_sessions_per_week ?? null],
@@ -170,18 +177,76 @@ export class StudentDialog implements OnInit {
     });
     this.buildPlanningOverrideRows(student);
     this.pendingMonthOptions = nextMonthFirsts(new Date());
-    // A stored effective date outside the rolling window must stay selectable.
-    const storedEffective = student.pending_package_effective;
-    if (storedEffective && !this.pendingMonthOptions.some(o => o.value === storedEffective)) {
-      this.pendingMonthOptions = [
-        {value: storedEffective, label: storedEffective},
-        ...this.pendingMonthOptions,
-      ];
+    // Stored effective dates outside the rolling window must stay selectable.
+    for (const stored of pendingChangesOf(student).map(c => c.effective).reverse()) {
+      if (!this.pendingMonthOptions.some(o => o.value === stored)) {
+        this.pendingMonthOptions = [
+          {value: stored, label: effectiveMonthLabel(stored)},
+          ...this.pendingMonthOptions,
+        ];
+      }
     }
   }
 
   /** Effective-month choices for a scheduled package change (next 6 firsts). */
   protected pendingMonthOptions: {value: string; label: string}[] = [];
+
+  /** The scheduled-change rows (one FormGroup per change). */
+  get pendingRows(): FormArray<FormGroup> {
+    return this.studentForm.get('pending_changes') as FormArray<FormGroup>;
+  }
+
+  /**
+   * One form row for a scheduled change. Editing the package definition
+   * (package or any custom value) drops the row's carried schedule — those
+   * slots belonged to the old definition — so the pending-schedule dialog
+   * opens for it again after save.
+   */
+  private pendingRow(change: Partial<PendingChange> = {}): FormGroup {
+    const row = this.formBuilder.group({
+      package: [change.package ?? ''],
+      custom_monthly_cost: [change.custom_monthly_cost ?? null],
+      custom_sessions_per_week: [change.custom_sessions_per_week ?? null],
+      custom_session_length_min: [change.custom_session_length_min ?? null],
+      effective: [change.effective ?? ''],
+      // Carried through untouched — owned by the pending-schedule dialog.
+      schedule: [change.schedule ?? null],
+      // Backend-owned advance-notice stamp, carried through.
+      notice_sent: [change.notice_sent ?? null],
+    });
+    for (const name of ['package', 'custom_monthly_cost', 'custom_sessions_per_week', 'custom_session_length_min']) {
+      row.get(name)!.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+        row.get('schedule')!.setValue(null, {emitEvent: false});
+      });
+    }
+    return row;
+  }
+
+  /** Adds a blank scheduled change, defaulting to the first month not already used. */
+  addPendingChange(): void {
+    const used = new Set(this.pendingRows.controls.map(r => r.get('effective')?.value as string));
+    const effective = this.pendingMonthOptions.find(o => !used.has(o.value))?.value ?? '';
+    this.pendingRows.push(this.pendingRow({effective}));
+  }
+
+  removePendingChange(index: number): void {
+    this.pendingRows.removeAt(index);
+  }
+
+  /** The row's summary, e.g. '→ Achieve from Sep 1' (null while incomplete). */
+  pendingNoteAt(index: number): string | null {
+    const row = this.pendingRows.at(index);
+    return pendingChangeNote({
+      package: row?.get('package')?.value || undefined,
+      effective: row?.get('effective')?.value || undefined,
+    });
+  }
+
+  /** True when the row already carries slots for its package definition. */
+  hasPendingScheduleAt(index: number): boolean {
+    const schedule = this.pendingRows.at(index)?.get('schedule')?.value as unknown;
+    return Array.isArray(schedule) && schedule.length > 0;
+  }
 
   /**
    * Per-tutor extra-planning override rows (default + overrides model): one
@@ -200,7 +265,8 @@ export class StudentDialog implements OnInit {
     if (student.assigned_tutor_id) {
       effective.add(student.assigned_tutor_id);
     }
-    for (const slot of [...(student.schedule ?? []), ...(student.pending_schedule ?? [])]) {
+    const queuedSlots = pendingChangesOf(student).flatMap(c => c.schedule ?? []);
+    for (const slot of [...(student.schedule ?? []), ...queuedSlots]) {
       if (slot?.tutor_id) {
         effective.add(slot.tutor_id);
       }
@@ -217,25 +283,6 @@ export class StudentDialog implements OnInit {
         label: tutor ? contactDisplayName(tutor) : '(former tutor)',
         minutes: stored.get(id) ?? null,
       };
-    });
-  }
-
-  /** The current scheduled-change summary, e.g. '→ Achieve from Sep 1'. */
-  get pendingNote(): string | null {
-    return pendingPackageNote({
-      pending_package: this.studentForm?.get('pending_package')?.value || undefined,
-      pending_package_effective: this.studentForm?.get('pending_package_effective')?.value || undefined,
-    } as Student);
-  }
-
-  /** Clears the scheduled change ('' signals the backend to remove it all). */
-  clearPending(): void {
-    this.studentForm.patchValue({
-      pending_package: '',
-      pending_custom_monthly_cost: null,
-      pending_custom_sessions_per_week: null,
-      pending_custom_session_length_min: null,
-      pending_package_effective: '',
     });
   }
 
@@ -327,12 +374,13 @@ export class StudentDialog implements OnInit {
   }
 
   private update(): void {
-    const raw = this.studentForm.getRawValue();
+    const {pending_changes: pendingRows, ...raw} = this.studentForm.getRawValue();
     const student: Student = {
       ...raw,
       name: (raw.name ?? '').trim(),
       birthday: this.toDateString(raw.birthday),
     };
+    const changes = this.pendingChangesFromRows(pendingRows as Record<string, unknown>[]);
     // Per-tutor planning overrides: blank rows mean "use the default". An
     // explicit [] only goes out when stored overrides are being cleared —
     // otherwise the key is omitted so the backend leaves the field alone.
@@ -346,28 +394,29 @@ export class StudentDialog implements OnInit {
     } else {
       delete student.extra_planning_by_tutor;
     }
-    const pendingError = this.validatePendingChange(student);
+    const storedChanges = pendingChangesOf(this.data.student);
+    const pendingError = validatePendingChanges(
+      changes, student.package, storedChanges.map(c => c.effective), new Date());
     if (pendingError) {
       this.fail(pendingError);
       return;
     }
-    if (!student.pending_package && !this.data.student?.pending_package) {
-      // Nothing pending before or after — omit the keys entirely so a plain
+    if (changes.length === 0 && storedChanges.length === 0) {
+      // Nothing scheduled before or after — omit the key entirely so a plain
       // save never issues a gratuitous backend $REMOVE.
-      delete student.pending_package;
-      delete student.pending_custom_monthly_cost;
-      delete student.pending_custom_sessions_per_week;
-      delete student.pending_custom_session_length_min;
-      delete student.pending_package_effective;
-      delete student.pending_schedule;
+      delete student.pending_changes;
+    } else {
+      student.pending_changes = changes; // [] = clear them all
     }
     this.submitting = true;
     this.hasError = false;
     const packageChanged = this.applyMidMonthPackageChange(student);
     // The mid-month flow wins when both fire; the pending-schedule dialog can
-    // follow on a later edit.
-    const pendingOpened =
-      !packageChanged && pendingChanged(this.data.student, student);
+    // follow on a later edit. Otherwise the first new/edited change without a
+    // schedule gets its slots defined next.
+    const scheduleTarget = packageChanged
+      ? undefined
+      : newChangesWithoutSchedule(this.data.student, changes)[0];
     this.studentService
       .updateStudent(student)
       .pipe(
@@ -380,34 +429,38 @@ export class StudentDialog implements OnInit {
       .subscribe(() => {
         if (packageChanged) {
           this.dialogRef.close({openScheduleForStudentId: student.id});
-        } else if (pendingOpened) {
-          this.dialogRef.close({openPendingScheduleForStudentId: student.id});
+        } else if (scheduleTarget && student.id) {
+          this.dialogRef.close({
+            openPendingScheduleFor: {studentId: student.id, effective: scheduleTarget.effective},
+          });
         } else {
           this.dialogRef.close(true);
         }
       });
   }
 
-  /** Scheduled-change validation; returns an error message or null. */
-  private validatePendingChange(student: Student): string | null {
-    if (!student.pending_package) {
-      return null;
-    }
-    if (!student.pending_package_effective) {
-      return 'Pick the month the scheduled package change takes effect.';
-    }
-    if (student.pending_package === student.package) {
-      return 'The scheduled package matches the current one — clear it or pick a different package.';
-    }
-    if (
-      student.pending_package === CUSTOM_PACKAGE &&
-      (!student.pending_custom_monthly_cost ||
-        !student.pending_custom_sessions_per_week ||
-        !student.pending_custom_session_length_min)
-    ) {
-      return 'A scheduled Custom package needs all three custom values.';
-    }
-    return null;
+  /** Form rows → scheduled changes (optional fields only when set). */
+  private pendingChangesFromRows(rows: Record<string, unknown>[]): PendingChange[] {
+    return (rows ?? []).map(row => {
+      const change: PendingChange = {
+        package: (row['package'] as string) ?? '',
+        effective: (row['effective'] as string) ?? '',
+      };
+      for (const key of ['custom_monthly_cost', 'custom_sessions_per_week', 'custom_session_length_min'] as const) {
+        const value = row[key];
+        if (value !== null && value !== undefined && value !== '' && !isNaN(Number(value))) {
+          change[key] = Number(value);
+        }
+      }
+      const schedule = row['schedule'];
+      if (Array.isArray(schedule) && schedule.length > 0) {
+        change.schedule = schedule;
+      }
+      if (typeof row['notice_sent'] === 'string' && row['notice_sent']) {
+        change.notice_sent = row['notice_sent'];
+      }
+      return change;
+    });
   }
 
   /**
