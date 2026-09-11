@@ -1,0 +1,19 @@
+.override-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 320px;
+}
+
+.override-period {
+  margin: 0;
+  font-weight: 600;
+}
+
+.override-derived {
+  margin: 0;
+}
+
+.override-amount {
+  margin-top: 4px;
+}

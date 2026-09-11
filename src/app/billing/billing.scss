@@ -37,6 +37,35 @@
     color: var(--btc-teal-deep);
   }
 
+  .due-cell {
+    white-space: nowrap;
+  }
+
+  .override-amount {
+    font-weight: 700;
+    color: var(--btc-teal-deep);
+    text-decoration: underline dotted;
+  }
+
+  .override-button {
+    width: 28px;
+    height: 28px;
+    padding: 2px;
+    margin-left: 2px;
+    vertical-align: middle;
+    opacity: 0.55;
+
+    mat-icon {
+      font-size: 16px;
+      height: 16px;
+      width: 16px;
+    }
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+
   .attention-icon {
     font-size: 18px;
     height: 18px;

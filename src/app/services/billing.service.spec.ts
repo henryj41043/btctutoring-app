@@ -54,6 +54,15 @@ describe('BillingService', () => {
     req.flush([]);
   });
 
+  it('setAmountOverride PUTs /billing/override with the request', () => {
+    const request = { contact_id: 'c-1', period_start: '2026-07-01', cycle: 'monthly', amount_override: null };
+    service.setAmountOverride(request).subscribe();
+    const req = httpMock.expectOne(`${base}/billing/override`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(request);
+    req.flush({ id: 'c-1#2026-07-01' });
+  });
+
   it('upsertBillingRecord POSTs the record', () => {
     const record: BillingRecord = {
       contact_id: 'c-1',

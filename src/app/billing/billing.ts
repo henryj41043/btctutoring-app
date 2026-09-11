@@ -16,6 +16,8 @@ import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatDialog} from '@angular/material/dialog';
+import {BillingOverrideDialog, BillingOverrideDialogData, BillingOverrideResult} from '../billing-override-dialog/billing-override-dialog';
 import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
 import {ContactService} from '../services/contact.service';
@@ -73,6 +75,7 @@ export class Billing implements OnInit {
   private noteService: NoteService = inject(NoteService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private router: Router = inject(Router);
+  private dialog: MatDialog = inject(MatDialog);
   // Cancels in-flight HTTP work when the user navigates away.
   private destroyRef: DestroyRef = inject(DestroyRef);
 
@@ -253,6 +256,15 @@ export class Billing implements OnInit {
 
       const discount = round2(preDiscountTotal + groupFee - total);
 
+      // Admin overrides (0 = no charge) replace the derived due for that
+      // period only; the total is the sum of the effective dues.
+      const overrideFirst = this.overrideOf(recordMap.get(`${contactId}#${periodFirst}`));
+      const overrideFifteenth = semi
+        ? this.overrideOf(recordMap.get(`${contactId}#${periodFifteenth}`))
+        : null;
+      const effectiveFirst = overrideFirst ?? dueFirst;
+      const effectiveFifteenth = overrideFifteenth ?? dueFifteenth;
+
       const entry: BillingEntry = {
         contact_id: contactId,
         name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
@@ -261,9 +273,13 @@ export class Billing implements OnInit {
           ...contactStudents.filter(s => s.btc_and_me).map(s => `${studentDisplayName(s)}: BTC & Me`),
         ].join('; '),
         cycle,
-        due_first: dueFirst,
-        due_fifteenth: dueFifteenth,
-        total,
+        due_first: effectiveFirst,
+        due_fifteenth: effectiveFifteenth,
+        derived_first: dueFirst,
+        derived_fifteenth: dueFifteenth,
+        override_first: overrideFirst,
+        override_fifteenth: overrideFifteenth,
+        total: round2((effectiveFirst ?? 0) + (effectiveFifteenth ?? 0)),
         discount,
         discount_percent: discount > 0 ? (pct ?? 0) : 0,
         paid_first: recordMap.get(`${contactId}#${periodFirst}`)?.paid ?? false,
@@ -273,6 +289,68 @@ export class Billing implements OnInit {
       entries.push(entry);
     }
     return entries.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+  }
+
+  /** A record's stored override, normalised to null when absent. */
+  private overrideOf(record: BillingRecord | undefined): number | null {
+    const value = record?.amount_override;
+    return typeof value === 'number' ? value : null;
+  }
+
+  /** True when a period's amount is an admin override rather than derived. */
+  protected isOverridden(entry: BillingEntry, half: 'first' | 'fifteenth'): boolean {
+    return (half === 'first' ? entry.override_first : entry.override_fifteenth) != null;
+  }
+
+  /** Tooltip for an overridden cell: what the package math would have charged. */
+  protected overrideTooltip(entry: BillingEntry, half: 'first' | 'fifteenth'): string {
+    const derived = half === 'first' ? entry.derived_first : entry.derived_fifteenth;
+    return `Overridden — calculated amount ${derived == null ? '—' : this.formatMoney(derived)}`;
+  }
+
+  /** Opens the per-period override editor; persists the result and patches the row. */
+  openOverrideDialog(entry: BillingEntry, half: 'first' | 'fifteenth', event: Event): void {
+    // Icon-button action — never also navigate to the contact.
+    event.stopPropagation();
+    if (!entry.contact_id) return;
+    const period = this.periodKey(this.selectedDate, half === 'first' ? 1 : 15);
+    const data: BillingOverrideDialogData = {
+      contactName: entry.name ?? '',
+      periodLabel: `Due ${half === 'first' ? '1st' : '15th'} — ${this.monthStart.toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}`,
+      derived: (half === 'first' ? entry.derived_first : entry.derived_fifteenth) ?? null,
+      current: (half === 'first' ? entry.override_first : entry.override_fifteenth) ?? null,
+    };
+    const ref = this.dialog.open<BillingOverrideDialog, BillingOverrideDialogData, BillingOverrideResult | undefined>(
+      BillingOverrideDialog, {data, width: '420px'},
+    );
+    ref.afterClosed().subscribe(result => {
+      if (!result) return;
+      this.billingService.setAmountOverride({
+        contact_id: entry.contact_id!,
+        period_start: period,
+        cycle: entry.cycle ?? BillingCycle.MONTHLY,
+        amount_override: result.amount_override,
+      }).pipe(
+        catchError(error => { console.log(error); return EMPTY; }),
+      ).subscribe(() => {
+        this.applyOverride(entry, half, result.amount_override);
+        this.cdr.markForCheck();
+      });
+    });
+  }
+
+  /** Patches a row's effective dues and total after an override is saved or cleared. */
+  private applyOverride(entry: BillingEntry, half: 'first' | 'fifteenth', override: number | null): void {
+    if (half === 'first') {
+      entry.override_first = override;
+      entry.due_first = override ?? entry.derived_first ?? null;
+    } else {
+      entry.override_fifteenth = override;
+      entry.due_fifteenth = override ?? entry.derived_fifteenth ?? null;
+    }
+    entry.total = round2((entry.due_first ?? 0) + (entry.due_fifteenth ?? 0));
+    // A fresh array reference so the OnPush table re-renders the footer totals.
+    this.dataSource.data = [...this.dataSource.data];
   }
 
   private finishLoading(entries: BillingEntry[]): void {
@@ -292,6 +370,7 @@ export class Billing implements OnInit {
   togglePaid(entry: BillingEntry, half: 'first' | 'fifteenth', checked: boolean): void {
     const period = this.periodKey(this.selectedDate, half === 'first' ? 1 : 15);
     const amount = (half === 'first' ? entry.due_first : entry.due_fifteenth) ?? 0;
+    const override = half === 'first' ? entry.override_first : entry.override_fifteenth;
     const record: BillingRecord = {
       contact_id: entry.contact_id,
       period_start: period,
@@ -299,6 +378,8 @@ export class Billing implements OnInit {
       amount,
       paid: checked,
       paid_date: checked ? new Date().toISOString() : undefined,
+      // The upsert replaces the whole record — carry the override we loaded.
+      ...(override != null ? {amount_override: override} : {}),
     };
     this.billingService.upsertBillingRecord(record).pipe(
       catchError(error => { console.log(error); return EMPTY; }),
@@ -357,6 +438,14 @@ export class Billing implements OnInit {
     return round2(this.dataSource.data.reduce((sum, e) => sum + (e.due_fifteenth ?? 0), 0));
   }
 
+  /** A due cell for the PDF: '—', 'No charge', '$x.xx' or '$x.xx*' when overridden. */
+  private pdfDue(entry: BillingEntry, half: 'first' | 'fifteenth'): string {
+    const due = half === 'first' ? entry.due_first : entry.due_fifteenth;
+    if (due == null) return '—';
+    if (!this.isOverridden(entry, half)) return this.formatMoney(due);
+    return due === 0 ? 'No charge' : `${this.formatMoney(due)}*`;
+  }
+
   exportPDF(): void {
     const monthStr = this.monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const doc = new jsPDF();
@@ -368,6 +457,9 @@ export class Billing implements OnInit {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
     doc.text(`Billing: ${monthStr}`, 14, 23);
+    if (this.dataSource.data.some(e => this.isOverridden(e, 'first') || this.isOverridden(e, 'fifteenth'))) {
+      doc.text('* manually overridden amount', 120, 23);
+    }
     doc.setTextColor(0);
 
     autoTable(doc, {
@@ -377,8 +469,8 @@ export class Billing implements OnInit {
         e.name ?? '',
         e.packages ?? '',
         e.cycle === BillingCycle.SEMI_MONTHLY ? 'Semi-monthly' : 'Monthly',
-        e.due_first == null ? '—' : this.formatMoney(e.due_first),
-        e.due_fifteenth == null ? '—' : this.formatMoney(e.due_fifteenth),
+        this.pdfDue(e, 'first'),
+        this.pdfDue(e, 'fifteenth'),
         e.discount ? `-${this.formatMoney(e.discount)} (${e.discount_percent}%)` : '—',
         this.formatMoney(e.total),
       ]),

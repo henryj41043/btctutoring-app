@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>Override amount — {{data.contactName}}</h2>
+<mat-dialog-content class="override-content">
+  <p class="override-period">{{data.periodLabel}}</p>
+  <p class="override-derived">
+    Calculated amount:
+    <strong>{{data.derived == null ? '—' : (data.derived | currency:'USD':'symbol':'1.2-2')}}</strong>
+  </p>
+
+  <mat-checkbox [(ngModel)]="noCharge" name="noCharge">No charge this period</mat-checkbox>
+
+  <mat-form-field appearance="outline" class="override-amount">
+    <mat-label>Custom amount</mat-label>
+    <span matTextPrefix>$&nbsp;</span>
+    <input matInput type="number" min="0" step="0.01" [(ngModel)]="amount" name="amount" [disabled]="noCharge">
+    <mat-hint>Replaces the calculated amount for this due date only.</mat-hint>
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button matButton type="button" (click)="cancel()">Cancel</button>
+  @if (hasCurrent) {
+    <button matButton type="button" color="warn" (click)="clear()">Clear override</button>
+  }
+  <button mat-raised-button color="primary" type="button" [disabled]="!valid" (click)="save()">Save</button>
+</mat-dialog-actions>
