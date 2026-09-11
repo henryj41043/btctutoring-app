@@ -3,7 +3,9 @@
   @if (student.name) { — {{student.name}} }
 </h2>
 <mat-dialog-content>
-  @if (!def) {
+  @if (missingChange) {
+    <p class="schedule-info">This scheduled change no longer exists — reopen it from the student card.</p>
+  } @else if (!def) {
     <p class="schedule-info">
       {{student.name}}'s package isn't configured. Custom-package students need their package
       values set first.

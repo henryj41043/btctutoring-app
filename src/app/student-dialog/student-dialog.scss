@@ -55,8 +55,26 @@
   opacity: 0.75;
 }
 
-.pending-clear-button {
-  margin-bottom: 8px;
+.pending-change-header,
+.pending-change-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pending-change-row {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 8px;
+  margin-bottom: 4px;
+
+  .pending-change-note {
+    margin: 0;
+  }
+}
+
+.pending-add-button {
+  margin-bottom: 4px;
 }
 
 .dialog-error {

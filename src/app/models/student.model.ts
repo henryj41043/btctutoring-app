@@ -7,6 +7,23 @@ export interface MakeupBatch {
   earned_date: string; // ISO
 }
 
+/**
+ * One scheduled package change. `effective` ('YYYY-MM-01') is the key —
+ * unique per student — so no synthetic id is needed.
+ */
+export interface PendingChange {
+  package: string;
+  /** 'YYYY-MM-DD', always the 1st of a month. */
+  effective: string;
+  custom_monthly_cost?: number;
+  custom_sessions_per_week?: number;
+  custom_session_length_min?: number;
+  /** The new package's weekly slots, swapped in at promotion (absent until set). */
+  schedule?: ScheduleSlot[];
+  /** The effective date this change's advance notice was sent for (backend-owned, carried through). */
+  notice_sent?: string;
+}
+
 export class Student {
   id?: string;
   contact_id?: string;
@@ -42,17 +59,25 @@ export class Student {
   /** Per-tutor overrides of extra_planning_minutes ([] on save = clear all). */
   extra_planning_by_tutor?: {tutor_id: string; minutes: number}[];
   /**
-   * Scheduled package change, applied by the backend's 1st-of-month cron on
-   * its effective date ('' on save = clear the pending change).
+   * Scheduled package changes, oldest effective first; each is applied by
+   * the backend's 1st-of-month cron on its effective date ([] on save =
+   * clear them all).
    */
-  pending_package?: string | '';
+  pending_changes?: PendingChange[];
+  /** @deprecated Single-change scalars; read as a one-entry list, never written. */
+  pending_package?: string;
+  /** @deprecated See pending_changes. */
   pending_custom_monthly_cost?: number;
+  /** @deprecated See pending_changes. */
   pending_custom_sessions_per_week?: number;
+  /** @deprecated See pending_changes. */
   pending_custom_session_length_min?: number;
-  /** 'YYYY-MM-DD', always the 1st of a month. */
+  /** @deprecated See pending_changes. */
   pending_package_effective?: string;
-  /** The new package's weekly slots, swapped in at promotion. */
+  /** @deprecated See pending_changes (schedule per entry). */
   pending_schedule?: ScheduleSlot[];
+  /** @deprecated See pending_changes (notice_sent per entry). */
+  pending_change_notice_sent?: string;
   /** Old package's prorated portion for a mid-month package-change month. */
   mid_month_prior_charge?: number;
   /** The 'YYYY-MM' the mid_month_prior_charge applies to (that month only). */

@@ -246,7 +246,19 @@
                 <div>Status: <span [class]="'btc-chip ' + statusChipClass(student.status)">{{student.status}}</span></div>
                 <div>Assigned Tutor: {{getTutorName(student.assigned_tutor_id)}}</div>
                 <div>Make Up Minutes: {{makeupSummary(student)}}</div>
-                <div>Package: {{student.package || '—'}}@if (pendingNote(student)) {<span class="pending-note"> {{pendingNote(student)}}</span>}</div>
+                <div>Package: {{student.package || '—'}}</div>
+                @for (change of pendingChanges(student); track change.effective) {
+                  <div class="pending-change-line">
+                    <span>{{pendingChangeNote(change)}} · {{change.schedule?.length ? 'schedule set' : 'no schedule'}}</span>
+                    <button matIconButton type="button" class="pending-change-button"
+                            [disabled]="!student.assigned_tutor_id"
+                            [matTooltip]="student.assigned_tutor_id ? 'Set this change\'s schedule' : 'Assign a tutor first'"
+                            (click)="openManageScheduleDialog(student, false, change.effective)"
+                            aria-label="Set schedule for this scheduled change">
+                      <mat-icon>calendar_month</mat-icon>
+                    </button>
+                  </div>
+                }
                 <div>Scholarship:
                   @if (student.scholarship) {
                     <mat-icon style="color: green;">check</mat-icon>
