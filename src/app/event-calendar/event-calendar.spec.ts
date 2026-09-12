@@ -278,6 +278,29 @@ describe('EventCalendar', () => {
     expect(c.events[1].title).toContain('[Make-up]');
   });
 
+  it('lists a day\'s sessions earliest → latest whatever order the API returned them in', () => {
+    sessionsService.getAllSessions.mockReturnValue(
+      of([
+        { id: 'evening', tutor_name: 'Tess', student_name: 'Pat', start_datetime: '2026-06-01T18:00:00', end_datetime: '2026-06-01T19:00:00' },
+        { id: 'morning', tutor_name: 'Tess', student_name: 'Sam', start_datetime: '2026-06-01T09:00:00', end_datetime: '2026-06-01T10:00:00' },
+        { id: 'afternoon', tutor_name: 'Tess', student_name: 'Kim', start_datetime: '2026-06-01T13:00:00', end_datetime: '2026-06-01T14:00:00' },
+        { id: 'morning-long', tutor_name: 'Tess', student_name: 'Lee', start_datetime: '2026-06-01T09:00:00', end_datetime: '2026-06-01T10:30:00' },
+      ] as Session[]),
+    );
+    const c = build();
+    c.ngOnInit();
+    expect(c.events.map(e => (e.meta as Session).id)).toEqual(['morning', 'morning-long', 'afternoon', 'evening']);
+    // A drag to a new time re-sorts the list (no dialog result → no reload).
+    afterClosed = undefined as never;
+    const evening = c.events[3];
+    c.eventTimesChanged({
+      event: evening,
+      newStart: new Date('2026-06-01T08:00:00'),
+      newEnd: new Date('2026-06-01T09:00:00'),
+    } as never);
+    expect(c.events.map(e => (e.meta as Session).id)).toEqual(['evening', 'morning', 'morning-long', 'afternoon']);
+  });
+
   it('exposes edit and delete actions that open the matching dialog', () => {
     sessionsService.getAllSessions.mockReturnValue(of([]));
     const c = build();

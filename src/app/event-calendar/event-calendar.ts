@@ -293,10 +293,22 @@ export class EventCalendar implements OnInit {
 
   /** Sessions + (for admins) reminders, with the display filter applied. */
   private rebuildEvents(): void {
-    this.events = [
+    this.events = this.sortByTime([
       ...this.buildCalendarEvents(this.allSessions),
       ...this.buildReminderEvents(this.reminders),
-    ];
+    ]);
+  }
+
+  /**
+   * Chronological order (start, then end). The month view's open-day list
+   * renders events in array order — the API returns sessions in table-scan
+   * order, which read as a jumble of morning/evening/afternoon (client
+   * request 2026-09). Week/day views place by time regardless.
+   */
+  private sortByTime<T extends CalendarEvent>(events: T[]): T[] {
+    const time = (d: Date | undefined): number => d?.getTime() ?? 0;
+    return [...events].sort((a, b) =>
+      time(a.start) - time(b.start) || time(a.end) - time(b.end));
   }
 
   /** Admin-only: reminders and the admin contacts for the dialog's recipients. */
@@ -487,7 +499,7 @@ export class EventCalendar implements OnInit {
     if (this.isReminderEvent(event)) {
       return; // reminders are not draggable/resizable
     }
-    this.events = this.events.map((iEvent) => {
+    this.events = this.sortByTime(this.events.map((iEvent) => {
       if (iEvent === event) {
         event.meta.start = newStart.toISOString();
         event.meta.end = newEnd?.toISOString();
@@ -498,7 +510,7 @@ export class EventCalendar implements OnInit {
         };
       }
       return iEvent;
-    });
+    }));
     this.handleEvent('Dropped or resized', event);
   }
 
