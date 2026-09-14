@@ -1047,13 +1047,27 @@ describe('SessionDialog', () => {
       return c;
     };
 
-    it('offers the checkbox only when completing a student session in edit mode', () => {
+    it.each([
+      SessionStatus.COMPLETED,
+      SessionStatus.CANCELLED,
+      SessionStatus.NO_CALL_NO_SHOW,
+    ])('offers the checkbox when taking attendance as %s on a student session in edit mode', status => {
       const c = completedEdit();
+      c.selectedAttendance = status;
       expect(c.canEmailNotes).toBe(true);
+    });
+
+    it('hides the checkbox while the status is Pending or unset', () => {
+      const c = completedEdit();
       c.selectedAttendance = SessionStatus.PENDING;
       expect(c.canEmailNotes).toBe(false);
-      c.selectedAttendance = SessionStatus.COMPLETED;
-      c.selectedType = SessionType.ADMIN; // no student -> nobody to email
+      c.selectedAttendance = undefined as unknown as SessionStatus;
+      expect(c.canEmailNotes).toBe(false);
+    });
+
+    it('hides the checkbox for an admin session (no student to email)', () => {
+      const c = completedEdit();
+      c.selectedType = SessionType.ADMIN;
       expect(c.canEmailNotes).toBe(false);
     });
 
