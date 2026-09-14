@@ -11,6 +11,15 @@ export interface SessionRange {
   to?: string;
 }
 
+/** Counts reported by the service-side session horizon fill. */
+export interface HorizonFillResult {
+  studentsFilled: number;
+  sessionsCreated: number;
+  groupSessionsCreated: number;
+  monthsSkippedNoSchedule: number;
+  lockedOut: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -81,5 +90,15 @@ export class SessionsService {
 
   deleteSession(id: string): Observable<Response> {
     return this.httpClient.delete<Response>(`${this.baseUrl}/sessions/${id}`);
+  }
+
+  /**
+   * Asks the service to generate the student's tutoring sessions through the
+   * next three months (idempotent per month; the nightly job does the same for
+   * everyone). Called right after a schedule save so the calendar fills now.
+   */
+  fillHorizon(studentId: string): Observable<HorizonFillResult> {
+    const params = new HttpParams().set('student', studentId);
+    return this.httpClient.post<HorizonFillResult>(`${this.baseUrl}/sessions/horizon/fill`, {}, { params });
   }
 }

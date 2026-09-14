@@ -84,3 +84,16 @@
 .dialog-saving-spinner {
   margin: 4px 8px;
 }
+
+.status-confirm-warning {
+  margin: 8px 0;
+  padding: 12px;
+  border-left: 4px solid orange;
+  background: rgba(255, 165, 0, 0.08);
+  border-radius: 4px;
+
+  p {
+    margin: 4px 0;
+    font-size: 13px;
+  }
+}

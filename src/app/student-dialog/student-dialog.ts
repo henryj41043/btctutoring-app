@@ -24,6 +24,7 @@ import {PendingChange, Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {StudentService} from '../services/student.service';
+import {ScheduleService} from '../services/schedule.service';
 import {PackageService} from '../services/package.service';
 import {PackageRow} from '../models/package-row.model';
 import {
@@ -110,6 +111,7 @@ export class StudentDialog implements OnInit {
   readonly data = inject<StudentDialogData>(MAT_DIALOG_DATA);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private studentService: StudentService = inject(StudentService);
+  private scheduleService: ScheduleService = inject(ScheduleService);
   private packageService: PackageService = inject(PackageService);
   private destroyRef: DestroyRef = inject(DestroyRef);
 
@@ -130,6 +132,17 @@ export class StudentDialog implements OnInit {
   protected readonly contactDisplayName = contactDisplayName;
   protected hasError: boolean = false;
   protected errorMessage: string = '';
+
+  // ── Leaving Active status: upcoming pending tutoring sessions are deleted ──
+  /** The in-dialog confirmation is showing. */
+  protected showDeactivateConfirm: boolean = false;
+  /** The admin confirmed; the save proceeds and deletes the sessions after. */
+  private deactivationConfirmed: boolean = false;
+  /** Upcoming pending tutoring sessions found (null = count unavailable). */
+  protected upcomingSessionCount: number | null = null;
+  /** The student saved but the session cleanup failed — offer Retry / Close. */
+  protected deleteSessionsFailed: boolean = false;
+  private savedStudentId: string | undefined;
 
   protected studentForm!: FormGroup;
 
@@ -408,6 +421,10 @@ export class StudentDialog implements OnInit {
     } else {
       student.pending_changes = changes; // [] = clear them all
     }
+    if (this.leavingActive(student) && !this.deactivationConfirmed) {
+      this.promptDeactivation(student.id!);
+      return;
+    }
     this.submitting = true;
     this.hasError = false;
     const packageChanged = this.applyMidMonthPackageChange(student);
@@ -427,16 +444,94 @@ export class StudentDialog implements OnInit {
         }),
       )
       .subscribe(() => {
-        if (packageChanged) {
-          this.dialogRef.close({openScheduleForStudentId: student.id});
-        } else if (scheduleTarget && student.id) {
-          this.dialogRef.close({
-            openPendingScheduleFor: {studentId: student.id, effective: scheduleTarget.effective},
-          });
+        const finish = () => {
+          if (packageChanged) {
+            this.dialogRef.close({openScheduleForStudentId: student.id});
+          } else if (scheduleTarget && student.id) {
+            this.dialogRef.close({
+              openPendingScheduleFor: {studentId: student.id, effective: scheduleTarget.effective},
+            });
+          } else {
+            this.dialogRef.close(true);
+          }
+        };
+        if (this.deactivationConfirmed && student.id) {
+          this.savedStudentId = student.id;
+          this.deleteUpcomingSessions(finish);
         } else {
-          this.dialogRef.close(true);
+          finish();
         }
       });
+  }
+
+  /** Edit mode, stored Active, saving as anything else (client rule 2026-09-14). */
+  private leavingActive(student: Student): boolean {
+    return (
+      this.mode === 'edit' &&
+      this.data.student?.status === StudentStatus.ACTIVE_STUDENT &&
+      student.status !== StudentStatus.ACTIVE_STUDENT
+    );
+  }
+
+  /**
+   * Counts the upcoming pending tutoring sessions and shows the confirmation;
+   * with none there is nothing to warn about, so the save just proceeds. A
+   * failed count still prompts (without a number) — never silently deletes.
+   */
+  private promptDeactivation(studentId: string): void {
+    this.submitting = true;
+    this.hasError = false;
+    this.scheduleService
+      .futurePendingTutoring(studentId)
+      .pipe(catchError(() => of(null)))
+      .subscribe(sessions => {
+        this.submitting = false;
+        if (sessions && sessions.length === 0) {
+          this.deactivationConfirmed = true;
+          this.update();
+          return;
+        }
+        this.upcomingSessionCount = sessions ? sessions.length : null;
+        this.showDeactivateConfirm = true;
+      });
+  }
+
+  confirmDeactivation(): void {
+    this.showDeactivateConfirm = false;
+    this.deactivationConfirmed = true;
+    this.save();
+  }
+
+  cancelDeactivation(): void {
+    this.showDeactivateConfirm = false;
+  }
+
+  /** The student is saved; delete the sessions, then close via `finish`. */
+  private deleteUpcomingSessions(finish: () => void): void {
+    this.submitting = true;
+    this.hasError = false;
+    this.deleteSessionsFailed = false;
+    this.scheduleService
+      .deleteFuturePendingSessions(this.savedStudentId!)
+      .pipe(
+        catchError(error => {
+          console.log(error);
+          this.deleteSessionsFailed = true;
+          this.fail('Student saved, but removing the upcoming sessions failed.');
+          return EMPTY;
+        }),
+      )
+      .subscribe(() => finish());
+  }
+
+  /** Retry ONLY the session cleanup (the student is already saved). */
+  retryDeleteSessions(): void {
+    this.deleteUpcomingSessions(() => this.dialogRef.close(true));
+  }
+
+  /** Give up on the cleanup; the saved student still closes normally. */
+  closeAfterSaveWithoutCleanup(): void {
+    this.dialogRef.close(true);
   }
 
   /** Form rows → scheduled changes (optional fields only when set). */

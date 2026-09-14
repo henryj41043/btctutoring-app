@@ -14,11 +14,11 @@
     <p class="schedule-info">
       {{packageLabel}}: {{def.sessionsPerWeek}} session(s)/week, {{def.sessionLengthMin}} min each.
       @if (pendingMode) {
-        {{pendingNote}} — these slots take effect then; nothing changes before that.
+        {{pendingNote}} — these slots take effect then; already-generated sessions from that month on are regenerated.
       } @else if (isEdit) {
-        Editing regenerates this month's remaining sessions.
+        Editing regenerates all upcoming sessions.
       } @else {
-        The start date's month is filled automatically.
+        The start date's month is filled now; the next three months fill automatically.
       }
     </p>
 
@@ -78,6 +78,9 @@
 
     @if (!pendingMode) {
       <mat-slide-toggle [(ngModel)]="autoRenew">Auto-renew this schedule each month</mat-slide-toggle>
+      <p class="schedule-info auto-renew-hint">
+        On: the next three months stay on the calendar. Off: nothing is generated beyond this month.
+      </p>
     }
   }
 
@@ -90,7 +93,7 @@
   @if (showDeleteConfirm) {
     <div class="status-confirm-warning">
       <p><strong>⚠ Delete this schedule?</strong></p>
-      <p>This removes the recurring schedule, turns off auto-renew, and deletes this month's
+      <p>This removes the recurring schedule, turns off auto-renew, and deletes all
         upcoming (not-yet-held) sessions. Past and completed sessions are kept.</p>
     </div>
   }
