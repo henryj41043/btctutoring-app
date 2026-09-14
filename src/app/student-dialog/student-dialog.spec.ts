@@ -5,6 +5,7 @@ import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dial
 import { MakeupEditDialog } from '../makeup-edit-dialog/makeup-edit-dialog';
 import { StudentDialog, StudentDialogData } from './student-dialog';
 import { StudentService } from '../services/student.service';
+import { ScheduleService } from '../services/schedule.service';
 import { PackageService } from '../services/package.service';
 import { TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
 import { nextMonthFirsts } from '../utils/pending-package';
@@ -24,6 +25,10 @@ describe('StudentDialog', () => {
     updateStudent: jest.fn(),
     deleteStudent: jest.fn(),
   };
+  const scheduleService = {
+    futurePendingTutoring: jest.fn(() => of([])),
+    deleteFuturePendingSessions: jest.fn(() => of(0)),
+  };
 
   const build = (data: Partial<StudentDialogData>): StudentDialog => {
     const full: StudentDialogData = {
@@ -38,6 +43,7 @@ describe('StudentDialog', () => {
         { provide: MatDialogRef, useValue: dialogRef },
         { provide: MAT_DIALOG_DATA, useValue: full },
         { provide: StudentService, useValue: studentService },
+        { provide: ScheduleService, useValue: scheduleService },
         { provide: MatDialog, useValue: matDialog },
         { provide: PackageService, useValue: packageServiceStub },
       ],
@@ -727,6 +733,133 @@ describe('StudentDialog', () => {
       const c = build({ mode: 'create' });
       c.editMakeupMinutes();
       expect(matDialog.open).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('edit — leaving Active status (upcoming sessions cleanup)', () => {
+    const active = (): Student =>
+      ({
+        id: 's-1',
+        contact_id: 'c-1',
+        name: 'Pat',
+        status: StudentStatus.ACTIVE_STUDENT,
+        onboarding_complete: true,
+      }) as Student;
+    const pendingSessions = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ id: `x-${i}`, type: 'TUTORING', status: 'Pending' }));
+    const pub = (c: StudentDialog) =>
+      c as unknown as {
+        showDeactivateConfirm: boolean;
+        upcomingSessionCount: number | null;
+        deleteSessionsFailed: boolean;
+      };
+
+    beforeEach(() => {
+      studentService.updateStudent.mockReturnValue(of({}));
+    });
+
+    it('prompts with the count and saves nothing yet', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(of(pendingSessions(3) as never));
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+      c.save();
+      expect(scheduleService.futurePendingTutoring).toHaveBeenCalledWith('s-1');
+      expect(pub(c).showDeactivateConfirm).toBe(true);
+      expect(pub(c).upcomingSessionCount).toBe(3);
+      expect(priv(c).submitting).toBe(false);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('Go Back keeps the dialog open and unsaved', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(of(pendingSessions(1) as never));
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('status')?.setValue(StudentStatus.MIA);
+      c.save();
+      c.cancelDeactivation();
+      expect(pub(c).showDeactivateConfirm).toBe(false);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it('confirming saves the student, deletes the upcoming sessions, then closes', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(of(pendingSessions(2) as never));
+      scheduleService.deleteFuturePendingSessions.mockReturnValue(of(2));
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+      c.save();
+      c.confirmDeactivation();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+      expect((studentService.updateStudent.mock.calls[0][0] as Student).status).toBe(StudentStatus.PAST_STUDENT);
+      expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith('s-1');
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('saves straight away when there are no upcoming sessions', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(of([] as never));
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('status')?.setValue(StudentStatus.DECLINED_SERVICES);
+      c.save();
+      expect(pub(c).showDeactivateConfirm).toBe(false);
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+      expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith('s-1');
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('does not prompt when the status stays Active', () => {
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('name')?.setValue('Pat B');
+      c.save();
+      expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+      expect(scheduleService.deleteFuturePendingSessions).not.toHaveBeenCalled();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not prompt when the student was not Active before', () => {
+      const d = build({ mode: 'edit', student: { ...active(), status: StudentStatus.ONBOARDING } });
+      form(d).get('status')?.setValue(StudentStatus.MIA);
+      d.save();
+      expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+      expect(scheduleService.deleteFuturePendingSessions).not.toHaveBeenCalled();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+    });
+
+    it('still prompts (without a count) when the count fails', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(throwError(() => new Error('x')));
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+      c.save();
+      expect(pub(c).showDeactivateConfirm).toBe(true);
+      expect(pub(c).upcomingSessionCount).toBeNull();
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('a failed cleanup after the save surfaces Retry and Close', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(of(pendingSessions(1) as never));
+      scheduleService.deleteFuturePendingSessions.mockReturnValue(throwError(() => new Error('x')));
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+      c.save();
+      c.confirmDeactivation();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+      expect(pub(c).deleteSessionsFailed).toBe(true);
+      expect(priv(c).errorMessage).toBe('Student saved, but removing the upcoming sessions failed.');
+      expect(dialogRef.close).not.toHaveBeenCalled();
+
+      scheduleService.deleteFuturePendingSessions.mockReturnValue(of(1));
+      c.retryDeleteSessions();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1); // never re-saved
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('Close after a failed cleanup still closes as saved', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(of(pendingSessions(1) as never));
+      scheduleService.deleteFuturePendingSessions.mockReturnValue(throwError(() => new Error('x')));
+      const c = build({ mode: 'edit', student: active() });
+      form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+      c.save();
+      c.confirmDeactivation();
+      c.closeAfterSaveWithoutCleanup();
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
     });
   });
 });

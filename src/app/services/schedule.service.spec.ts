@@ -44,6 +44,7 @@ describe('ScheduleService', () => {
     createSessions: jest.fn(),
     getSessionsByStudent: jest.fn(),
     deleteSession: jest.fn(),
+    fillHorizon: jest.fn(),
   };
   const studentService = {updateStudent: jest.fn()};
   let service: ScheduleService;
@@ -58,6 +59,7 @@ describe('ScheduleService', () => {
       ],
     });
     service = TestBed.inject(ScheduleService);
+    sessionsService.fillHorizon.mockReturnValue(of({sessionsCreated: 0}));
   });
 
   describe('time helpers', () => {
@@ -269,6 +271,33 @@ describe('ScheduleService', () => {
       expect(new Set(created.filter(s => s.tutor_id === 't-2').map(s => s.series_id)).size).toBe(1);
     });
 
+    it('asks the service to fill the months ahead after the save (auto-renew on)', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      let done = false;
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 1), true).subscribe(() => (done = true));
+      expect(sessionsService.fillHorizon).toHaveBeenCalledWith('s-1');
+      expect(sessionsService.fillHorizon.mock.invocationCallOrder[0])
+        .toBeGreaterThan(studentService.updateStudent.mock.invocationCallOrder[0]);
+      expect(done).toBe(true);
+    });
+
+    it('does not fill ahead when auto-renew is off', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 1), false).subscribe();
+      expect(sessionsService.fillHorizon).not.toHaveBeenCalled();
+    });
+
+    it('a failed fill still resolves the saved student', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      sessionsService.fillHorizon.mockReturnValue(throwError(() => new Error('x')));
+      let result: Student | undefined;
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 1), true).subscribe(s => (result = s));
+      expect(result?.auto_renew).toBe(true);
+    });
+
     it('skips session creation when the month has no occurrences left', () => {
       studentService.updateStudent.mockReturnValue(of({} as Student));
       // July 31 2026 is a Friday — no Mon/Wed remain.
@@ -308,6 +337,22 @@ describe('ScheduleService', () => {
       expect(saved.schedule).toHaveLength(2);
       expect(saved.auto_renew).toBe(false);
       expect(result).toBe(saved);
+    });
+
+    it('fills ahead after an edit with auto-renew on, and not when it is turned off', () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of(existing()));
+      sessionsService.deleteSession.mockReturnValue(of({message: 'ok'}));
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      service.updateSchedule(student(), tutor(), slots, true).subscribe();
+      expect(sessionsService.fillHorizon).toHaveBeenCalledWith('s-1');
+      jest.clearAllMocks();
+      sessionsService.getSessionsByStudent.mockReturnValue(of(existing()));
+      sessionsService.deleteSession.mockReturnValue(of({message: 'ok'}));
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      service.updateSchedule(student(), tutor(), slots, false).subscribe();
+      expect(sessionsService.fillHorizon).not.toHaveBeenCalled();
     });
 
     it('mints a new series id when no future-pending sessions exist', () => {
@@ -386,5 +431,74 @@ describe('ScheduleService', () => {
       .subscribe({error: () => (errored = true)});
     expect(errored).toBe(true);
     expect(studentService.updateStudent).not.toHaveBeenCalled();
+  });
+
+  describe('futurePendingTutoring / deleteFuturePendingSessions (clock pinned to 2026-07-01)', () => {
+    beforeEach(() => jest.useFakeTimers().setSystemTime(new Date(2026, 6, 1, 9, 0, 0)));
+    afterEach(() => jest.useRealTimers());
+
+    const mixed = (): Session[] => [
+      {id: 'past', type: SessionType.TUTORING, status: SessionStatus.PENDING,
+        start_datetime: new Date(2026, 5, 15, 10, 0).toISOString()} as Session,
+      {id: 'jul', type: SessionType.TUTORING, status: SessionStatus.PENDING,
+        start_datetime: new Date(2026, 6, 8, 10, 0).toISOString()} as Session,
+      {id: 'aug-no-series', type: SessionType.TUTORING, status: SessionStatus.PENDING,
+        start_datetime: new Date(2026, 7, 5, 10, 0).toISOString()} as Session,
+      {id: 'sep', type: SessionType.TUTORING, status: SessionStatus.PENDING, series_id: 'x',
+        start_datetime: new Date(2026, 8, 2, 10, 0).toISOString()} as Session,
+      {id: 'done', type: SessionType.TUTORING, status: SessionStatus.COMPLETED,
+        start_datetime: new Date(2026, 6, 9, 10, 0).toISOString()} as Session,
+      {id: 'makeup', type: SessionType.MAKE_UP, status: SessionStatus.PENDING,
+        start_datetime: new Date(2026, 6, 10, 10, 0).toISOString()} as Session,
+      {id: 'group', type: SessionType.GROUP, status: SessionStatus.PENDING,
+        start_datetime: new Date(2026, 6, 11, 10, 0).toISOString()} as Session,
+      {id: 'undated', type: SessionType.TUTORING, status: SessionStatus.PENDING} as Session,
+    ];
+
+    it('returns future PENDING tutoring sessions only (series or not)', () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of(mixed()));
+      let ids: string[] = [];
+      service.futurePendingTutoring('s-1').subscribe(list => (ids = list.map(s => s.id!)));
+      expect(ids).toEqual(['jul', 'aug-no-series', 'sep']);
+      expect(sessionsService.getSessionsByStudent).toHaveBeenCalledWith('s-1');
+    });
+
+    it('honours a window (from inclusive, to exclusive)', () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of(mixed()));
+      let ids: string[] = [];
+      service
+        .futurePendingTutoring('s-1', new Date(), {from: new Date(2026, 7, 1), to: new Date(2026, 8, 1)})
+        .subscribe(list => (ids = list.map(s => s.id!)));
+      expect(ids).toEqual(['aug-no-series']);
+      service
+        .futurePendingTutoring('s-1', new Date(), {from: new Date(2026, 7, 1)})
+        .subscribe(list => (ids = list.map(s => s.id!)));
+      expect(ids).toEqual(['aug-no-series', 'sep']);
+    });
+
+    it('deletes each future pending tutoring session and resolves with the count', () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of(mixed()));
+      sessionsService.deleteSession.mockReturnValue(of({message: 'ok'}));
+      let count = -1;
+      service.deleteFuturePendingSessions('s-1').subscribe(n => (count = n));
+      expect(count).toBe(3);
+      expect(sessionsService.deleteSession).toHaveBeenCalledTimes(3);
+      expect(sessionsService.deleteSession).toHaveBeenCalledWith('sep');
+    });
+
+    it('resolves 0 without deleting when nothing is upcoming', () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of([mixed()[0]]));
+      let count = -1;
+      service.deleteFuturePendingSessions('s-1').subscribe(n => (count = n));
+      expect(count).toBe(0);
+      expect(sessionsService.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it('fillAhead skips a student without an id', () => {
+      let done = false;
+      service.fillAhead({...student(), id: undefined, auto_renew: true}).subscribe(() => (done = true));
+      expect(done).toBe(true);
+      expect(sessionsService.fillHorizon).not.toHaveBeenCalled();
+    });
   });
 });

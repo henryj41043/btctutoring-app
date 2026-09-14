@@ -16,7 +16,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {provideNativeDateAdapter} from '@angular/material/core';
-import {catchError, EMPTY, of, take} from 'rxjs';
+import {catchError, EMPTY, of, switchMap, take} from 'rxjs';
 import {PendingChange, Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
@@ -345,25 +345,44 @@ export class ManageScheduleDialog implements OnInit {
 
   /** The effective date as a local Date (component parse — never new Date(string)). */
   private effectiveAnchor(): Date {
-    const [y, m, d] = (this.change?.effective ?? '').split('-').map(Number);
+    return this.parseDateKey(this.change?.effective) ?? new Date();
+  }
+
+  /** 'YYYY-MM-DD' → local Date, or undefined when malformed. */
+  private parseDateKey(key?: string): Date | undefined {
+    const [y, m, d] = (key ?? '').split('-').map(Number);
     if (!y || !m || !d) {
-      return new Date();
+      return undefined;
     }
     return new Date(y, m - 1, d);
+  }
+
+  /** The start of the NEXT scheduled change after the one being edited (its window end). */
+  private nextChangeAnchor(): Date | undefined {
+    const later = pendingChangesOf(this.student)
+      .map(c => c.effective)
+      .filter(e => e > (this.data.pendingEffective ?? ''))
+      .sort()[0];
+    return this.parseDateKey(later);
   }
 
   private persist(slots: ScheduleSlot[]): void {
     this.saving = true;
     if (this.pendingMode) {
-      // Only this change's slots change — no sessions, no live-schedule
-      // fields. The whole list is rewritten (the backend replaces it and
-      // drops any legacy single-change scalars still on the record).
+      // Only this change's slots change — no live-schedule fields. The whole
+      // list is rewritten (the backend replaces it and drops any legacy
+      // single-change scalars still on the record). Sessions the horizon job
+      // already generated for this change's months are dropped first and
+      // regenerated from the new slots by the fill afterwards.
       const pendingChanges = withPendingSchedule(
         pendingChangesOf(this.student), this.data.pendingEffective!, slots);
       const updated: Student = {...this.student, pending_changes: pendingChanges};
-      this.studentService
-        .updateStudent(updated)
+      const window = {from: this.effectiveAnchor(), to: this.nextChangeAnchor()};
+      this.scheduleService
+        .deleteFuturePendingSessions(this.student.id!, new Date(), window)
         .pipe(
+          switchMap(() => this.studentService.updateStudent(updated)),
+          switchMap(() => this.scheduleService.fillAhead(updated)),
           catchError(() => {
             this.saving = false;
             this.fail('Saving the pending schedule failed.');

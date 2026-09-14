@@ -1,5 +1,5 @@
 import {inject, Injectable} from '@angular/core';
-import {forkJoin, map, Observable, of, switchMap} from 'rxjs';
+import {catchError, forkJoin, map, Observable, of, switchMap} from 'rxjs';
 import {SessionsService} from './sessions.service';
 import {StudentService} from './student.service';
 import {Student} from '../models/student.model';
@@ -189,6 +189,70 @@ export class ScheduleService {
     });
   }
 
+  /** A time window over session start instants: `from` inclusive, `to` exclusive. */
+  private inWindow(session: Session, window?: {from: Date; to?: Date}): boolean {
+    if (!window) return true;
+    const start = new Date(session.start_datetime!);
+    return start >= window.from && (!window.to || start < window.to);
+  }
+
+  /**
+   * A student's future (after now) PENDING tutoring sessions — series or not —
+   * optionally limited to a window. Make-ups, trials and group sessions are
+   * never included.
+   */
+  futurePendingTutoring(
+    studentId: string,
+    now: Date = new Date(),
+    window?: {from: Date; to?: Date},
+  ): Observable<Session[]> {
+    return this.sessionsService.getSessionsByStudent(studentId).pipe(
+      map(sessions =>
+        sessions.filter(
+          s =>
+            s.type === SessionType.TUTORING &&
+            s.status === SessionStatus.PENDING &&
+            !!s.start_datetime &&
+            new Date(s.start_datetime) > now &&
+            this.inWindow(s, window),
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Deletes a student's future PENDING tutoring sessions (see
+   * futurePendingTutoring) and resolves with the count removed. Deleting banks
+   * no make-up minutes — callers warn the admin to cancel first when the
+   * minutes should be kept.
+   */
+  deleteFuturePendingSessions(
+    studentId: string,
+    now: Date = new Date(),
+    window?: {from: Date; to?: Date},
+  ): Observable<number> {
+    return this.futurePendingTutoring(studentId, now, window).pipe(
+      switchMap(targets =>
+        targets.length
+          ? forkJoin(targets.map(s => this.sessionsService.deleteSession(s.id!))).pipe(map(() => targets.length))
+          : of(0),
+      ),
+    );
+  }
+
+  /**
+   * After a schedule save: have the service generate the next three months for
+   * this student (idempotent). Best effort — a failure here never fails the
+   * save, since the nightly horizon job fills the same months. Nothing is
+   * generated ahead when auto-renew is off.
+   */
+  fillAhead(student: Student): Observable<unknown> {
+    if (!student.auto_renew || !student.id) {
+      return of(null);
+    }
+    return this.sessionsService.fillHorizon(student.id).pipe(catchError(() => of(null)));
+  }
+
   /** A student's future (after now) PENDING tutoring sessions that belong to a series. */
   private futurePendingSeries(sessions: Session[], now: Date): Session[] {
     return sessions.filter(
@@ -240,7 +304,8 @@ export class ScheduleService {
   /**
    * Creates a brand-new schedule: generates this month's sessions from `startDate`
    * and persists the template (schedule + package_start_date + auto_renew) on the
-   * student. Resolves with the updated student.
+   * student, then asks the service to fill the next three months (auto-renew
+   * only). Resolves with the updated student.
    */
   createSchedule(
     student: Student,
@@ -266,15 +331,18 @@ export class ScheduleService {
       : of(null);
     return create$.pipe(
       switchMap(() => this.studentService.updateStudent(updated)),
+      switchMap(() => this.fillAhead(updated)),
       map(() => updated),
     );
   }
 
   /**
-   * Edits an existing schedule: deletes this month's future-pending series
-   * sessions, regenerates the remainder of the month from the new slots (reusing
-   * the active series id when one exists), and saves the new template. The
-   * original package_start_date is preserved. Resolves with the updated student.
+   * Edits an existing schedule: deletes ALL future-pending series sessions
+   * (including months generated ahead), regenerates the remainder of this month
+   * from the new slots (reusing the active series id when one exists), saves the
+   * new template, then asks the service to refill the months ahead (auto-renew
+   * only — turning it off therefore also drops the future months). The original
+   * package_start_date is preserved. Resolves with the updated student.
    */
   updateSchedule(
     student: Student,
@@ -306,6 +374,7 @@ export class ScheduleService {
         return deletes$.pipe(
           switchMap(() => create$),
           switchMap(() => this.studentService.updateStudent(updated)),
+          switchMap(() => this.fillAhead(updated)),
           map(() => updated),
         );
       }),
@@ -313,7 +382,7 @@ export class ScheduleService {
   }
 
   /**
-   * Deletes a schedule: removes this month's future-pending series sessions, then
+   * Deletes a schedule: removes every future-pending series session, then
    * clears the template (empty schedule signals the backend to drop it) and turns
    * auto-renew off. History (past/finalized sessions) is preserved.
    */

@@ -76,7 +76,10 @@ describe('Contact', () => {
   };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
   const router = { navigate: jest.fn() };
-  const scheduleService = { scheduleSummary: jest.fn().mockReturnValue([]) };
+  const scheduleService = {
+    scheduleSummary: jest.fn().mockReturnValue([]),
+    deleteFuturePendingSessions: jest.fn(() => of(0)),
+  };
   const sessionsService = { getAllSessions: jest.fn() };
   const billingService = {
     getBillingRecordsByContact: jest.fn(),
@@ -1446,7 +1449,26 @@ describe('Contact', () => {
         expect(studentService.updateStudent).toHaveBeenCalledWith({
           id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.MIA,
         });
+        // The cascaded student's upcoming pending tutoring sessions are dropped.
+        expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledTimes(1);
+        expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith('s-1');
         // Students are re-fetched afterwards (initial load + post-cascade).
+        expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(2);
+      });
+
+      it('still reloads the students when a session cleanup fails', () => {
+        family('Active Client');
+        studentService.getStudentsByContact.mockReturnValue(
+          of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT }]),
+        );
+        scheduleService.deleteFuturePendingSessions.mockReturnValueOnce(
+          throwError(() => new Error('x')) as never,
+        );
+        const c = build();
+        c.ngOnInit();
+        form(c).controls['status'].setValue('MIA');
+        c.updateContact();
+        expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
         expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(2);
       });
 

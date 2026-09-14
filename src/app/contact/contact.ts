@@ -1056,8 +1056,10 @@ export class Contact implements OnInit {
 
   /**
    * Applies a deactivating parent-status change to every student in the
-   * family (partial updates — the backend preserves untouched fields), then
-   * refreshes the students list. Students already at the target are skipped.
+   * family (partial updates — the backend preserves untouched fields), drops
+   * each one's upcoming pending tutoring sessions (three months may be
+   * generated ahead), then refreshes the students list. Students already at
+   * the target are skipped.
    */
   private cascadeStatusToStudents(target: StudentStatus): void {
     const pending = this.students.filter(s => !!s.id && s.status !== target);
@@ -1074,6 +1076,7 @@ export class Contact implements OnInit {
             status: target,
           } as Student)
           .pipe(
+            switchMap(() => this.scheduleService.deleteFuturePendingSessions(s.id!)),
             catchError(error => {
               console.log(error);
               return of(null);

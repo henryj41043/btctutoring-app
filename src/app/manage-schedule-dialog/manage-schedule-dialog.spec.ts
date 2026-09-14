@@ -35,6 +35,8 @@ describe('ManageScheduleDialog', () => {
     createSchedule: jest.fn(),
     updateSchedule: jest.fn(),
     deleteSchedule: jest.fn(),
+    deleteFuturePendingSessions: jest.fn(() => of(0)),
+    fillAhead: jest.fn(() => of(null)),
   };
   const authService = {isAdmin: () => isAdmin};
   const studentService = {updateStudent: jest.fn()};
@@ -351,9 +353,38 @@ describe('ManageScheduleDialog', () => {
       expect(scheduleService.createSchedule).not.toHaveBeenCalled();
       expect(scheduleService.updateSchedule).not.toHaveBeenCalled();
       expect(scheduleService.deleteSchedule).not.toHaveBeenCalled();
+      // Sessions already generated for this change's months (Sep 1 up to the
+      // next change on Jan 1) are dropped before the save, then refilled.
+      expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith(
+        's-1', expect.any(Date), {from: new Date(2026, 8, 1), to: new Date(2027, 0, 1)});
+      expect(scheduleService.fillAhead).toHaveBeenCalledWith(
+        expect.objectContaining({pending_changes: payload.pending_changes}));
+      const deleteOrder = scheduleService.deleteFuturePendingSessions.mock.invocationCallOrder[0];
+      const saveOrder = studentService.updateStudent.mock.invocationCallOrder[0];
+      const fillOrder = scheduleService.fillAhead.mock.invocationCallOrder[0];
+      expect(deleteOrder).toBeLessThan(saveOrder);
+      expect(saveOrder).toBeLessThan(fillOrder);
       expect(dialogRef.close).toHaveBeenCalledWith(
         expect.objectContaining({pending_changes: payload.pending_changes}),
       );
+    });
+
+    it('the last change has an open-ended cleanup window', () => {
+      const c = primedPending({
+        pending_changes: [{package: 'Achieve', effective: '2026-09-01'}],
+      });
+      c.save();
+      expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith(
+        's-1', expect.any(Date), {from: new Date(2026, 8, 1), to: undefined});
+    });
+
+    it('a failed cleanup before the save surfaces the error and saves nothing', () => {
+      scheduleService.deleteFuturePendingSessions.mockReturnValueOnce(throwError(() => new Error('x')));
+      const c = primedPending();
+      c.save();
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      expect(c.errorMessage).toBe('Saving the pending schedule failed.');
+      expect(dialogRef.close).not.toHaveBeenCalled();
     });
 
     it('a change that no longer exists blocks with a message (no def, no save)', () => {

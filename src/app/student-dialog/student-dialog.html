@@ -198,6 +198,19 @@
       }
     }
 
+    @if (showDeactivateConfirm) {
+      <div class="status-confirm-warning">
+        <p><strong>⚠ Leaving Active status.</strong></p>
+        <p>
+          @if (upcomingSessionCount !== null) {
+            {{ upcomingSessionCount }} upcoming pending tutoring session(s) will be deleted.
+          } @else {
+            This student's upcoming pending tutoring sessions will be deleted.
+          }
+          Deleting does not bank make-up minutes — cancel sessions first if the minutes should be kept.
+        </p>
+      </div>
+    }
     @if (hasError) {
       <mat-error class="dialog-error">{{ errorMessage }}</mat-error>
     }
@@ -205,6 +218,12 @@
   <mat-dialog-actions>
     @if (submitting) {
       <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
+    } @else if (showDeactivateConfirm) {
+      <button matButton (click)="cancelDeactivation()">Go Back</button>
+      <button mat-raised-button color="warn" (click)="confirmDeactivation()">Save &amp; Delete Sessions</button>
+    } @else if (deleteSessionsFailed) {
+      <button matButton (click)="closeAfterSaveWithoutCleanup()">Close</button>
+      <button mat-raised-button color="primary" (click)="retryDeleteSessions()">Retry Cleanup</button>
     } @else {
       <button matButton (click)="cancel()">Cancel</button>
       <button mat-raised-button color="primary" (click)="save()">
