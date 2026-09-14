@@ -253,13 +253,16 @@ export class SessionDialog implements OnInit {
   emailNotesFailed: boolean = false;
   private savedResponse: Session | null = null;
 
-  /** The checkbox shows when completing (or amending) attendance on a
-   *  student session — the client's tutors opt in per session. */
+  /** The checkbox shows when taking (or amending) attendance on a student
+   *  session — any finalizing status (Completed, Cancelled, No-call/no-show),
+   *  since notes are required for all of them (client 2026-09-14). The
+   *  client's tutors opt in per session. */
   get canEmailNotes(): boolean {
     return this.dialogData?.type === 'edit'
       && !this.isReadOnly
       && this.hasStudent
-      && this.selectedAttendance === SessionStatus.COMPLETED;
+      && !!this.selectedAttendance
+      && this.selectedAttendance !== SessionStatus.PENDING;
   }
 
   /** Duration of the currently-entered time range (validation + banking live in utils). */
