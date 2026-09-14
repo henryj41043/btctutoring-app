@@ -107,9 +107,12 @@
   }
   <br/>
 
-  <mat-form-field>
+  <!-- Free text: spans the full dialog width (both columns) with a taller
+       textarea; the subscript grows with the hint so it never overlaps the
+       email-to-parent row below. -->
+  <mat-form-field class="notes-field" subscriptSizing="dynamic">
     <mat-label>Notes</mat-label>
-    <textarea matInput [(ngModel)]="notes" [disabled]="isReadOnly" [required]="notesRequired"></textarea>
+    <textarea matInput rows="4" [(ngModel)]="notes" [disabled]="isReadOnly" [required]="notesRequired"></textarea>
     @if (notesRequired) {
       <mat-hint>Required when taking attendance — a short summary of the session.</mat-hint>
     }

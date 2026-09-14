@@ -55,13 +55,23 @@
   margin: 4px 8px;
 }
 
-/* Email-notes opt-in: sits tight under the notes field with its last-sent hint. */
+/* Notes: the one free-text field — full dialog width, taller textarea. */
+.notes-field {
+  display: block;
+  width: calc(100% - 10px); // full width less the 5px side margins above
+
+  textarea {
+    resize: vertical;
+  }
+}
+
+/* Email-notes opt-in: sits under the notes field (and its hint) with its last-sent hint. */
 .email-notes-row {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  margin: 0 0 6px;
+  margin: 4px 5px 6px;
 
   .email-notes-hint {
     font-size: .8rem;
