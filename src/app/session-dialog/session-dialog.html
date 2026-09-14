@@ -109,7 +109,10 @@
 
   <mat-form-field>
     <mat-label>Notes</mat-label>
-    <textarea matInput [(ngModel)]="notes" [disabled]="isReadOnly"></textarea>
+    <textarea matInput [(ngModel)]="notes" [disabled]="isReadOnly" [required]="notesRequired"></textarea>
+    @if (notesRequired) {
+      <mat-hint>Required when taking attendance — a short summary of the session.</mat-hint>
+    }
   </mat-form-field>
   @if (canEmailNotes) {
     <div class="email-notes-row">

@@ -574,6 +574,7 @@ describe('SessionDialog', () => {
     it('does not warn when only taking attendance on an unchanged session (regression)', () => {
       const c = unchangedEdit();
       c.selectedAttendance = SessionStatus.COMPLETED;
+      c.notes = 'Attendance note.';
       c.updateSession();
       expect(c.showScheduleWarning).toBe(false);
       // Proceeds straight to the finalize-attendance confirm.
@@ -699,6 +700,7 @@ describe('SessionDialog', () => {
       c.startTime = new Date(2026, 5, 1, 10, 0);
       c.endTime = new Date(2026, 5, 1, 11, 0);
       c.selectedAttendance = SessionStatus.PENDING;
+      c.notes = 'Worked on fractions.';
       return c;
     };
 
@@ -708,6 +710,72 @@ describe('SessionDialog', () => {
       c.updateSession();
       expect(sessionsService.updateSession).toHaveBeenCalled();
       expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    describe('notes required when taking attendance', () => {
+      it.each([
+        SessionStatus.COMPLETED,
+        SessionStatus.CANCELLED,
+        SessionStatus.NO_CALL_NO_SHOW,
+      ])('blocks a Pending → %s change when the notes are blank', status => {
+        const c = primedEdit(editData());
+        c.selectedAttendance = status;
+        c.notes = '   ';
+        expect(c.notesRequired).toBe(true);
+        c.updateSession();
+        expect(c.hasError).toBe(true);
+        expect(c.errorMessage).toBe('Notes are required when taking attendance.');
+        expect(c.showStatusConfirm).toBe(false);
+        expect(sessionsService.updateSession).not.toHaveBeenCalled();
+      });
+
+      it('blocks when the notes are undefined (session never had any)', () => {
+        const c = primedEdit(editData({ notes: undefined }));
+        c.selectedAttendance = SessionStatus.COMPLETED;
+        c.notes = undefined as unknown as string;
+        c.updateSession();
+        expect(c.hasError).toBe(true);
+        expect(c.showStatusConfirm).toBe(false);
+      });
+
+      it('proceeds to the status confirmation once notes are typed', () => {
+        const c = primedEdit(editData());
+        c.selectedAttendance = SessionStatus.COMPLETED;
+        c.notes = 'Reviewed long division.';
+        c.updateSession();
+        expect(c.hasError).toBe(false);
+        expect(c.showStatusConfirm).toBe(true);
+      });
+
+      it('does not require notes for a still-pending edit', () => {
+        const c = primedEdit(editData());
+        c.notes = '';
+        expect(c.notesRequired).toBe(false);
+        sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+        c.updateSession();
+        expect(c.hasError).toBe(false);
+        expect(sessionsService.updateSession).toHaveBeenCalled();
+      });
+
+      it('does not require notes when the stored status was already finalized', () => {
+        const c = primedEdit(editData({ status: SessionStatus.COMPLETED }));
+        c.selectedAttendance = SessionStatus.COMPLETED;
+        c.notes = '';
+        expect(c.notesRequired).toBe(false);
+      });
+
+      it('does not require notes for an admin session (no student)', () => {
+        const c = primedEdit(editData());
+        c.selectedType = SessionType.ADMIN;
+        c.selectedAttendance = SessionStatus.COMPLETED;
+        expect(c.notesRequired).toBe(false);
+      });
+
+      it('does not require notes in create mode', () => {
+        const c = build({ type: 'create', session: new Session(), existingSessions: [] } as SessionDialogData);
+        c.selectedAttendance = SessionStatus.COMPLETED;
+        expect(c.notesRequired).toBe(false);
+      });
     });
 
     it('prompts for status confirmation when marking a pending tutoring session complete', () => {
@@ -908,6 +976,7 @@ describe('SessionDialog', () => {
       c.startTime = new Date(2026, 5, 1, 10, 0);
       c.endTime = new Date(2026, 5, 1, 11, 0);
       c.selectedAttendance = SessionStatus.COMPLETED;
+      c.notes = 'Make-up session note.';
       return c;
     };
 
@@ -1342,6 +1411,7 @@ describe('SessionDialog', () => {
       c.startTime = new Date(2026, 5, 1, 10, 0);
       c.endTime = new Date(2026, 5, 1, 11, 0);
       c.selectedAttendance = SessionStatus.PENDING;
+      c.notes = 'Session note.';
       Object.assign(c, fields);
       return c;
     };

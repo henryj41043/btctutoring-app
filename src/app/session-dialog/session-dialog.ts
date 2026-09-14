@@ -216,6 +216,19 @@ export class SessionDialog implements OnInit {
     return this.seriesAction === 'delete' ? 'deletion' : 'change';
   }
 
+  /**
+   * Taking attendance (Pending → any finalized status) on a student session
+   * requires a typed session summary — company practice, enforced by the UI
+   * (client 2026-09-14). Pending-only edits and reschedules stay free-form.
+   */
+  get notesRequired(): boolean {
+    return this.dialogData?.type === 'edit'
+      && this.hasStudent
+      && this.dialogData.session?.status === SessionStatus.PENDING
+      && !!this.selectedAttendance
+      && this.selectedAttendance !== SessionStatus.PENDING;
+  }
+
   get isStatusLocked(): boolean {
     return this.dialogData.type === 'edit'
       && !!this.dialogData.session.status
@@ -555,6 +568,11 @@ export class SessionDialog implements OnInit {
       const lengthError = this.lengthError();
       if (lengthError) {
         this.errorMessage = lengthError;
+        this.hasError = true;
+        return;
+      }
+      if (this.notesRequired && !(this.notes ?? '').trim()) {
+        this.errorMessage = 'Notes are required when taking attendance.';
         this.hasError = true;
         return;
       }
