@@ -10,11 +10,18 @@
   }
 </h2>
 <mat-dialog-content>
-  @if (dialogData.type !== 'delete') {
+  @if (isMakeupLocked && dialogData.type === 'create') {
+    <!-- Tutor self-service: type and tutor are pinned (make-up, self) — shown
+         as plain text so the locked fields don't read as broken controls. -->
+    <p class="locked-hint">
+      <strong>Make-up session</strong> for <strong>{{lockedTutorName}}</strong> —
+      pick the student, date and time. Regular lessons are scheduled by the office.
+    </p>
+  } @else if (dialogData.type !== 'delete') {
     <mat-form-field>
       <mat-label>Session Type</mat-label>
       <mat-select [ngModel]="selectedType" (ngModelChange)="onTypeChange($event)"
-                  [disabled]="isReadOnly || isMakeupLocked">
+                  [disabled]="isReadOnly">
         @for (type of sessionTypeOptions; track type) {
           <mat-option [value]="type">{{typeLabels[type]}}</mat-option>
         }
@@ -35,11 +42,16 @@
       <mat-label>Tutor</mat-label>
       <input matInput disabled [value]="dialogData.session.tutor_name ?? ''">
     </mat-form-field>
+  } @else if (isMakeupLocked) {
+    <mat-form-field>
+      <mat-label>Tutor</mat-label>
+      <input matInput disabled [value]="lockedTutorName">
+    </mat-form-field>
   } @else {
     <mat-form-field>
       <!-- Admin time is loggable by any staff member; tutoring/make-up only by tutors. -->
       <mat-label>{{selectedType === SessionType.ADMIN ? 'Select Staff' : 'Select Tutor'}}</mat-label>
-      <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)" [disabled]="isMakeupLocked">
+      <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)">
         @for (tutor of tutors; track tutor) {
           <mat-option [value]="tutor.id">{{contactDisplayName(tutor)}}</mat-option>
         }
