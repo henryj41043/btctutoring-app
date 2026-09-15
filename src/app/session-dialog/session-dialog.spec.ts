@@ -1166,6 +1166,96 @@ describe('SessionDialog', () => {
     it('the tutors list contains only the tutor themselves, even at capacity', () => {
       const c = buildLocked();
       expect(c.tutors.map(t => t.id)).toEqual(['c-self']);
+      expect(c.lockedTutorName).toContain('Self');
+    });
+
+    it('keeps the names-only staff projection tutors receive (no status/service fields)', () => {
+      // Regression (client 2026-09-14): the projection rows were filtered out
+      // as "not current staff", leaving the locked tutor blank.
+      isAdmin = false;
+      ownContactId = 'c-self';
+      contactService.getStaff.mockReturnValue(of([
+        { id: 'c-self', first_name: 'Emily', last_name: 'S' } as Contact,
+        { id: 'c-other', first_name: 'Other', last_name: 'T' } as Contact,
+      ]));
+      studentService.getStudentsByTutor.mockReturnValue(of([
+        student({ id: 's-own', assigned_tutor_id: 'c-self', make_up_minutes: 240 }),
+      ]));
+      const c = build({
+        type: 'create',
+        session: new Session(),
+        existingSessions: [],
+        lockToMakeup: true,
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.tutors.map(t => t.id)).toEqual(['c-self']);
+      expect(c.lockedTutorName).toContain('Emily');
+
+      c.selectedStudent = 's-own';
+      c.date = new Date(2026, 5, 1);
+      c.startTime = new Date(2026, 5, 1, 10, 0);
+      c.endTime = new Date(2026, 5, 1, 11, 0);
+      sessionsService.createSession.mockReturnValue(of({ id: 'mu-1' }));
+      c.createSession();
+      const sent = sessionsService.createSession.mock.calls.at(-1)![0] as Session;
+      expect(sent.type).toBe(SessionType.MAKE_UP);
+      expect(sent.tutor_id).toBe('c-self');
+      expect(sent.tutor_name).toBe('Emily');
+      expect(sent.student_id).toBe('s-own');
+      expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    it('falls back to the signed-in contact when the staff list lacks them', () => {
+      isAdmin = false;
+      ownContactId = 'c-self';
+      contactService.getStaff.mockReturnValue(of([]));
+      studentService.getStudentsByTutor.mockReturnValue(of([]));
+      const c = build({
+        type: 'create',
+        session: new Session(),
+        existingSessions: [],
+        lockToMakeup: true,
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.tutors.map(t => t.id)).toEqual(['c-self']);
+      expect(c.selectedTutor).toBe('c-self');
+    });
+
+    it('still filters full staff records to current staff for admins', () => {
+      isAdmin = true;
+      contactService.getStaff.mockReturnValue(of([
+        tutor({ id: 'c-active' }),
+        tutor({ id: 'c-former', status: StaffStatus.FORMER_STAFF }),
+        tutor({ id: 'c-applicant', service: Service.EMPLOYMENT_INQUIRY }),
+      ]));
+      studentService.getStudents.mockReturnValue(of([]));
+      const c = build({
+        type: 'create',
+        session: new Session(),
+        existingSessions: [],
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.tutors.map(t => t.id)).toEqual(['c-active']);
+    });
+
+    it('an unlocked create without a tutor selection fails visibly instead of crashing', () => {
+      isAdmin = true;
+      contactService.getStaff.mockReturnValue(of([]));
+      studentService.getStudents.mockReturnValue(of([]));
+      const c = build({
+        type: 'create',
+        session: new Session(),
+        existingSessions: [],
+      } as SessionDialogData);
+      c.ngOnInit();
+      c.selectedType = SessionType.ADMIN;
+      c.date = new Date(2026, 5, 1);
+      c.startTime = new Date(2026, 5, 1, 10, 0);
+      c.endTime = new Date(2026, 5, 1, 11, 0);
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toBe('Please select a tutor');
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
     });
 
     it('an unlocked create is unaffected', () => {

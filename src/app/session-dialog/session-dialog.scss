@@ -78,3 +78,10 @@
     color: var(--mat-sys-on-surface-variant);
   }
 }
+
+/* Tutor self-service make-up: the pinned type/tutor shown as a sentence. */
+.locked-hint {
+  margin: 0 5px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}

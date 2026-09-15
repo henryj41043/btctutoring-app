@@ -105,10 +105,13 @@ export class SessionDialog implements OnInit {
   private allStaff: Contact[] = [];
   get tutors(): Contact[] {
     // Locked self-service mode: only the tutor themselves — even when they're
-    // at capacity (not currently accepting), their own name must render.
+    // at capacity (not currently accepting), their own name must render. The
+    // signed-in contact is the fallback when the staff list lacks them (e.g.
+    // it failed to load), so the locked tutor is never blank.
     if (this.isMakeupLocked) {
-      const ownId = this.authService.contact().id;
-      return this.allStaff.filter(c => c.id === ownId);
+      const own = this.authService.contact();
+      const fromStaff = this.allStaff.find(c => c.id === own?.id);
+      return fromStaff ? [fromStaff] : own?.id ? [own] : [];
     }
     if (this.selectedType === SessionType.ADMIN) {
       return this.allStaff;
@@ -122,6 +125,12 @@ export class SessionDialog implements OnInit {
       c => c.is_tutor !== false && c.currently_accepting_students,
     );
   }
+  /** The locked tutor's display name (self-service make-up create). */
+  get lockedTutorName(): string {
+    const self = this.tutors[0];
+    return self ? contactDisplayName(self) : '';
+  }
+
   /** Every loaded student, unfiltered — the status filter depends on the
    *  CURRENT session type, so it must be re-derived, never baked in. */
   private allLoadedStudents: Student[] = [];
@@ -525,7 +534,12 @@ export class SessionDialog implements OnInit {
       }
       const submitStartDate = combineDateTime(this.date, this.startTime);
       const submitEndDate = combineDateTime(this.date, this.endTime);
-      let tutor: Contact = this.tutors.find(tutor => tutor.id === this.selectedTutor)!;
+      const tutor: Contact | undefined = this.tutors.find(t => t.id === this.selectedTutor);
+      if (!tutor) {
+        this.errorMessage = 'Please select a tutor';
+        this.hasError = true;
+        return;
+      }
       let session: Session = new Session();
       session.type = this.selectedType;
       session.tutor_name = tutor.first_name;
@@ -911,7 +925,13 @@ export class SessionDialog implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(contacts => {
-        this.allStaff = contacts.filter(c => c.status === StaffStatus.ACTIVE_STAFF && c.service === Service.HIRING);
+        // Admins get full records (filter to current staff); tutor-role users
+        // get the names-only projection — already current staff, and without
+        // status/service fields — which must NOT be filtered away, or the
+        // locked make-up tutor renders blank (client bug report 2026-09-14).
+        this.allStaff = contacts.filter(
+          c => (c.status === undefined && c.service === undefined)
+            || (c.status === StaffStatus.ACTIVE_STAFF && c.service === Service.HIRING));
       });
   }
 
