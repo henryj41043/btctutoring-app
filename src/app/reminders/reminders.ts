@@ -21,10 +21,10 @@ import {ContactService} from '../services/contact.service';
 import {AuthService} from '../services/auth.service';
 import {Reminder} from '../models/reminder.model';
 import {Contact} from '../models/contact.model';
-import {UserGroup} from '../enums/user-group.enum';
 import {ReminderDialog, ReminderDialogMode} from '../reminder-dialog/reminder-dialog';
 import {TableStateStore} from '../utils/table-state';
 import {contactDisplayName} from '../utils/contact-name';
+import {isCurrentAdmin} from '../utils/staff';
 
 /**
  * Admin-only Reminders page: dated reminders emailed to chosen admins the
@@ -118,7 +118,8 @@ export class Reminders implements OnInit {
         .pipe(catchError(error => { console.log(error); return of([] as Contact[]); })),
     }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({reminders, contacts}) => {
       this.contacts = contacts;
-      this.admins = contacts.filter(c => c.user_group === UserGroup.ADMINS);
+      // Current admins only — former staff / inquiries may still carry the group.
+      this.admins = contacts.filter(isCurrentAdmin);
       // Name-less (newsletter) contacts fall back to their email address.
       this.adminNamesById = new Map(this.admins
         .filter(a => !!a.id)

@@ -24,7 +24,9 @@ const reminder = (over: Partial<Reminder> = {}): Reminder => ({
   ...over,
 });
 
-const adminContact = { id: 'a-1', first_name: 'Amy', last_name: 'Adams', user_group: 'Admins' };
+const STAFF = { service: 'Hiring', status: 'Staff' };
+const adminContact = { id: 'a-1', first_name: 'Amy', last_name: 'Adams', user_group: 'Admins', ...STAFF };
+const formerAdmin = { id: 'a-9', first_name: 'Fay', last_name: 'Former', user_group: 'Admins', service: 'Hiring', status: 'Former Staff' };
 const tutorContact = { id: 't-1', first_name: 'Tess', last_name: 'Coach', user_group: 'Tutors' };
 
 describe('Reminders', () => {
@@ -174,9 +176,23 @@ describe('Reminders', () => {
     }));
   });
 
+  it('offers only CURRENT admins as recipients (former staff / inquiries carrying the group are dropped)', () => {
+    contactService.getContactsSummary.mockReturnValue(of([
+      adminContact,
+      formerAdmin,
+      { id: 'a-8', first_name: 'Ivy', last_name: 'Inquiry', user_group: 'Admins', service: 'Employment Inquiry', status: 'Inquiry submitted' },
+      tutorContact,
+    ]));
+    const c = build();
+    c.ngOnInit();
+    expect((c as unknown as { admins: { id: string }[] }).admins.map(a => a.id)).toEqual(['a-1']);
+    // A stored recipient who is no longer offered renders as the dash placeholder.
+    expect(c.recipientNames(reminder({ all_admins: false, recipient_ids: ['a-9'] }))).toBe('—');
+  });
+
   it('handles contacts without ids and reminders without dates or recipients', () => {
     contactService.getContactsSummary.mockReturnValue(
-      of([adminContact, { first_name: 'NoId', user_group: 'Admins' }]),
+      of([adminContact, { first_name: 'NoId', user_group: 'Admins', ...STAFF }]),
     );
     reminderService.getReminders.mockReturnValue(
       of([reminder({ id: 'rem-2', date: undefined, all_admins: false, recipient_ids: undefined })]),
@@ -202,7 +218,7 @@ describe('Reminders', () => {
   it('sorts date-less reminders and maps name-less admins without crashing', () => {
     contactService.getContactsSummary.mockReturnValue(of([
       adminContact,
-      { id: 'a-2', user_group: 'Admins' }, // no names -> '' via the ?? fallbacks
+      { id: 'a-2', user_group: 'Admins', ...STAFF }, // no names -> '' via the ?? fallbacks
     ]));
     reminderService.getReminders.mockReturnValue(of([
       reminder({ id: 'rem-1', date: undefined }), // no date -> '' in the sort
@@ -219,7 +235,7 @@ describe('Reminders', () => {
   it('name-less contacts with an email display as the email', () => {
     contactService.getContactsSummary.mockReturnValue(of([
       adminContact,
-      { id: 'a-3', user_group: 'Admins', email: 'third.admin@example.com' },
+      { id: 'a-3', user_group: 'Admins', email: 'third.admin@example.com', ...STAFF },
     ]));
     reminderService.getReminders.mockReturnValue(of([]));
     const c = build();
