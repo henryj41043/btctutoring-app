@@ -6,9 +6,12 @@ import {CUSTOM_PACKAGE, PackageDef} from './package-config';
 import {availableMakeupMinutes} from './makeup';
 import {durationOf} from './session-times';
 
+/** Allowed trial lengths in minutes (client policy 2026-09-22: 45, or 30). */
+export const TRIAL_LENGTHS_MIN: readonly number[] = [45, 30];
+
 /**
  * Returns an error if a session's duration violates its type's length rules:
- * trials are exactly 45 minutes by policy, and tutoring sessions may not
+ * trials are 45 minutes (or 30) by policy, and tutoring sessions may not
  * exceed the length the student's package allows per session. ADMIN/MAKE_UP
  * and unconfigured packages aren't constrained (make-up is already bounded by
  * the make-up minutes bank).
@@ -20,9 +23,9 @@ export function validateSessionLength(
   student: Student | undefined,
 ): string | null {
   if (type === SessionType.TRIAL) {
-    return durationMinutes === 45
+    return TRIAL_LENGTHS_MIN.includes(durationMinutes)
       ? null
-      : 'Trial sessions are always exactly 45 minutes.';
+      : 'Trial sessions are 45 minutes, or 30 if the student can\'t manage the full session.';
   }
   if (type === SessionType.GROUP) {
     return durationMinutes === 45

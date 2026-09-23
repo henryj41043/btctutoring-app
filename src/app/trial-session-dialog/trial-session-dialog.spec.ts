@@ -83,6 +83,36 @@ describe('TrialSessionDialog', () => {
     expect(dialogRef.close).toHaveBeenCalledWith('2026-08-21');
   });
 
+  it('creates a 30-minute TRIAL when the shorter length is chosen', () => {
+    const c = build();
+    c.ngOnInit();
+    expect((c as unknown as { lengthMin: number }).lengthMin).toBe(45); // default
+    (c as unknown as { lengthMin: number }).lengthMin = 30;
+    (c as unknown as { date: Date }).date = new Date(2026, 7, 21);
+    (c as unknown as { startTime: Date }).startTime = new Date(2026, 7, 21, 10, 0);
+    (c as unknown as { save: () => void }).save();
+    const session = sessionsService.createSession.mock.calls[0][0] as Session;
+    expect(session.type).toBe(SessionType.TRIAL);
+    const start = new Date(session.start_datetime!);
+    const end = new Date(session.end_datetime!);
+    expect(end.getTime() - start.getTime()).toBe(30 * 60 * 1000);
+  });
+
+  it('offers exactly the 45 and 30 minute lengths, default first', () => {
+    const c = build();
+    expect((c as unknown as { lengthOptions: readonly number[] }).lengthOptions).toEqual([45, 30]);
+  });
+
+  it('shows the computed end time for the chosen length', () => {
+    const c = build();
+    c.ngOnInit();
+    (c as unknown as { lengthMin: number }).lengthMin = 30;
+    (c as unknown as { startTime: Date }).startTime = new Date(2026, 7, 21, 10, 30);
+    const end = (c as unknown as { endTime: Date }).endTime;
+    expect(end.getHours()).toBe(11);
+    expect(end.getMinutes()).toBe(0);
+  });
+
   it('shows the computed end time (start + 45 minutes)', () => {
     const c = build();
     c.ngOnInit();

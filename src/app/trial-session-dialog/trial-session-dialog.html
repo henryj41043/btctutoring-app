@@ -3,8 +3,14 @@
 <mat-dialog-content class="trial-dialog-content">
   <p class="trial-tutor-line">
     Tutor: <strong>{{data.tutor.first_name}}</strong>
-    <span class="trial-length-hint">Trial sessions are always 45 minutes.</span>
+    <span class="trial-length-hint">Trials are 45 minutes — choose 30 if the student can't manage the full session.</span>
   </p>
+
+  <mat-button-toggle-group class="trial-length-toggle" [(ngModel)]="lengthMin" aria-label="Trial length">
+    @for (option of lengthOptions; track option) {
+      <mat-button-toggle [value]="option">{{option}} min</mat-button-toggle>
+    }
+  </mat-button-toggle-group>
 
   <mat-form-field>
     <mat-label>Trial Date</mat-label>
