@@ -17,6 +17,7 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {Service} from '../enums/service.enum';
 import {ContactService} from '../services/contact.service';
 import {Contact} from '../models/contact.model';
+import {optionalEmailValidator} from '../utils/optional-email';
 import {PhoneFormatDirective} from '../directives/phone-format.directive';
 import {phoneValidator} from '../utils/phone.util';
 import {normalizeParentStatus} from '../utils/legacy-status';
@@ -48,10 +49,12 @@ export class ContactDialog implements OnInit {
   private destroyRef: DestroyRef = inject(DestroyRef);
 
   protected contactForm: FormGroup = this.formBuilder.group({
-    // Optional: newsletter signups arrive with only an email address.
+    // Optional: newsletter signups arrive with only an email address, and
+    // website inquiries sometimes arrive without one (client 2026-09-22) —
+    // the format is checked only when something is typed.
     first_name: [''],
     last_name: [''],
-    email: ['', [Validators.required, Validators.email]],
+    email: ['', optionalEmailValidator],
     phone_number: ['', phoneValidator],
     service: [undefined, Validators.required],
   });
@@ -130,6 +133,9 @@ export class ContactDialog implements OnInit {
     this.hasError = false;
     this.submitting = true;
     const contact: Contact = this.contactForm.value as Contact;
+    // A blank / whitespace email is omitted entirely (the backend treats a
+    // present email as the duplicate key).
+    contact.email = contact.email?.trim() || undefined;
     this.contactService.createContact(contact).pipe(
       catchError((error: HttpErrorResponse) =>  {
         console.log(error);

@@ -18,8 +18,8 @@
       <mat-form-field>
         <mat-label>Email Address</mat-label>
         <input matInput formControlName="email" [type]="'email'">
-        @if (contactForm.controls['email'].hasError('email') || contactForm.controls['email'].hasError('required')) {
-          <mat-error>Valid Email Required</mat-error>
+        @if (contactForm.controls['email'].hasError('email')) {
+          <mat-error>Enter a valid email address</mat-error>
         }
       </mat-form-field>
       <mat-form-field>
@@ -93,9 +93,11 @@
             <mat-spinner diameter="24"></mat-spinner>
           } @else if (!accountCreated) {
             <button matButton type="button"
-                    [disabled]="!contactForm.controls['user_group'].value"
+                    [disabled]="!contactForm.controls['user_group'].value || !hasEmail"
                     (click)="createAccount()">Create Account</button>
-            @if (!contactForm.controls['user_group'].value) {
+            @if (!hasEmail) {
+              <span class="account-hint">Add an email address to enable account creation.</span>
+            } @else if (!contactForm.controls['user_group'].value) {
               <span class="account-hint">Select a group to enable account creation.</span>
             }
           } @else {

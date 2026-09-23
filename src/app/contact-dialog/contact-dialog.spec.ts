@@ -50,13 +50,15 @@ describe('ContactDialog', () => {
     expect(c.errorMessage).toBe('');
     expect(c.serviceOptions.length).toBeGreaterThan(0);
 
-    // Validators: required on email + service only — names are optional
-    // (newsletter signups arrive with just an address).
+    // Validators: required on service only — names are optional (newsletter
+    // signups arrive with just an address) and so is the email (website
+    // inquiries may have none); the email format is checked when present.
     expect(f.controls['first_name'].valid).toBe(true);
     f.controls['first_name'].setValue('Ada');
     expect(f.controls['first_name'].valid).toBe(true);
     expect(f.controls['last_name'].valid).toBe(true);
-    expect(f.controls['email'].hasError('required')).toBe(true);
+    expect(f.controls['email'].valid).toBe(true);
+    expect(f.controls['email'].hasError('required')).toBe(false);
     f.controls['email'].setValue('not-an-email');
     expect(f.controls['email'].hasError('email')).toBe(true);
     f.controls['email'].setValue('ada@example.com');
@@ -97,6 +99,21 @@ describe('ContactDialog', () => {
       expect.objectContaining({ first_name: '', email: 'subscriber@example.com' }),
     );
     expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-news' });
+  });
+
+  it('creates a contact without an email (website inquiry), omitting the key', () => {
+    const f = form();
+    f.controls['first_name'].setValue('Ida');
+    f.controls['last_name'].setValue('Inquiry');
+    f.controls['email'].setValue('   ');
+    f.controls['service'].setValue('Tutoring');
+    contactService.createContact.mockReturnValue(of({ id: 'c-inq' }));
+    component.createContact();
+    expect(contactService.createContact).toHaveBeenCalledTimes(1);
+    const sent = contactService.createContact.mock.calls[0][0] as { email?: string; first_name: string };
+    expect(sent.first_name).toBe('Ida');
+    expect(sent.email).toBeUndefined();
+    expect(dialogRef.close).toHaveBeenCalledWith({ id: 'c-inq' });
   });
 
   it('shows a duplicate-contact message on a 409 conflict', () => {
