@@ -29,10 +29,13 @@ const pendingMakeup = (id: string, minutes: number, over: Partial<Session> = {})
 
 describe('session-rules', () => {
   describe('validateSessionLength', () => {
-    it('requires trials to be exactly 45 minutes', () => {
+    it('allows trials of 45 or 30 minutes only', () => {
       expect(validateSessionLength(SessionType.TRIAL, 45, null, undefined)).toBeNull();
-      expect(validateSessionLength(SessionType.TRIAL, 60, null, undefined))
-        .toBe('Trial sessions are always exactly 45 minutes.');
+      expect(validateSessionLength(SessionType.TRIAL, 30, null, undefined)).toBeNull();
+      const message = "Trial sessions are 45 minutes, or 30 if the student can't manage the full session.";
+      expect(validateSessionLength(SessionType.TRIAL, 60, null, undefined)).toBe(message);
+      expect(validateSessionLength(SessionType.TRIAL, 15, null, undefined)).toBe(message);
+      expect(validateSessionLength(SessionType.TRIAL, 40, null, undefined)).toBe(message);
     });
 
     it('requires BTC & Me group sessions to be exactly 45 minutes', () => {

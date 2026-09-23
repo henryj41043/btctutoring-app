@@ -178,6 +178,13 @@ describe('Payroll', () => {
           end_datetime: '2026-05-01T10:45:00',
         },
         {
+          // A 30-minute trial (short-session option) still pays the flat hour.
+          type: SessionType.TRIAL,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-06-09T10:00:00',
+          end_datetime: '2026-06-09T10:30:00',
+        },
+        {
           // A normal completed tutoring hour keeps the planning math visible.
           type: SessionType.TUTORING,
           status: SessionStatus.COMPLETED,
@@ -191,13 +198,13 @@ describe('Payroll', () => {
     p.onDateChange(new Date(2026, 5, 10));
 
     const entry = data(p)[0];
-    expect(entry.trial_hours).toBe(2); // completed + NCNS, flat 1.0 each
+    expect(entry.trial_hours).toBe(3); // completed 45 + NCNS + completed 30, flat 1.0 each
     expect(entry.tutoring_hours).toBe(1); // trials never join tutoring hours
     // Planning derives from tutoring hours only: 1/6 h.
     expect(entry.planning_time).toBeCloseTo(0.17, 2);
-    expect(entry.hours_subtotal).toBe(3); // 1 tutoring + 0 admin + 2 trial
+    expect(entry.hours_subtotal).toBe(4); // 1 tutoring + 0 admin + 3 trial
     // 3h x $40 = $120 at the regular rate — the flat trial hours are in.
-    expect(entry.tutoring_compensation).toBe(120);
+    expect(entry.tutoring_compensation).toBe(160);
   });
 
   it('pays a flat hour per held BTC & Me group session, per session not per student', () => {

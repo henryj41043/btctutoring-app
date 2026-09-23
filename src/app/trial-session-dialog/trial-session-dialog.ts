@@ -14,6 +14,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatTimepickerModule} from '@angular/material/timepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {catchError, EMPTY, switchMap} from 'rxjs';
 import {Session} from '../models/session.model';
@@ -26,8 +27,13 @@ import {SessionType} from '../enums/session-type.enum';
 import {Response} from '../models/response.model';
 import {studentDisplayName} from '../utils/student-name';
 
-/** Trials are always exactly this long (client policy). */
-export const TRIAL_LENGTH_MIN = 45;
+/**
+ * Allowed trial lengths in minutes, default first: 45 by policy, or 30 when
+ * the student can't manage the full session (client 2026-09-22).
+ */
+export const TRIAL_LENGTH_OPTIONS: readonly number[] = [45, 30];
+/** The default (full-length) trial. */
+export const TRIAL_LENGTH_MIN = TRIAL_LENGTH_OPTIONS[0];
 
 /** Data needed to schedule a trial: the student and their assigned tutor. */
 export interface TrialSessionDialogData {
@@ -36,10 +42,10 @@ export interface TrialSessionDialogData {
 }
 
 /**
- * Schedules a student's 45-minute trial session with their assigned tutor.
- * Deliberately separate from the generic SessionDialog: trial students are
- * usually still Onboarding (absent from its Active-only lists) and the length
- * is fixed. On save the session's date also becomes the student's recorded
+ * Schedules a student's trial session (45 minutes, or 30) with their assigned
+ * tutor. Deliberately separate from the generic SessionDialog: trial students
+ * are usually still Onboarding (absent from its Active-only lists) and the
+ * length is a fixed choice. On save the session's date also becomes the student's recorded
  * trial_date — one source of truth for the Onboarding table.
  */
 @Component({
@@ -56,6 +62,7 @@ export interface TrialSessionDialogData {
     MatDatepickerModule,
     MatTimepickerModule,
     MatProgressSpinnerModule,
+    MatButtonToggleModule,
     FormsModule,
   ],
   templateUrl: './trial-session-dialog.html',
@@ -68,6 +75,9 @@ export class TrialSessionDialog implements OnInit {
   private studentService: StudentService = inject(StudentService);
 
   protected readonly studentDisplayName = studentDisplayName;
+  protected readonly lengthOptions = TRIAL_LENGTH_OPTIONS;
+  /** Chosen trial length in minutes (45 default, 30 alternative). */
+  protected lengthMin: number = TRIAL_LENGTH_MIN;
   protected date: Date | null = null;
   protected startTime: Date | null = null;
   protected notes: string = '';
@@ -86,12 +96,12 @@ export class TrialSessionDialog implements OnInit {
     }
   }
 
-  /** The computed end time (start + 45 minutes) for display. */
+  /** The computed end time (start + chosen length) for display. */
   get endTime(): Date | null {
     if (!this.startTime) {
       return null;
     }
-    return new Date(this.startTime.getTime() + TRIAL_LENGTH_MIN * 60 * 1000);
+    return new Date(this.startTime.getTime() + this.lengthMin * 60 * 1000);
   }
 
   get canSave(): boolean {
@@ -114,7 +124,7 @@ export class TrialSessionDialog implements OnInit {
 
     const start = new Date(this.date);
     start.setHours(this.startTime.getHours(), this.startTime.getMinutes(), 0, 0);
-    const end = new Date(start.getTime() + TRIAL_LENGTH_MIN * 60 * 1000);
+    const end = new Date(start.getTime() + this.lengthMin * 60 * 1000);
 
     const session: Session = new Session();
     session.type = SessionType.TRIAL;
