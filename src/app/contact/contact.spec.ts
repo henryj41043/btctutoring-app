@@ -329,8 +329,9 @@ describe('Contact', () => {
     // Names are optional — newsletter signups have only an email address.
     expect(f.controls['first_name'].valid).toBe(true);
     expect(f.controls['service'].hasError('required')).toBe(true);
+    // Email is optional (website inquiries may have none) but must be valid when present.
     f.controls['email'].setValue('');
-    expect(f.controls['email'].hasError('required')).toBe(true);
+    expect(f.controls['email'].valid).toBe(true);
     f.controls['email'].setValue('not-an-email');
     expect(f.controls['email'].hasError('email')).toBe(true);
     f.controls['phone_number'].setValue('123');
@@ -1230,6 +1231,20 @@ describe('Contact', () => {
       expect((c as unknown as { accountError: boolean }).accountError).toBe(true);
     });
 
+    it('needs an email for a login account even though the contact does not', () => {
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['user_group'].setValue('Tutors');
+      form(c).controls['email'].setValue('   ');
+      expect(form(c).controls['email'].valid).toBe(true); // the contact itself is fine
+      expect(c.hasEmail).toBe(false);
+      c.createAccount();
+      expect(contactService.adminCreateUser).not.toHaveBeenCalled();
+      expect((c as unknown as { accountError: boolean }).accountError).toBe(true);
+      form(c).controls['email'].setValue('ada@example.com');
+      expect(c.hasEmail).toBe(true);
+    });
+
     it('flags an error when account creation fails', () => {
       const c = build();
       c.ngOnInit();
@@ -1365,6 +1380,18 @@ describe('Contact', () => {
       expect((c as unknown as { updatedSuccessfully: boolean }).updatedSuccessfully).toBe(true);
       jest.advanceTimersByTime(1000);
       expect((c as unknown as { updatedSuccessfully: boolean }).updatedSuccessfully).toBe(false);
+    });
+
+    it('saves a contact with a blank email as no email at all', () => {
+      const c = build();
+      c.ngOnInit();
+      form(c).controls['email'].setValue('  ');
+      contactService.updateContact.mockReturnValue(of({} as ContactModel));
+      c.updateContact();
+      expect(contactService.updateContact).toHaveBeenCalledTimes(1);
+      const sent = contactService.updateContact.mock.calls[0][0] as { email?: string };
+      expect(sent.email).toBeUndefined();
+      expect((c as unknown as { updateInvalid: boolean }).updateInvalid).toBe(false);
     });
 
     it('surfaces an invalid form instead of silently bailing', () => {

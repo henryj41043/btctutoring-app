@@ -7,6 +7,7 @@ import {Contact as _Contact} from '../models/contact.model';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {PhoneFormatDirective} from '../directives/phone-format.directive';
 import {phoneValidator} from '../utils/phone.util';
+import {optionalEmailValidator} from '../utils/optional-email';
 import {MatInputModule} from '@angular/material/input';
 import {Service} from '../enums/service.enum';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -148,10 +149,10 @@ export class Contact implements OnInit {
   protected contactForm: FormGroup = this.formBuilder.group({
     id: ['', Validators.required],
     // Optional (kept symmetric with the create dialog): newsletter signups
-    // have only an email address.
+    // have only an email address, and website inquiries may have none.
     first_name: [''],
     last_name: [''],
-    email: ['', [Validators.required, Validators.email]],
+    email: ['', optionalEmailValidator],
     phone_number: ['', phoneValidator],
     // Excluded from the contacts table's "copy all emails" bulk-email list.
     exclude_bulk_email: false,
@@ -918,10 +919,17 @@ export class Contact implements OnInit {
     this.setNotesEditIndex(0);
   }
 
+  /** A login account needs an email — the contact record itself doesn't. */
+  get hasEmail(): boolean {
+    const email = this.contactForm?.controls['email'];
+    return !!email && email.valid && !!(email.value as string | null)?.trim();
+  }
+
   createAccount() {
     // A user with no group is locked out of the whole app, so a group is
-    // mandatory. The Create button is also disabled until one is chosen.
-    if (!this.contactForm.controls['email'].valid || !this.contactForm.controls['user_group'].value) {
+    // mandatory, and Cognito needs an email. The Create button is also
+    // disabled until both are present.
+    if (!this.hasEmail || !this.contactForm.controls['user_group'].value) {
       this.accountError = true;
       this.cdr.markForCheck();
       return;
@@ -1004,6 +1012,9 @@ export class Contact implements OnInit {
     }
     this.updateInvalid = false;
     const contact: _Contact = this.contactForm.value as _Contact;
+    // A blank / whitespace email is saved as none (it is the duplicate key
+    // when present, and a login account needs a real one).
+    contact.email = contact.email?.trim() || undefined;
     // If the group changed on a contact that already has an account, Cognito
     // must be updated too. Doing it first means a Cognito failure aborts the
     // save, so the contact record can't drift ahead of the actual group.
