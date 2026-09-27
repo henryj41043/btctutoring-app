@@ -7,6 +7,8 @@ import { StudentDialog, StudentDialogData } from './student-dialog';
 import { StudentService } from '../services/student.service';
 import { ScheduleService } from '../services/schedule.service';
 import { PackageService } from '../services/package.service';
+import { BillingService } from '../services/billing.service';
+import { statement, statementLine } from '../../testing/statement.fixture';
 import { TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
 import { nextMonthFirsts } from '../utils/pending-package';
 import { Student } from '../models/student.model';
@@ -25,6 +27,7 @@ describe('StudentDialog', () => {
     updateStudent: jest.fn(),
     deleteStudent: jest.fn(),
   };
+  const billingService = { previewStatement: jest.fn() };
   const scheduleService = {
     futurePendingTutoring: jest.fn(() => of([])),
     deleteFuturePendingSessions: jest.fn(() => of(0)),
@@ -46,6 +49,7 @@ describe('StudentDialog', () => {
         { provide: ScheduleService, useValue: scheduleService },
         { provide: MatDialog, useValue: matDialog },
         { provide: PackageService, useValue: packageServiceStub },
+        { provide: BillingService, useValue: billingService },
       ],
     });
     const c = TestBed.createComponent(StudentDialog).componentInstance;
@@ -860,6 +864,223 @@ describe('StudentDialog', () => {
       c.confirmDeactivation();
       c.closeAfterSaveWithoutCleanup();
       expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('custom pricing', () => {
+    const enrolled = (over: Partial<Student> = {}): Student => ({
+      id: 's-1',
+      contact_id: 'c-1',
+      name: 'Pat',
+      status: StudentStatus.ACTIVE_STUDENT,
+      onboarding_complete: true,
+      package: 'Succeed',
+      ...over,
+    } as Student);
+    const pricing = (c: StudentDialog) =>
+      c as unknown as { showPricing: boolean; showPriceOverride: boolean; pricingPreview: string };
+    const saved = (): Student => studentService.updateStudent.mock.calls.at(-1)![0];
+
+    beforeEach(() => {
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      billingService.previewStatement.mockReturnValue(of({ statement: null }));
+    });
+
+    afterEach(() => jest.useRealTimers());
+
+    it('loads the stored values', () => {
+      const c = build({
+        mode: 'edit',
+        student: enrolled({ price_override: 410.4, discount_percent: 10, discount_reason: 'Staff' }),
+      });
+      expect(form(c).get('price_override')?.value).toBe(410.4);
+      expect(form(c).get('discount_percent')?.value).toBe(10);
+      expect(form(c).get('discount_reason')?.value).toBe('Staff');
+    });
+
+    it('is offered only to an enrolled, unlocked student being edited', () => {
+      expect(pricing(build({ mode: 'edit', student: enrolled() })).showPricing).toBe(true);
+      TestBed.resetTestingModule();
+      expect(pricing(build({ mode: 'edit', student: enrolled({ package: '' }) })).showPricing).toBe(false);
+      TestBed.resetTestingModule();
+      expect(pricing(build({ mode: 'create' })).showPricing).toBe(false);
+      TestBed.resetTestingModule();
+      expect(pricing(build({
+        mode: 'edit',
+        student: enrolled({ status: StudentStatus.ONBOARDING, onboarding_complete: false }),
+      })).showPricing).toBe(false);
+    });
+
+    it('hides the custom price on a Custom package (it has its own)', () => {
+      expect(pricing(build({ mode: 'edit', student: enrolled() })).showPriceOverride).toBe(true);
+      TestBed.resetTestingModule();
+      expect(pricing(build({ mode: 'edit', student: enrolled({ package: 'Custom' }) })).showPriceOverride)
+        .toBe(false);
+    });
+
+    it('a plain save sends no pricing keys', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.save();
+      expect('price_override' in saved()).toBe(false);
+      expect('discount_percent' in saved()).toBe(false);
+      expect('discount_reason' in saved()).toBe(false);
+    });
+
+    it('saves a custom price and a discount with its trimmed reason', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      form(c).patchValue({ price_override: '410.40', discount_percent: 10, discount_reason: '  Staff  ' });
+      c.save();
+      expect(saved().price_override).toBe(410.4);
+      expect(saved().discount_percent).toBe(10);
+      expect(saved().discount_reason).toBe('Staff');
+    });
+
+    it('saves a $0 custom price', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      form(c).patchValue({ price_override: 0 });
+      c.save();
+      expect(saved().price_override).toBe(0);
+    });
+
+    it('a discount without a reason sends a blank reason', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      form(c).patchValue({ discount_percent: 5, discount_reason: null });
+      c.save();
+      expect(saved().discount_percent).toBe(5);
+      expect(saved().discount_reason).toBe('');
+    });
+
+    it('blanking stored values sends null to clear them', () => {
+      const c = build({
+        mode: 'edit',
+        student: enrolled({ price_override: 410.4, discount_percent: 10, discount_reason: 'Staff' }),
+      });
+      form(c).patchValue({ price_override: null, discount_percent: '' });
+      c.save();
+      expect(saved().price_override).toBeNull();
+      expect(saved().discount_percent).toBeNull();
+      expect('discount_reason' in saved()).toBe(false);
+    });
+
+    it('a 0% discount clears a stored one and is otherwise omitted', () => {
+      const c1 = build({ mode: 'edit', student: enrolled({ discount_percent: 10 }) });
+      form(c1).patchValue({ discount_percent: 0 });
+      c1.save();
+      expect(saved().discount_percent).toBeNull();
+      TestBed.resetTestingModule();
+      const c2 = build({ mode: 'edit', student: enrolled() });
+      form(c2).patchValue({ discount_percent: 0, discount_reason: 'x' });
+      c2.save();
+      expect('discount_percent' in saved()).toBe(false);
+      expect('discount_reason' in saved()).toBe(false);
+    });
+
+    it('a Custom package clears a stored custom price and never sends a new one', () => {
+      const c1 = build({ mode: 'edit', student: enrolled({ package: 'Custom', price_override: 300 }) });
+      c1.save();
+      expect(saved().price_override).toBeNull();
+      TestBed.resetTestingModule();
+      const c2 = build({ mode: 'edit', student: enrolled({ package: 'Custom' }) });
+      form(c2).patchValue({ price_override: 300 });
+      c2.save();
+      expect('price_override' in saved()).toBe(false);
+    });
+
+    it('ignores a non-numeric custom price', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      form(c).patchValue({ price_override: 'abc' });
+      c.save();
+      expect('price_override' in saved()).toBe(false);
+    });
+
+    it('rejects a negative price or an out-of-range discount', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      form(c).patchValue({ price_override: -1 });
+      c.save();
+      expect(priv(c).errorMessage).toBe('The custom monthly price must be $0 or more.');
+      form(c).patchValue({ price_override: null, discount_percent: 101 });
+      c.save();
+      expect(priv(c).errorMessage).toBe('The discount must be between 0 and 100 percent.');
+      form(c).patchValue({ discount_percent: -1 });
+      c.save();
+      expect(priv(c).errorMessage).toBe('The discount must be between 0 and 100 percent.');
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      form(c).patchValue({ discount_percent: 100 });
+      c.save();
+      expect(studentService.updateStudent).toHaveBeenCalled();
+    });
+
+    describe('live preview', () => {
+      beforeEach(() => jest.useFakeTimers());
+
+      it('re-prices this month once the fields settle', () => {
+        billingService.previewStatement.mockReturnValue(of({
+          statement: statement({
+            lines: [
+              statementLine({ student_id: 's-1', net: 300.1 }),
+              statementLine({ student_id: 's-1', net: 110.3 }),
+              statementLine({ student_id: 's-2', net: 273 }),
+            ],
+            total: 683.4,
+          }),
+        }));
+        const c = build({ mode: 'edit', student: enrolled({ discount_reason: 'Staff' }) });
+        form(c).patchValue({ price_override: 456 });
+        form(c).patchValue({ discount_percent: 10 });
+        jest.advanceTimersByTime(399);
+        expect(billingService.previewStatement).not.toHaveBeenCalled();
+        jest.advanceTimersByTime(1);
+        expect(billingService.previewStatement).toHaveBeenCalledTimes(1);
+        const now = new Date();
+        const [month, draft] = billingService.previewStatement.mock.calls[0];
+        expect(month).toBe(monthKey(now.getFullYear(), now.getMonth()));
+        expect(draft).toEqual(expect.objectContaining({
+          id: 's-1', package: 'Succeed', price_override: 456, discount_percent: 10, discount_reason: 'Staff',
+        }));
+        expect(pricing(c).pricingPreview).toBe('This month: Pat $410.40 · family total $683.40');
+      });
+
+      it('clears when the family would owe nothing or the preview fails', () => {
+        const c = build({ mode: 'edit', student: enrolled() });
+        (c as unknown as { pricingPreview: string }).pricingPreview = 'old';
+        form(c).patchValue({ discount_percent: 10 });
+        jest.advanceTimersByTime(400);
+        expect(pricing(c).pricingPreview).toBe('');
+
+        (c as unknown as { pricingPreview: string }).pricingPreview = 'old';
+        billingService.previewStatement.mockReturnValue(throwError(() => new Error('boom')));
+        form(c).patchValue({ discount_percent: 20 });
+        jest.advanceTimersByTime(400);
+        expect(pricing(c).pricingPreview).toBe('');
+        // A failed preview never stops later ones.
+        billingService.previewStatement.mockReturnValue(of({ statement: statement({ lines: [], total: 75 }) }));
+        form(c).patchValue({ discount_percent: 30 });
+        jest.advanceTimersByTime(400);
+        expect(pricing(c).pricingPreview).toBe('This month: Pat $0.00 · family total $75.00');
+      });
+
+      it('skips invalid fields and a package that is being changed', () => {
+        const c = build({ mode: 'edit', student: enrolled() });
+        form(c).patchValue({ discount_percent: 150 });
+        jest.advanceTimersByTime(400);
+        form(c).patchValue({ discount_percent: null, price_override: -5 });
+        jest.advanceTimersByTime(400);
+        form(c).patchValue({ price_override: 100, package: 'Thrive' });
+        jest.advanceTimersByTime(400);
+        expect(billingService.previewStatement).not.toHaveBeenCalled();
+        expect(pricing(c).pricingPreview).toBe('');
+      });
+
+      it('never previews an unsaved student', () => {
+        const c1 = build({ mode: 'create' });
+        form(c1).patchValue({ discount_percent: 10 });
+        jest.advanceTimersByTime(400);
+        TestBed.resetTestingModule();
+        const c2 = build({ mode: 'edit', student: enrolled({ id: undefined }) });
+        form(c2).patchValue({ discount_percent: 10 });
+        jest.advanceTimersByTime(400);
+        expect(billingService.previewStatement).not.toHaveBeenCalled();
+      });
     });
   });
 });
