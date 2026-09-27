@@ -1287,15 +1287,69 @@ describe('Contact', () => {
   });
 
   describe('schedule trial button', () => {
-    it('is enabled only when the assigned tutor is resolvable', () => {
+    it('is enabled whenever a tutor is available to run the trial', () => {
       contactService.getStaff.mockReturnValue(
         of([{ id: 't-1', first_name: 'Tess', status: 'Staff', currently_accepting_students: true, service: Service.HIRING }]),
       );
       const c = build();
       c.ngOnInit();
       expect(c.canScheduleTrial({ id: 's-1', assigned_tutor_id: 't-1' } as Student)).toBe(true);
-      expect(c.canScheduleTrial({ id: 's-2' } as Student)).toBe(false);
-      expect(c.canScheduleTrial({ id: 's-3', assigned_tutor_id: 't-unknown' } as Student)).toBe(false);
+      // No assigned tutor (or an unknown one) is fine — any current tutor can be picked.
+      expect(c.canScheduleTrial({ id: 's-2' } as Student)).toBe(true);
+      expect(c.canScheduleTrial({ id: 's-3', assigned_tutor_id: 't-unknown' } as Student)).toBe(true);
+      // An unsaved student has nothing to attach a session to.
+      expect(c.canScheduleTrial({ assigned_tutor_id: 't-1' } as Student)).toBe(false);
+    });
+
+    it('is disabled when no tutor exists at all', () => {
+      contactService.getStaff.mockReturnValue(of([]));
+      const c = build();
+      c.ngOnInit();
+      expect(c.canScheduleTrial({ id: 's-1' } as Student)).toBe(false);
+    });
+
+    it('offers current tutors only (not admin-only staff, former staff or applicants), sorted by name', () => {
+      contactService.getStaff.mockReturnValue(of([
+        { id: 't-2', first_name: 'Zed', status: 'Staff', service: Service.HIRING, currently_accepting_students: false },
+        { id: 't-1', first_name: 'Amy', status: 'Staff', service: Service.HIRING, currently_accepting_students: true },
+        { id: 'a-1', first_name: 'Office', status: 'Staff', service: Service.HIRING, is_tutor: false },
+        { id: 'f-1', first_name: 'Former', status: 'Former Staff', service: Service.HIRING },
+        { id: 'e-1', first_name: 'Applicant', status: 'Inquiry submitted', service: Service.EMPLOYMENT_INQUIRY },
+      ]));
+      const c = build();
+      c.ngOnInit();
+      // A tutor at capacity (not accepting) can still run a trial.
+      expect(c.trialTutors.map(t => t.id)).toEqual(['t-1', 't-2']);
+    });
+
+    it('passes the assigned tutor as the default plus every trial tutor', () => {
+      contactService.getStaff.mockReturnValue(of([
+        { id: 't-1', first_name: 'Tess', status: 'Staff', service: Service.HIRING },
+        { id: 't-2', first_name: 'Christian', status: 'Staff', service: Service.HIRING },
+      ]));
+      const c = build();
+      c.ngOnInit();
+      dialog.open.mockClear();
+      const student = { id: 's-1', contact_id: 'c-1', assigned_tutor_id: 't-1' } as Student;
+      c.openTrialDialog(student);
+      const config = (dialog.open.mock.calls[0] as unknown[])[1] as {
+        data: { student: Student; tutor?: { id: string }; tutors: { id: string }[] };
+      };
+      expect(config.data.student).toBe(student);
+      expect(config.data.tutor?.id).toBe('t-1');
+      expect(config.data.tutors.map(t => t.id)).toEqual(['t-2', 't-1']);
+    });
+
+    it('keeps the trial date when the dialog reports a trial without a date sync', () => {
+      contactService.getStaff.mockReturnValue(
+        of([{ id: 't-1', first_name: 'Tess', status: 'Staff', service: Service.HIRING }]),
+      );
+      afterClosed = true;
+      const c = build();
+      c.ngOnInit();
+      const student = { id: 's-1', contact_id: 'c-1', assigned_tutor_id: 't-1', trial_date: '2026-01-10' } as Student;
+      c.openTrialDialog(student);
+      expect(student.trial_date).toBe('2026-01-10');
     });
 
     it('opens the trial dialog and syncs the returned date onto the student', () => {
@@ -1311,7 +1365,8 @@ describe('Contact', () => {
       expect(student.trial_date).toBe('2026-08-21');
     });
 
-    it('does nothing when the tutor is unresolvable', () => {
+    it('does nothing when no tutor can run a trial', () => {
+      contactService.getStaff.mockReturnValue(of([]));
       const c = build();
       c.ngOnInit();
       dialog.open.mockClear();

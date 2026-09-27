@@ -15,8 +15,9 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatTimepickerModule} from '@angular/material/timepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
+import {MatSelectModule} from '@angular/material/select';
 import {provideNativeDateAdapter} from '@angular/material/core';
-import {catchError, EMPTY, switchMap} from 'rxjs';
+import {catchError, EMPTY, of, switchMap} from 'rxjs';
 import {Session} from '../models/session.model';
 import {Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
@@ -26,6 +27,8 @@ import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {Response} from '../models/response.model';
 import {studentDisplayName} from '../utils/student-name';
+import {contactDisplayName} from '../utils/contact-name';
+import {StudentStatus} from '../enums/student-status.enum';
 
 /**
  * Allowed trial lengths in minutes, default first: 45 by policy, or 30 when
@@ -35,18 +38,32 @@ export const TRIAL_LENGTH_OPTIONS: readonly number[] = [45, 30];
 /** The default (full-length) trial. */
 export const TRIAL_LENGTH_MIN = TRIAL_LENGTH_OPTIONS[0];
 
-/** Data needed to schedule a trial: the student and their assigned tutor. */
+/**
+ * Data needed to schedule a trial: the student, their assigned tutor (the
+ * default choice, when they have one) and the tutors that may run the trial.
+ */
 export interface TrialSessionDialogData {
   student: Student;
-  tutor: Contact;
+  tutor?: Contact;
+  tutors?: Contact[];
 }
 
 /**
- * Schedules a student's trial session (45 minutes, or 30) with their assigned
- * tutor. Deliberately separate from the generic SessionDialog: trial students
- * are usually still Onboarding (absent from its Active-only lists) and the
- * length is a fixed choice. On save the session's date also becomes the student's recorded
- * trial_date — one source of truth for the Onboarding table.
+ * What the dialog closes with: the scheduled date ('YYYY-MM-DD') when it also
+ * became the student's trial date of record, or `true` when the trial was
+ * scheduled without touching it (the student is past onboarding).
+ */
+export type TrialSessionDialogResult = string | true;
+
+/**
+ * Schedules a student's trial session (45 minutes, or 30) with a chosen tutor
+ * — the assigned tutor by default, or another tutor when an existing student
+ * is trying out a prospective second tutor (client 2026-09-27). Deliberately
+ * separate from the generic SessionDialog: trial students are usually still
+ * Onboarding (absent from its Active-only lists) and the length is a fixed
+ * choice. For an Onboarding student the session's date also becomes the
+ * recorded trial_date — one source of truth for the Onboarding table; a
+ * student past onboarding keeps their original trial date.
  */
 @Component({
   selector: 'app-trial-session-dialog',
@@ -63,6 +80,7 @@ export interface TrialSessionDialogData {
     MatTimepickerModule,
     MatProgressSpinnerModule,
     MatButtonToggleModule,
+    MatSelectModule,
     FormsModule,
   ],
   templateUrl: './trial-session-dialog.html',
@@ -75,6 +93,10 @@ export class TrialSessionDialog implements OnInit {
   private studentService: StudentService = inject(StudentService);
 
   protected readonly studentDisplayName = studentDisplayName;
+  protected readonly contactDisplayName = contactDisplayName;
+  /** Tutors offered for the trial; the assigned tutor is always included. */
+  protected tutorOptions: Contact[] = [];
+  protected selectedTutorId: string | undefined;
   protected readonly lengthOptions = TRIAL_LENGTH_OPTIONS;
   /** Chosen trial length in minutes (45 default, 30 alternative). */
   protected lengthMin: number = TRIAL_LENGTH_MIN;
@@ -86,6 +108,13 @@ export class TrialSessionDialog implements OnInit {
   protected errorMessage: string = '';
 
   ngOnInit(): void {
+    const assigned = this.data.tutor;
+    const offered = [...(this.data.tutors ?? [])];
+    if (assigned?.id && !offered.some(t => t.id === assigned.id)) {
+      offered.unshift(assigned);
+    }
+    this.tutorOptions = offered;
+    this.selectedTutorId = assigned?.id ?? (offered.length === 1 ? offered[0].id : undefined);
     // Prefill from the recorded trial date when one exists.
     const stored = this.data.student.trial_date;
     if (stored) {
@@ -104,8 +133,22 @@ export class TrialSessionDialog implements OnInit {
     return new Date(this.startTime.getTime() + this.lengthMin * 60 * 1000);
   }
 
+  /** The tutor who will run the trial. */
+  get selectedTutor(): Contact | undefined {
+    return this.tutorOptions.find(t => t.id === this.selectedTutorId);
+  }
+
+  /**
+   * Only an Onboarding student's trial date follows the scheduled trial; a
+   * later trial (e.g. with a second tutor) must not rewrite that history.
+   */
+  get syncsTrialDate(): boolean {
+    const status = this.data.student.status;
+    return !status || status === StudentStatus.ONBOARDING;
+  }
+
   get canSave(): boolean {
-    return !!this.date && !!this.startTime && !this.submitting;
+    return !!this.date && !!this.startTime && !!this.selectedTutor && !this.submitting;
   }
 
   cancel(): void {
@@ -116,7 +159,8 @@ export class TrialSessionDialog implements OnInit {
   }
 
   save(): void {
-    if (!this.canSave || !this.date || !this.startTime) {
+    const tutor = this.selectedTutor;
+    if (!this.canSave || !this.date || !this.startTime || !tutor) {
       return;
     }
     this.submitting = true;
@@ -128,8 +172,8 @@ export class TrialSessionDialog implements OnInit {
 
     const session: Session = new Session();
     session.type = SessionType.TRIAL;
-    session.tutor_id = this.data.tutor.id;
-    session.tutor_name = this.data.tutor.first_name;
+    session.tutor_id = tutor.id;
+    session.tutor_name = tutor.first_name;
     session.student_id = this.data.student.id;
     session.student_name = studentDisplayName(this.data.student);
     session.start_datetime = start.toISOString();
@@ -142,9 +186,12 @@ export class TrialSessionDialog implements OnInit {
     this.sessionsService
       .createSession(session)
       .pipe(
-        // The scheduled date becomes the student's recorded trial date.
+        // The scheduled date becomes an Onboarding student's trial date.
         switchMap((response: Response) => {
           session.id = response.id;
+          if (!this.syncsTrialDate) {
+            return of(null);
+          }
           return this.studentService.updateStudent({
             id: this.data.student.id,
             contact_id: this.data.student.contact_id,
@@ -160,6 +207,6 @@ export class TrialSessionDialog implements OnInit {
           return EMPTY;
         }),
       )
-      .subscribe(() => this.dialogRef.close(iso));
+      .subscribe(() => this.dialogRef.close(this.syncsTrialDate ? iso : true));
   }
 }

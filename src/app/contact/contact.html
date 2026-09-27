@@ -492,7 +492,7 @@
                     [disabled]="!canScheduleTrial(trialStudent)"
                     [matTooltip]="canScheduleTrial(trialStudent)
                       ? 'Schedule the trial session'
-                      : 'Assign a tutor to schedule the trial'"
+                      : 'No tutors available to run a trial'"
                     (click)="openTrialDialog(trialStudent)"
                     aria-label="Schedule trial session">
               <mat-icon>event_available</mat-icon>
