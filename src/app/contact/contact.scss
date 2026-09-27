@@ -300,3 +300,33 @@
     }
   }
 }
+
+/* Mailing address (admin-only): its own full-width block inside the Contact
+   section, street lines wide, state/ZIP compact. */
+.mailing-address {
+  grid-column: 1 / -1; // spans both columns of the .contact-main grid
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 12px;
+  margin: 4px 0 8px;
+
+  h3 {
+    flex-basis: 100%;
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .address-line {
+    flex: 1 1 320px;
+  }
+
+  .address-state {
+    width: 110px;
+  }
+
+  .address-zip {
+    width: 150px;
+  }
+}

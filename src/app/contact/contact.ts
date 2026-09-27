@@ -8,6 +8,7 @@ import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {PhoneFormatDirective} from '../directives/phone-format.directive';
 import {phoneValidator} from '../utils/phone.util';
 import {optionalEmailValidator} from '../utils/optional-email';
+import {US_STATES, ZIP_PATTERN} from '../utils/us-states';
 import {isCurrentStaff} from '../utils/staff';
 import {contactDisplayName} from '../utils/contact-name';
 import {MatInputModule} from '@angular/material/input';
@@ -67,6 +68,9 @@ import {ContactRemindersSection} from '../contact-reminders-section/contact-remi
 import {ContactEmailsSection} from '../contact-emails-section/contact-emails-section';
 import {ContactScholarshipSection} from '../contact-scholarship-section/contact-scholarship-section';
 import {Router} from '@angular/router';
+
+/** The contact form's mailing-address controls (admin-only). */
+const ADDRESS_CONTROLS = ['address_line1', 'address_line2', 'city', 'state', 'zip'] as const;
 
 @Component({
   selector: 'app-contact',
@@ -145,6 +149,7 @@ export class Contact implements OnInit {
   protected contactLoading: boolean = true;
   protected studentsLoading: boolean = true;
   protected notesLoading: boolean = true;
+  protected readonly usStates = US_STATES;
   protected accountCreated: boolean = false;
   protected accountError: boolean = false;
   protected accountLoading: boolean = false;
@@ -156,6 +161,12 @@ export class Contact implements OnInit {
     last_name: [''],
     email: ['', optionalEmailValidator],
     phone_number: ['', phoneValidator],
+    // Mailing address (admin-only). All optional; ZIP is format-checked.
+    address_line1: '',
+    address_line2: '',
+    city: '',
+    state: '',
+    zip: ['', Validators.pattern(ZIP_PATTERN)],
     // Excluded from the contacts table's "copy all emails" bulk-email list.
     exclude_bulk_email: false,
     service: ['', Validators.required],
@@ -363,6 +374,9 @@ export class Contact implements OnInit {
     this.contactForm.controls['last_name'].setValue(contact.last_name);
     this.contactForm.controls['email'].setValue(contact.email);
     this.contactForm.controls['phone_number'].setValue(contact.phone_number);
+    for (const field of ADDRESS_CONTROLS) {
+      this.contactForm.controls[field].setValue(contact[field] ?? '');
+    }
     this.contactForm.controls['service'].setValue(contact.service);
     this.contactForm.controls['billing_cycle'].setValue(contact.billing_cycle);
     this.contactForm.controls['sibling_discount'].setValue(contact.sibling_discount ?? 0);
@@ -409,9 +423,12 @@ export class Contact implements OnInit {
     this.contactForm.controls['user_profile_created'].setValue(contact.user_profile_created);
     this.contactForm.controls['user_group'].setValue(contact.user_group);
 
-    // Tutors cannot edit their own service, status, group, or hiring process fields
+    // Tutors cannot edit their own service, status, group, or hiring process
+    // fields; the mailing address is admin-only (hidden, and disabled so it
+    // never travels in a non-admin payload).
     if (!this.authService.isAdmin()) {
       [
+        ...ADDRESS_CONTROLS,
         'service', 'status', 'user_group',
         'hiring_inquiry_received', 'interview_offer_sent', 'interview_scheduled',
         'offer_sent', 'onboarding_paperwork_received', 'training_completed',

@@ -9,6 +9,12 @@ export class Contact {
   last_name?: string;
   email?: string;
   phone_number?: string;
+  /** Mailing address — admin-only; the service never returns it to non-admins. */
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   service?: Service;
   /** StaffStatus values for Hiring contacts; ParentStatus values for Tutoring. */
   status?: string;
