@@ -8,6 +8,7 @@ import { SessionType } from '../enums/session-type.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { Session } from '../models/session.model';
 import { Student } from '../models/student.model';
+import { StudentStatus } from '../enums/student-status.enum';
 
 describe('TrialSessionDialog', () => {
   const sessionsService = { createSession: jest.fn() };
@@ -23,6 +24,10 @@ describe('TrialSessionDialog', () => {
       ...over,
     } as Student,
     tutor: { id: 't-1', first_name: 'Tess' },
+    tutors: [
+      { id: 't-1', first_name: 'Tess' },
+      { id: 't-2', first_name: 'Christian' },
+    ],
   });
 
   const build = (dialogData: TrialSessionDialogData = data()): TrialSessionDialog => {
@@ -81,6 +86,106 @@ describe('TrialSessionDialog', () => {
       id: 's-1', contact_id: 'c-1', name: 'Pat', trial_date: '2026-08-21',
     });
     expect(dialogRef.close).toHaveBeenCalledWith('2026-08-21');
+  });
+
+  describe('choosing the tutor', () => {
+    const view = (c: TrialSessionDialog) =>
+      c as unknown as {
+        tutorOptions: { id: string }[];
+        selectedTutorId: string | undefined;
+        date: Date;
+        startTime: Date;
+        canSave: boolean;
+        syncsTrialDate: boolean;
+        save: () => void;
+      };
+    const prime = (c: TrialSessionDialog) => {
+      view(c).date = new Date(2026, 8, 30);
+      view(c).startTime = new Date(2026, 8, 30, 16, 0);
+    };
+
+    it('defaults to the assigned tutor and offers the others', () => {
+      const c = build();
+      c.ngOnInit();
+      expect(view(c).selectedTutorId).toBe('t-1');
+      expect(view(c).tutorOptions.map(t => t.id)).toEqual(['t-1', 't-2']);
+    });
+
+    it('schedules the trial with the tutor that was picked', () => {
+      const c = build();
+      c.ngOnInit();
+      prime(c);
+      view(c).selectedTutorId = 't-2';
+      view(c).save();
+      const session = sessionsService.createSession.mock.calls.at(-1)![0] as Session;
+      expect(session.tutor_id).toBe('t-2');
+      expect(session.tutor_name).toBe('Christian');
+      expect(session.student_id).toBe('s-1');
+    });
+
+    it('adds an assigned tutor missing from the offered list (e.g. no longer current staff)', () => {
+      const c = build({
+        ...data(),
+        tutor: { id: 't-9', first_name: 'Former' },
+      } as TrialSessionDialogData);
+      c.ngOnInit();
+      expect(view(c).tutorOptions.map(t => t.id)).toEqual(['t-9', 't-1', 't-2']);
+      expect(view(c).selectedTutorId).toBe('t-9');
+    });
+
+    it('requires a choice when there is no assigned tutor and several are offered', () => {
+      const c = build({ ...data(), tutor: undefined } as TrialSessionDialogData);
+      c.ngOnInit();
+      prime(c);
+      expect(view(c).selectedTutorId).toBeUndefined();
+      expect(view(c).canSave).toBe(false);
+      sessionsService.createSession.mockClear();
+      view(c).save();
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+      view(c).selectedTutorId = 't-2';
+      expect(view(c).canSave).toBe(true);
+    });
+
+    it('preselects the only tutor when just one is offered', () => {
+      const c = build({
+        student: data().student,
+        tutors: [{ id: 't-2', first_name: 'Christian' }],
+      } as TrialSessionDialogData);
+      c.ngOnInit();
+      expect(view(c).selectedTutorId).toBe('t-2');
+    });
+
+    it('works with no tutor list at all (assigned tutor only)', () => {
+      const c = build({ student: data().student, tutor: { id: 't-1', first_name: 'Tess' } } as TrialSessionDialogData);
+      c.ngOnInit();
+      expect(view(c).tutorOptions.map(t => t.id)).toEqual(['t-1']);
+      expect(view(c).selectedTutorId).toBe('t-1');
+    });
+
+    it('keeps an ACTIVE student\'s original trial date (no student update) and closes with true', () => {
+      const c = build(data({ status: StudentStatus.ACTIVE_STUDENT, trial_date: '2026-01-10' }));
+      c.ngOnInit();
+      prime(c);
+      view(c).selectedTutorId = 't-2';
+      studentService.updateStudent.mockClear();
+      view(c).save();
+      expect(view(c).syncsTrialDate).toBe(false);
+      expect(sessionsService.createSession).toHaveBeenCalled();
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('still syncs the trial date for an Onboarding student', () => {
+      const c = build(data({ status: StudentStatus.ONBOARDING }));
+      c.ngOnInit();
+      prime(c);
+      studentService.updateStudent.mockClear();
+      view(c).save();
+      expect(studentService.updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 's-1', trial_date: '2026-09-30' }),
+      );
+      expect(dialogRef.close).toHaveBeenCalledWith('2026-09-30');
+    });
   });
 
   it('creates a 30-minute TRIAL when the shorter length is chosen', () => {

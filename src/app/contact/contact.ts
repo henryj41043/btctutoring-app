@@ -8,6 +8,8 @@ import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
 import {PhoneFormatDirective} from '../directives/phone-format.directive';
 import {phoneValidator} from '../utils/phone.util';
 import {optionalEmailValidator} from '../utils/optional-email';
+import {isCurrentStaff} from '../utils/staff';
+import {contactDisplayName} from '../utils/contact-name';
 import {MatInputModule} from '@angular/material/input';
 import {Service} from '../enums/service.enum';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -44,7 +46,7 @@ import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions
 import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialog';
 import {ManageScheduleDialog} from '../manage-schedule-dialog/manage-schedule-dialog';
 import {StudentDialog, StudentDialogMode, StudentDialogResult} from '../student-dialog/student-dialog';
-import {TrialSessionDialog} from '../trial-session-dialog/trial-session-dialog';
+import {TrialSessionDialog, TrialSessionDialogResult} from '../trial-session-dialog/trial-session-dialog';
 import {BillingService} from '../services/billing.service';
 import {BillingRecord} from '../models/billing-record.model';
 import {currentPeriodAmounts, recomputedBillingRecords} from '../utils/billing-recompute';
@@ -594,27 +596,43 @@ export class Contact implements OnInit {
       });
   }
 
-  /** A trial can be scheduled once the student has a resolvable assigned tutor. */
-  canScheduleTrial(student: Student): boolean {
-    return !!student.id && !!student.assigned_tutor_id && this.staffById.has(student.assigned_tutor_id);
+  /**
+   * Tutors who may run a trial: current staff who tutor — NOT limited to
+   * "currently accepting" (a full tutor can still take a trial), sorted by name.
+   */
+  get trialTutors(): _Contact[] {
+    return [...this.staffById.values()]
+      .filter(c => isCurrentStaff(c) && c.is_tutor !== false)
+      .sort((a, b) => contactDisplayName(a).localeCompare(contactDisplayName(b)));
   }
 
-  /** Opens the trial scheduler for a student; syncs the picked date on close. */
+  /** The student's assigned tutor, when it resolves. */
+  private assignedTutorOf(student: Student): _Contact | undefined {
+    return student.assigned_tutor_id ? this.staffById.get(student.assigned_tutor_id) : undefined;
+  }
+
+  /** A trial can be scheduled once there is any tutor to run it. */
+  canScheduleTrial(student: Student): boolean {
+    return !!student.id && (!!this.assignedTutorOf(student) || this.trialTutors.length > 0);
+  }
+
+  /**
+   * Opens the trial scheduler for a student. The assigned tutor is the default
+   * choice; any current tutor can be picked (a trial with a prospective second
+   * tutor). Syncs the trial date on close when the dialog recorded one.
+   */
   openTrialDialog(student: Student): void {
-    const tutor = student.assigned_tutor_id
-      ? this.staffById.get(student.assigned_tutor_id)
-      : undefined;
-    if (!tutor) {
+    if (!this.canScheduleTrial(student)) {
       return;
     }
     const ref = this.dialog.open(TrialSessionDialog, {
-      data: {student, tutor},
+      data: {student, tutor: this.assignedTutorOf(student), tutors: this.trialTutors},
       width: '420px',
     });
-    ref.afterClosed().subscribe((scheduledIso?: string) => {
-      if (scheduledIso) {
+    ref.afterClosed().subscribe((result?: TrialSessionDialogResult) => {
+      if (typeof result === 'string' && result) {
         // The session's date is the trial date of record.
-        student.trial_date = scheduledIso;
+        student.trial_date = result;
         this.cdr.markForCheck();
       }
     });

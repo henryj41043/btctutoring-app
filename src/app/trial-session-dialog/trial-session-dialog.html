@@ -1,8 +1,19 @@
 <h2 mat-dialog-title>Schedule Trial — {{studentDisplayName(data.student)}}</h2>
 
 <mat-dialog-content class="trial-dialog-content">
+  <mat-form-field>
+    <mat-label>Tutor</mat-label>
+    <mat-select [(ngModel)]="selectedTutorId">
+      @for (tutor of tutorOptions; track tutor.id) {
+        <mat-option [value]="tutor.id">{{contactDisplayName(tutor)}}</mat-option>
+      }
+    </mat-select>
+    @if (!syncsTrialDate) {
+      <mat-hint>The student's original trial date is kept.</mat-hint>
+    }
+  </mat-form-field>
+
   <p class="trial-tutor-line">
-    Tutor: <strong>{{data.tutor.first_name}}</strong>
     <span class="trial-length-hint">Trials are 45 minutes — choose 30 if the student can't manage the full session.</span>
   </p>
 
