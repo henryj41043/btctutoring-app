@@ -1,4 +1,5 @@
 import {
+  makeupAfterServiceEndError,
   makeupMinutesLeftToSchedule,
   mutatesStudent,
   pendingMakeupMinutesFor,
@@ -207,6 +208,33 @@ describe('session-rules', () => {
       expect(mutatesStudent(SessionType.TUTORING, SessionStatus.CANCELLED)).toBe(true);
       expect(mutatesStudent(SessionType.TUTORING, SessionStatus.COMPLETED)).toBe(false);
       expect(mutatesStudent(SessionType.ADMIN, SessionStatus.CANCELLED)).toBe(true);
+    });
+  });
+
+  describe('makeupAfterServiceEndError', () => {
+    const ending = {...student, service_end_date: '2026-10-15'} as Student;
+
+    it('allows a make-up through the last day of service', () => {
+      expect(makeupAfterServiceEndError(ending, new Date(2026, 9, 14))).toBeNull();
+      expect(makeupAfterServiceEndError(ending, new Date(2026, 9, 15))).toBeNull();
+      expect(makeupAfterServiceEndError(ending, new Date(2026, 9, 15, 23, 59, 59, 999))).toBeNull();
+    });
+
+    it('blocks a make-up after the last day', () => {
+      expect(makeupAfterServiceEndError(ending, new Date(2026, 9, 16))).toBe(
+        "Sam's service ends Oct 15, 2026. Make-up sessions can't be scheduled after that date.",
+      );
+    });
+
+    it('names a nameless student generically', () => {
+      expect(makeupAfterServiceEndError({...ending, name: undefined} as unknown as Student, new Date(2026, 9, 16)))
+        .toBe("This student's service ends Oct 15, 2026. Make-up sessions can't be scheduled after that date.");
+    });
+
+    it('is silent without an end date or a session date', () => {
+      expect(makeupAfterServiceEndError(student, new Date(2026, 9, 16))).toBeNull();
+      expect(makeupAfterServiceEndError(ending, null)).toBeNull();
+      expect(makeupAfterServiceEndError(ending, undefined)).toBeNull();
     });
   });
 });

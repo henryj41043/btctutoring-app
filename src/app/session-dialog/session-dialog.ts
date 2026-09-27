@@ -48,7 +48,8 @@ import {
   retimeSeriesOccurrences,
   scheduleFieldsUnchanged,
 } from '../utils/session-times';
-import {mutatesStudent, validateMakeupPendingBalance, validateSessionLength} from '../utils/session-rules';
+import {mutatesStudent, validateMakeupPendingBalance,
+  makeupAfterServiceEndError, validateSessionLength} from '../utils/session-rules';
 
 @Component({
   selector: 'app-session-dialog',
@@ -294,6 +295,10 @@ export class SessionDialog implements OnInit {
     student: Student,
     excludeIds: Set<string> = new Set(),
   ): string | null {
+    const ended = makeupAfterServiceEndError(student, this.date);
+    if (ended) {
+      return ended;
+    }
     return validateMakeupPendingBalance(
       student,
       this.sessionDurationMinutes,

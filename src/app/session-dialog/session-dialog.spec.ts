@@ -1559,6 +1559,26 @@ describe('SessionDialog', () => {
       expect(c.errorMessage).toContain('make-up');
     });
 
+    it('blocks a make-up dated after the student service end date', () => {
+      const c = primedCreate({});
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 600, service_end_date: '2020-01-31' })];
+      c.createSession();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toContain("service ends Jan 31, 2020");
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+    });
+
+    it('allows a make-up on or before the service end date', () => {
+      const c = primedCreate({});
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 600, service_end_date: '2999-01-31' })];
+      sessionsService.createSession.mockReturnValue(of({ id: 'sess-new' }));
+      c.createSession();
+      expect(c.errorMessage ?? '').not.toContain('service ends');
+      expect(sessionsService.createSession).toHaveBeenCalled();
+    });
+
     it('deducts make-up minutes on a no-call-no-show make-up session', () => {
       const c = editFor({}, {
         selectedType: SessionType.MAKE_UP,

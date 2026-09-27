@@ -79,6 +79,10 @@ export class Student {
   /** @deprecated See pending_changes (notice_sent per entry). */
   pending_change_notice_sent?: string;
   /** Old package's prorated portion for a mid-month package-change month. */
+  /** 'YYYY-MM-DD' last day of service, inclusive (null on save = clear). */
+  service_end_date?: string | null;
+  /** The status applied once the end date has passed (default Past Student). */
+  end_status?: string | null;
   /** Monthly price replacing the package's price for this student (null on save = clear). */
   price_override?: number | null;
   /** Percent (0-100) taken off this student's package charge (null on save = clear). */

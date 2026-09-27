@@ -217,6 +217,40 @@
           }
         </div>
 
+        @if (showServiceEnd) {
+          <div class="pricing-section">
+            <p class="pending-change-title">End of Service</p>
+            <p class="planning-overrides-hint">
+              The last day of service. The final month is prorated to this date, later sessions are
+              removed, and make-up minutes expire with it.
+            </p>
+            <mat-form-field>
+              <mat-label>Service End Date</mat-label>
+              <input matInput [matDatepicker]="endPicker" [min]="today" formControlName="service_end_date">
+              <mat-datepicker-toggle [for]="endPicker" matSuffix/>
+              <mat-datepicker #endPicker/>
+              <mat-hint>Blank = service continues</mat-hint>
+            </mat-form-field>
+            @if (studentForm.get('service_end_date')?.value) {
+              <mat-form-field>
+                <mat-label>Status After End Date</mat-label>
+                <mat-select formControlName="end_status">
+                  @for (endOption of endStatusOptions; track endOption) {
+                    <mat-option [value]="endOption">{{ endOption }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Applied automatically the morning after</mat-hint>
+              </mat-form-field>
+            }
+            @if (shortNotice) {
+              <p class="short-notice">
+                ⚠ Less than one month's notice. Policy asks for at least a month; the final month is
+                still prorated to this date and no refund is calculated.
+              </p>
+            }
+          </div>
+        }
+
         <p class="makeup-balance">
           Make Up Minutes: <strong>{{ makeupBalance }}</strong>
           <span class="makeup-hint">(from cancelled sessions; expire after 90 days)</span>
@@ -231,12 +265,16 @@
 
     @if (showDeactivateConfirm) {
       <div class="status-confirm-warning">
-        <p><strong>⚠ Leaving Active status.</strong></p>
+        @if (confirmingEndDate) {
+          <p><strong>⚠ Service ends {{ endDateLabel }}.</strong></p>
+        } @else {
+          <p><strong>⚠ Leaving Active status.</strong></p>
+        }
         <p>
           @if (upcomingSessionCount !== null) {
-            {{ upcomingSessionCount }} upcoming pending tutoring session(s) will be deleted.
+            {{ upcomingSessionCount }} {{ confirmingEndDate ? 'pending tutoring session(s) after that date' : 'upcoming pending tutoring session(s)' }} will be deleted.
           } @else {
-            This student's upcoming pending tutoring sessions will be deleted.
+            This student's {{ confirmingEndDate ? 'pending tutoring sessions after that date' : 'upcoming pending tutoring sessions' }} will be deleted.
           }
           Deleting does not bank make-up minutes — cancel sessions first if the minutes should be kept.
         </p>

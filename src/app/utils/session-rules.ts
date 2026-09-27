@@ -3,7 +3,7 @@ import {Student} from '../models/student.model';
 import {SessionStatus} from '../enums/session-status.enum';
 import {SessionType} from '../enums/session-type.enum';
 import {CUSTOM_PACKAGE, PackageDef} from './package-config';
-import {availableMakeupMinutes} from './makeup';
+import {availableMakeupMinutes, serviceEndInstant} from './makeup';
 import {durationOf} from './session-times';
 
 /** Allowed trial lengths in minutes (client policy 2026-09-22: 45, or 30). */
@@ -136,6 +136,19 @@ export function validateMakeupPendingBalance(
 }
 
 /** Whether finalizing a session of this type/status changes the student's minute banks. */
+/**
+ * A make-up can't be scheduled after the student's last day of service:
+ * their make-up minutes expire with it.
+ */
+export function makeupAfterServiceEndError(student: Student, sessionDate: Date | null | undefined): string | null {
+  const end = serviceEndInstant(student);
+  if (!end || !sessionDate || sessionDate.getTime() <= end.getTime()) {
+    return null;
+  }
+  const label = end.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+  return `${student.name ?? 'This student'}'s service ends ${label}. Make-up sessions can't be scheduled after that date.`;
+}
+
 export function mutatesStudent(type: SessionType, status: SessionStatus): boolean {
   // Trials and BTC & Me group sessions never touch the make-up bank — a
   // cancelled one banks nothing (group billing is a flat monthly fee).

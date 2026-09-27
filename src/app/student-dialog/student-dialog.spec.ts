@@ -29,8 +29,9 @@ describe('StudentDialog', () => {
   };
   const billingService = { previewStatement: jest.fn() };
   const scheduleService = {
-    futurePendingTutoring: jest.fn(() => of([])),
-    deleteFuturePendingSessions: jest.fn(() => of(0)),
+    futurePendingTutoring: jest.fn((..._args: unknown[]) => of([])),
+    deleteFuturePendingSessions: jest.fn((..._args: unknown[]) => of(0)),
+    fillAhead: jest.fn((..._args: unknown[]) => of(null)),
   };
 
   const build = (data: Partial<StudentDialogData>): StudentDialog => {
@@ -1080,6 +1081,280 @@ describe('StudentDialog', () => {
         form(c2).patchValue({ discount_percent: 10 });
         jest.advanceTimersByTime(400);
         expect(billingService.previewStatement).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('end of service', () => {
+    const key = (d: Date): string =>
+      `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const inDays = (n: number): Date => new Date(today.getFullYear(), today.getMonth(), today.getDate() + n);
+    const inMonths = (n: number): Date => new Date(today.getFullYear(), today.getMonth() + n, today.getDate());
+    const active = (over: Partial<Student> = {}): Student => ({
+      id: 's-1',
+      contact_id: 'c-1',
+      name: 'Pat',
+      status: StudentStatus.ACTIVE_STUDENT,
+      onboarding_complete: true,
+      package: 'Succeed',
+      ...over,
+    } as Student);
+    const view = (c: StudentDialog) =>
+      c as unknown as {
+        showServiceEnd: boolean;
+        shortNotice: boolean;
+        endDateLabel: string;
+        confirmingEndDate: boolean;
+        showDeactivateConfirm: boolean;
+        upcomingSessionCount: number | null;
+        endStatusOptions: string[];
+      };
+    const saved = (): Student => studentService.updateStudent.mock.calls.at(-1)![0];
+    const pending = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ id: `x-${i}`, type: 'TUTORING', status: 'Pending' }));
+
+    beforeEach(() => {
+      studentService.updateStudent.mockReturnValue(of({}));
+      scheduleService.futurePendingTutoring.mockReturnValue(of([]));
+      scheduleService.deleteFuturePendingSessions.mockReturnValue(of(0));
+      scheduleService.fillAhead.mockReturnValue(of(null));
+    });
+
+    it('is offered to a student in service, or one carrying an end date', () => {
+      expect(view(build({ mode: 'edit', student: active() })).showServiceEnd).toBe(true);
+      TestBed.resetTestingModule();
+      expect(view(build({
+        mode: 'edit',
+        student: active({ status: StudentStatus.PAST_STUDENT, service_end_date: '2026-01-31' }),
+      })).showServiceEnd).toBe(true);
+      TestBed.resetTestingModule();
+      expect(view(build({ mode: 'edit', student: active({ status: StudentStatus.PAST_STUDENT }) })).showServiceEnd)
+        .toBe(false);
+      TestBed.resetTestingModule();
+      expect(view(build({ mode: 'create' })).showServiceEnd).toBe(false);
+      TestBed.resetTestingModule();
+      expect(view(build({
+        mode: 'edit',
+        student: active({ status: StudentStatus.ONBOARDING, onboarding_complete: false }),
+      })).showServiceEnd).toBe(false);
+    });
+
+    it('offers only the statuses that follow service', () => {
+      expect(view(build({ mode: 'edit', student: active() })).endStatusOptions).toEqual([
+        StudentStatus.PAST_STUDENT, StudentStatus.MIA, StudentStatus.DECLINED_SERVICES,
+      ]);
+    });
+
+    it('loads the stored end date and end status', () => {
+      const c = build({
+        mode: 'edit',
+        student: active({ service_end_date: '2026-10-15T00:00:00', end_status: StudentStatus.MIA }),
+      });
+      expect(form(c).get('service_end_date')?.value).toEqual(new Date(2026, 9, 15));
+      expect(form(c).get('end_status')?.value).toBe(StudentStatus.MIA);
+      expect(view(c).endDateLabel).toBe('Oct 15, 2026');
+    });
+
+    it('defaults the end status to Past Student and has no label when blank', () => {
+      const c = build({ mode: 'edit', student: active() });
+      expect(form(c).get('end_status')?.value).toBe(StudentStatus.PAST_STUDENT);
+      expect(form(c).get('service_end_date')?.value).toBeNull();
+      expect(view(c).endDateLabel).toBe('');
+    });
+
+    it('a plain save sends no end-of-service keys', () => {
+      const c = build({ mode: 'edit', student: active() });
+      c.save();
+      expect('service_end_date' in saved()).toBe(false);
+      expect('end_status' in saved()).toBe(false);
+      expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+      expect(scheduleService.fillAhead).not.toHaveBeenCalled();
+    });
+
+    describe('short notice', () => {
+      it('warns under one month and never blocks', () => {
+        const c = build({ mode: 'edit', student: active() });
+        expect(view(c).shortNotice).toBe(false);
+        form(c).get('service_end_date')?.setValue(inDays(10));
+        expect(view(c).shortNotice).toBe(true);
+        c.save();
+        expect(studentService.updateStudent).toHaveBeenCalled();
+      });
+
+      it('is satisfied by exactly one month', () => {
+        const c = build({ mode: 'edit', student: active() });
+        form(c).get('service_end_date')?.setValue(inMonths(1));
+        expect(view(c).shortNotice).toBe(false);
+        form(c).get('service_end_date')?.setValue(new Date(inMonths(1).getTime() - 24 * 60 * 60 * 1000));
+        expect(view(c).shortNotice).toBe(true);
+      });
+
+      it('stays quiet for an end date that was already saved', () => {
+        const soon = key(inDays(5));
+        const c = build({ mode: 'edit', student: active({ service_end_date: soon }) });
+        expect(view(c).shortNotice).toBe(false);
+      });
+    });
+
+    describe('setting an end date', () => {
+      it('saves the date and status without a prompt when nothing is scheduled after it', () => {
+        const c = build({ mode: 'edit', student: active() });
+        const end = inMonths(2);
+        form(c).patchValue({ service_end_date: end, end_status: StudentStatus.DECLINED_SERVICES });
+        c.save();
+        expect(scheduleService.futurePendingTutoring).toHaveBeenCalledWith(
+          's-1', expect.any(Date), { from: new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1) },
+        );
+        expect(view(c).showDeactivateConfirm).toBe(false);
+        expect(saved().service_end_date).toBe(key(end));
+        expect(saved().end_status).toBe(StudentStatus.DECLINED_SERVICES);
+        expect(saved().status).toBe(StudentStatus.ACTIVE_STUDENT);
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+
+      it('falls back to Past Student when the end status is blank', () => {
+        const c = build({ mode: 'edit', student: active() });
+        form(c).patchValue({ service_end_date: inMonths(2), end_status: '' });
+        c.save();
+        expect(saved().end_status).toBe(StudentStatus.PAST_STUDENT);
+      });
+
+      it('prompts with the sessions after the date, then saves and removes them', () => {
+        scheduleService.futurePendingTutoring.mockReturnValue(of(pending(4) as never));
+        scheduleService.deleteFuturePendingSessions.mockReturnValue(of(4));
+        const c = build({ mode: 'edit', student: active() });
+        const end = inMonths(2);
+        const from = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+        form(c).get('service_end_date')?.setValue(end);
+        c.save();
+        expect(view(c).showDeactivateConfirm).toBe(true);
+        expect(view(c).confirmingEndDate).toBe(true);
+        expect(view(c).upcomingSessionCount).toBe(4);
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+
+        c.confirmDeactivation();
+        expect(saved().service_end_date).toBe(key(end));
+        expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith('s-1', expect.any(Date), { from });
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+
+      it('an unchanged end date never prompts again', () => {
+        const end = key(inMonths(2));
+        const c = build({ mode: 'edit', student: active({ service_end_date: end }) });
+        c.save();
+        expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+        expect(saved().service_end_date).toBe(end);
+        expect(saved().end_status).toBe(StudentStatus.PAST_STUDENT);
+      });
+
+      it('moving a stored end date prompts for the new one', () => {
+        const c = build({ mode: 'edit', student: active({ service_end_date: key(inMonths(3)) }) });
+        form(c).get('service_end_date')?.setValue(inMonths(2));
+        c.save();
+        expect(scheduleService.futurePendingTutoring).toHaveBeenCalledTimes(1);
+        expect(saved().service_end_date).toBe(key(inMonths(2)));
+      });
+    });
+
+    describe('clearing an end date', () => {
+      it('sends null and refills the calendar', () => {
+        const c = build({
+          mode: 'edit',
+          student: active({ service_end_date: key(inMonths(2)), end_status: StudentStatus.MIA }),
+        });
+        form(c).get('service_end_date')?.setValue(null);
+        c.save();
+        expect(saved().service_end_date).toBeNull();
+        expect('end_status' in saved()).toBe(false);
+        expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+        expect(scheduleService.fillAhead).toHaveBeenCalledWith(saved());
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+    });
+
+    describe('leaving Active', () => {
+      it('ends service today and records the new status as the end status', () => {
+        const c = build({ mode: 'edit', student: active() });
+        form(c).get('status')?.setValue(StudentStatus.MIA);
+        c.save();
+        expect(view(c).confirmingEndDate).toBe(false);
+        expect(scheduleService.futurePendingTutoring).toHaveBeenCalledWith('s-1');
+        expect(saved().status).toBe(StudentStatus.MIA);
+        expect(saved().service_end_date).toBe(key(today));
+        expect(saved().end_status).toBe(StudentStatus.MIA);
+      });
+
+      it('pulls a future end date back to today', () => {
+        const c = build({ mode: 'edit', student: active({ service_end_date: key(inMonths(2)) }) });
+        form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+        c.save();
+        expect(saved().service_end_date).toBe(key(today));
+      });
+
+      it('keeps an end date that already passed', () => {
+        const past = key(inDays(-3));
+        const c = build({ mode: 'edit', student: active({ service_end_date: past }) });
+        form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+        c.save();
+        expect(saved().service_end_date).toBe(past);
+      });
+
+      it('removes every upcoming session, not only those after a date', () => {
+        scheduleService.futurePendingTutoring.mockReturnValue(of(pending(2) as never));
+        const c = build({ mode: 'edit', student: active() });
+        form(c).get('status')?.setValue(StudentStatus.PAST_STUDENT);
+        c.save();
+        c.confirmDeactivation();
+        expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith('s-1');
+      });
+
+      it('going back to Onboarding is not an end of service', () => {
+        const c = build({ mode: 'edit', student: active() });
+        form(c).get('status')?.setValue(StudentStatus.ONBOARDING);
+        c.save();
+        expect('service_end_date' in saved()).toBe(false);
+        expect('end_status' in saved()).toBe(false);
+      });
+    });
+
+    describe('a student no longer in service', () => {
+      const past = (over: Partial<Student> = {}): Student =>
+        active({ status: StudentStatus.PAST_STUDENT, service_end_date: '2026-01-31', ...over });
+
+      it('keeps the stored end date on an ordinary save', () => {
+        const c = build({ mode: 'edit', student: past() });
+        form(c).get('service_end_date')?.setValue(inMonths(2));
+        c.save();
+        expect(saved().service_end_date).toBe('2026-01-31');
+        expect('end_status' in saved()).toBe(false);
+        expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+      });
+
+      it('returning to Active clears a past end date and refills the calendar', () => {
+        const c = build({ mode: 'edit', student: past() });
+        form(c).get('status')?.setValue(StudentStatus.ACTIVE_STUDENT);
+        c.save();
+        expect(saved().service_end_date).toBeNull();
+        expect('end_status' in saved()).toBe(false);
+        expect(scheduleService.fillAhead).toHaveBeenCalled();
+      });
+
+      it('returning to Active with a new future end date keeps it', () => {
+        const c = build({ mode: 'edit', student: past() });
+        const end = inMonths(3);
+        form(c).patchValue({ status: StudentStatus.ACTIVE_STUDENT, service_end_date: end });
+        c.save();
+        expect(saved().service_end_date).toBe(key(end));
+        expect(saved().end_status).toBe(StudentStatus.PAST_STUDENT);
+        expect(scheduleService.fillAhead).not.toHaveBeenCalled();
+      });
+
+      it('a past student without an end date sends nothing', () => {
+        const c = build({ mode: 'edit', student: past({ service_end_date: undefined }) });
+        c.save();
+        expect('service_end_date' in saved()).toBe(false);
       });
     });
   });

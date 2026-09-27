@@ -5,8 +5,29 @@ export const MAKEUP_EXPIRY_DAYS = 90;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** True when a batch is past its 90-day life (never, if the student is exempt). */
+/**
+ * The instant the student's service ends (the end of their last day, local
+ * time), or null without a service end date.
+ */
+export function serviceEndInstant(student: Student): Date | null {
+  const key = (student.service_end_date ?? '').slice(0, 10);
+  const [year, month, day] = key.split('-').map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+  return new Date(year, month - 1, day, 23, 59, 59, 999);
+}
+
+/**
+ * True when a batch is past its 90-day life (never, if the student is
+ * exempt) — or the student's service has ended: every remaining minute
+ * expires with the last day of service, exempt or not (client policy).
+ */
 function isExpired(batch: MakeupBatch, student: Student, now: Date): boolean {
+  const end = serviceEndInstant(student);
+  if (end && now.getTime() > end.getTime()) {
+    return true;
+  }
   if (student.make_up_never_expire) {
     return false;
   }
@@ -41,6 +62,10 @@ function apply(student: Student, batches: MakeupBatch[]): Student {
 export function availableMakeupMinutes(student: Student, now: Date = new Date()): number {
   const batches = student.make_up_batches;
   if (!batches || batches.length === 0) {
+    const end = serviceEndInstant(student);
+    if (end && now.getTime() > end.getTime()) {
+      return 0;
+    }
     return student.make_up_minutes ?? 0;
   }
   return batches
@@ -94,18 +119,28 @@ export function consumeMakeupMinutes(
   return apply(student, kept);
 }
 
+function expiryOf(batch: MakeupBatch, student: Student): Date | null {
+  const end = serviceEndInstant(student);
+  if (student.make_up_never_expire) {
+    return end;
+  }
+  const natural = new Date(new Date(batch.earned_date).getTime() + MAKEUP_EXPIRY_DAYS * DAY_MS);
+  return end && end.getTime() < natural.getTime() ? end : natural;
+}
+
 /** An unexpired batch prepared for display: source date + computed expiry. */
 export interface MakeupBatchView {
   minutes: number;
   /** The cancelled session's date (when the minutes were banked). */
   earned_date: string;
-  /** Expiry date, or null when the student is exempt from expiry. */
+  /** Expiry date (never later than the service end), or null when nothing expires. */
   expires: Date | null;
 }
 
 /**
  * The student's unexpired batches, oldest first, each with its computed
- * expiry (earned + 90 days; null when make_up_never_expire).
+ * expiry: earned + 90 days (none when make_up_never_expire), capped at the
+ * end of the student's last day of service.
  */
 export function unexpiredBatchViews(
   student: Student,
@@ -116,9 +151,7 @@ export function unexpiredBatchViews(
     .map(b => ({
       minutes: b.minutes,
       earned_date: b.earned_date,
-      expires: student.make_up_never_expire
-        ? null
-        : new Date(new Date(b.earned_date).getTime() + MAKEUP_EXPIRY_DAYS * DAY_MS),
+      expires: expiryOf(b, student),
     }))
     .sort(
       (a, b) =>
