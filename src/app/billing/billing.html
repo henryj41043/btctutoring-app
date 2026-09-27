@@ -5,12 +5,22 @@
       <span class="billing-period">{{monthStart | date:'MMMM y'}}</span>
     </div>
     <div class="billing-controls">
-      <mat-form-field subscriptSizing="dynamic" appearance="outline">
+      <button matIconButton type="button" aria-label="Previous month" matTooltip="Previous month"
+              (click)="shiftMonth(-1)" [disabled]="loading">
+        <mat-icon>chevron_left</mat-icon>
+      </button>
+      <mat-form-field subscriptSizing="dynamic" appearance="outline" class="month-field">
         <mat-label>Billing month</mat-label>
-        <input matInput [matDatepicker]="billingDatepicker" [(ngModel)]="selectedDate" (dateChange)="onDateChange($event.value)">
+        <input matInput readonly [matDatepicker]="billingDatepicker" [ngModel]="monthStart"
+               (click)="billingDatepicker.open()">
         <mat-datepicker-toggle [for]="billingDatepicker" matSuffix/>
-        <mat-datepicker #billingDatepicker/>
+        <mat-datepicker #billingDatepicker startView="year"
+                        (monthSelected)="onMonthSelected($event, billingDatepicker)"/>
       </mat-form-field>
+      <button matIconButton type="button" aria-label="Next month" matTooltip="Next month"
+              (click)="shiftMonth(1)" [disabled]="loading">
+        <mat-icon>chevron_right</mat-icon>
+      </button>
       <button mat-raised-button color="primary" (click)="exportPDF()" [disabled]="loading">
         <mat-icon>picture_as_pdf</mat-icon>
         Export PDF
@@ -26,13 +36,25 @@
           <span class="billing-spinner-label">Calculating billing…</span>
         </div>
       } @else if (hasError) {
-        <p class="billing-empty billing-error">Billing couldn't load the package catalog — amounts can't be calculated. Reload to try again.</p>
+        <p class="billing-empty billing-error">Billing couldn't be calculated for this month. Reload to try again.</p>
       } @else if (!authService.isAdmin()) {
         <p class="billing-empty">Billing is available to administrators only.</p>
       } @else if (dataSource.data.length === 0) {
         <p class="billing-empty">No billable contacts for this month.</p>
       } @else {
-      <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
+      <table mat-table [dataSource]="dataSource" matSort multiTemplateDataRows class="mat-elevation-z8">
+        <ng-container matColumnDef="expand">
+          <th mat-header-cell *matHeaderCellDef class="expand-cell"></th>
+          <td mat-cell *matCellDef="let item" class="expand-cell">
+            <button matIconButton type="button" class="expand-button"
+                    [attr.aria-label]="isExpanded(item) ? 'Hide breakdown' : 'Show breakdown'"
+                    [attr.aria-expanded]="isExpanded(item)"
+                    (click)="toggleExpanded(item, $event)">
+              <mat-icon>{{isExpanded(item) ? 'expand_less' : 'expand_more'}}</mat-icon>
+            </button>
+          </td>
+          <td mat-footer-cell *matFooterCellDef></td>
+        </ng-container>
         <ng-container matColumnDef="name">
           <th mat-header-cell *matHeaderCellDef mat-sort-header> Contact </th>
           <td mat-cell *matCellDef="let item">
@@ -48,7 +70,16 @@
         </ng-container>
         <ng-container matColumnDef="packages">
           <th mat-header-cell *matHeaderCellDef> Students </th>
-          <td mat-cell *matCellDef="let item"> {{item.packages}} </td>
+          <td mat-cell *matCellDef="let item">
+            {{item.packages}}
+            @if (item.labels?.length) {
+              <div class="billing-labels">
+                @for (label of item.labels; track label) {
+                  <span class="billing-label">{{label}}</span>
+                }
+              </div>
+            }
+          </td>
           <td mat-footer-cell *matFooterCellDef></td>
         </ng-container>
         <ng-container matColumnDef="cycle">
@@ -95,10 +126,13 @@
           <td mat-footer-cell *matFooterCellDef> {{grandDueFifteenth | currency:'USD':'symbol':'1.2-2'}} </td>
         </ng-container>
         <ng-container matColumnDef="discount">
-          <th mat-header-cell *matHeaderCellDef> Sibling Discount </th>
+          <th mat-header-cell *matHeaderCellDef> Discount </th>
           <td mat-cell *matCellDef="let item">
             @if (item.discount) {
-              -{{item.discount | currency:'USD':'symbol':'1.2-2'}} ({{item.discount_percent}}%)
+              -{{item.discount | currency:'USD':'symbol':'1.2-2'}}
+              @if (item.discount_percent) {
+                ({{item.discount_percent}}%)
+              }
             } @else {
               —
             }
@@ -129,9 +163,82 @@
           </td>
           <td mat-footer-cell *matFooterCellDef></td>
         </ng-container>
+        <ng-container matColumnDef="detail">
+          <td mat-cell *matCellDef="let item" [attr.colspan]="billingColumns.length" class="detail-cell">
+            @if (isExpanded(item) && item.statement; as statement) {
+              <div class="billing-detail">
+                @if (statement.lines.length) {
+                  <table class="detail-table">
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Package</th>
+                        <th>Period</th>
+                        <th>Sessions</th>
+                        <th class="num">Rate</th>
+                        <th class="num">Charge</th>
+                        <th class="num">Discount</th>
+                        <th class="num">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (line of statement.lines; track $index) {
+                        <tr>
+                          <td>{{line.student_name}}</td>
+                          <td>
+                            {{line.package}}
+                            @for (label of lineLabels(line); track label) {
+                              <span class="billing-label">{{label}}</span>
+                            }
+                          </td>
+                          <td>{{linePeriod(line)}}</td>
+                          <td>{{lineSessions(line)}}</td>
+                          <td class="num">{{line.rate ? (line.rate | currency:'USD':'symbol':'1.2-2') : '—'}}</td>
+                          <td class="num">{{line.amount | currency:'USD':'symbol':'1.2-2'}}</td>
+                          <td class="num">
+                            @if (line.discount_amount) {
+                              -{{line.discount_amount | currency:'USD':'symbol':'1.2-2'}} ({{line.discount_percent}}%)
+                            } @else {
+                              —
+                            }
+                          </td>
+                          <td class="num">{{line.net | currency:'USD':'symbol':'1.2-2'}}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                }
+                <dl class="detail-summary">
+                  <div>
+                    <dt>Packages</dt>
+                    <dd>{{statement.package_subtotal | currency:'USD':'symbol':'1.2-2'}}</dd>
+                  </div>
+                  @if (statement.sibling_discount_amount) {
+                    <div>
+                      <dt>Sibling discount ({{statement.sibling_discount_percent}}%)</dt>
+                      <dd>-{{statement.sibling_discount_amount | currency:'USD':'symbol':'1.2-2'}}</dd>
+                    </div>
+                  }
+                  @if (statement.group_fee) {
+                    <div>
+                      <dt>BTC &amp; Me ({{statement.group_students.join(', ')}})</dt>
+                      <dd>{{statement.group_fee | currency:'USD':'symbol':'1.2-2'}}</dd>
+                    </div>
+                  }
+                  <div class="detail-total">
+                    <dt>Calculated total</dt>
+                    <dd>{{statement.total | currency:'USD':'symbol':'1.2-2'}}</dd>
+                  </div>
+                </dl>
+              </div>
+            }
+          </td>
+        </ng-container>
         <tr mat-header-row *matHeaderRowDef="billingColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: billingColumns;"
             class="billing-row-link" (click)="openContact(row)"></tr>
+        <tr mat-row *matRowDef="let row; columns: detailColumns;"
+            class="billing-detail-row" [class.billing-detail-open]="isExpanded(row)"></tr>
         <tr mat-footer-row *matFooterRowDef="billingColumns"></tr>
       </table>
       <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons/>

@@ -2,14 +2,14 @@ import {DestroyRef, ChangeDetectionStrategy, ChangeDetectorRef, Component, injec
 import {Router} from '@angular/router';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, {RowInput, Styles} from 'jspdf-autotable';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatSort, MatSortModule} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
-import {MatDatepickerModule} from '@angular/material/datepicker';
+import {MatDatepicker, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatCheckboxModule} from '@angular/material/checkbox';
@@ -20,31 +20,33 @@ import {MatDialog} from '@angular/material/dialog';
 import {BillingOverrideDialog, BillingOverrideDialogData, BillingOverrideResult} from '../billing-override-dialog/billing-override-dialog';
 import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
-import {ContactService} from '../services/contact.service';
-import {StudentService} from '../services/student.service';
 import {BillingService} from '../services/billing.service';
 import {NoteService} from '../services/note.service';
 import {Note} from '../models/note.model';
-import {Contact} from '../models/contact.model';
-import {Student} from '../models/student.model';
 import {BillingRecord} from '../models/billing-record.model';
 import {BillingEntry} from '../models/billing-entry.model';
 import {CurrencyPipe, DatePipe} from '@angular/common';
-import {catchError, EMPTY, forkJoin, of} from 'rxjs';
-import {StudentStatus} from '../enums/student-status.enum';
+import {catchError, EMPTY} from 'rxjs';
 import {BillingCycle} from '../enums/billing-cycle.enum';
-import {groupSessionFee, studentMonthlyCharge, studentSemiMonthlyCharge, studentNeedsAttention, siblingDiscountedTotal} from '../utils/billing-amount';
-import {PackageService} from '../services/package.service';
-import {PackageCatalog, toCatalog} from '../utils/package-config';
-import {PackageRow} from '../models/package-row.model';
-import {packageFieldsForMonth} from '../utils/pending-package';
 import {round2} from '../utils/package-config';
-import {studentDisplayName} from '../utils/student-name';
 import {TableStateStore} from '../utils/table-state';
+import {StatementLine} from '../models/statement.model';
+import {flagLabels, formatMoney, linePeriod, lineSessions, lineSummary, toBillingEntry} from '../utils/statement-view';
+
+/** The month picker shows and announces a month, never a day. */
+const MONTH_FORMATS = {
+  parse: {dateInput: null},
+  display: {
+    dateInput: {year: 'numeric', month: 'long'},
+    monthYearLabel: {year: 'numeric', month: 'short'},
+    dateA11yLabel: {year: 'numeric', month: 'long'},
+    monthYearA11yLabel: {year: 'numeric', month: 'long'},
+  },
+};
 
 @Component({
   selector: 'app-billing',
-  providers: [provideNativeDateAdapter()],
+  providers: [provideNativeDateAdapter(MONTH_FORMATS)],
   imports: [
     MatButtonModule,
     MatCardModule,
@@ -68,10 +70,7 @@ import {TableStateStore} from '../utils/table-state';
 })
 export class Billing implements OnInit {
   protected authService: AuthService = inject(AuthService);
-  private contactService: ContactService = inject(ContactService);
-  private studentService: StudentService = inject(StudentService);
   private billingService: BillingService = inject(BillingService);
-  private packageService: PackageService = inject(PackageService);
   private noteService: NoteService = inject(NoteService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private router: Router = inject(Router);
@@ -95,15 +94,16 @@ export class Billing implements OnInit {
   }
 
   protected billingColumns: string[] = [
-    'name', 'packages', 'cycle', 'due_first', 'due_fifteenth', 'discount', 'total', 'paid',
+    'expand', 'name', 'packages', 'cycle', 'due_first', 'due_fifteenth', 'discount', 'total', 'paid',
   ];
   protected dataSource = new MatTableDataSource<BillingEntry>([]);
   protected selectedDate: Date = new Date();
   protected loading: boolean = true;
-  /** True when the load (notably the package catalog) failed — shown loudly. */
+  /** True when the statements could not be loaded — shown loudly. */
   protected hasError: boolean = false;
-  /** The admin-managed package catalog governing all derived amounts. */
-  private catalog: PackageCatalog = {};
+  /** Contact ids of the rows whose breakdown is open. */
+  private expanded = new Set<string>();
+  protected readonly detailColumns: string[] = ['detail'];
   /** First-of-month for the selected billing month, used for the header. */
   protected monthStart: Date = new Date();
 
@@ -115,12 +115,24 @@ export class Billing implements OnInit {
     this.loadBilling(this.selectedDate);
   }
 
+  /** Billing is per month: whatever day arrives, the month is what's selected. */
   onDateChange(date: Date | null): void {
     if (date) {
-      this.selectedDate = date;
-      this.viewState.patch({extra: {selectedDate: date.toISOString()}});
-      this.loadBilling(date);
+      this.selectedDate = new Date(date.getFullYear(), date.getMonth(), 1);
+      this.viewState.patch({extra: {selectedDate: this.selectedDate.toISOString()}});
+      this.loadBilling(this.selectedDate);
     }
+  }
+
+  /** The picker stops at the month view: choosing a month selects it and closes. */
+  onMonthSelected(date: Date, picker: Pick<MatDatepicker<Date>, 'close'>): void {
+    picker.close();
+    this.onDateChange(date);
+  }
+
+  /** Steps to the previous (-1) or next (+1) month. */
+  shiftMonth(delta: number): void {
+    this.onDateChange(new Date(this.monthStart.getFullYear(), this.monthStart.getMonth() + delta, 1));
   }
 
   /** 'YYYY-MM' month key for the selected billing month. */
@@ -135,14 +147,6 @@ export class Billing implements OnInit {
     return `${y}-${m}-${day.toString().padStart(2, '0')}`;
   }
 
-  /** Normalizes a contact's billing cycle, treating the legacy 'biweekly' as semi-monthly. */
-  private normalizeCycle(cycle: string | undefined): string {
-    if (cycle === BillingCycle.SEMI_MONTHLY || cycle === 'biweekly') {
-      return BillingCycle.SEMI_MONTHLY;
-    }
-    return BillingCycle.MONTHLY;
-  }
-
   protected isSemiMonthly(entry: BillingEntry): boolean {
     return entry.cycle === BillingCycle.SEMI_MONTHLY;
   }
@@ -151,6 +155,7 @@ export class Billing implements OnInit {
     this.monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
     this.loading = true;
     this.hasError = false;
+    this.expanded.clear();
     this.dataSource.data = [];
     this.cdr.markForCheck();
 
@@ -159,143 +164,38 @@ export class Billing implements OnInit {
       return;
     }
 
-    forkJoin({
-      contacts: this.contactService.getContacts().pipe(catchError(() => of([] as Contact[]))),
-      students: this.studentService.getStudents().pipe(catchError(() => of([] as Student[]))),
-      records: this.billingService
-        .getBillingRecordsByMonth(this.monthKeyOf(date))
-        .pipe(catchError(() => of([] as BillingRecord[]))),
-      // No catchError: a missing catalog must fail LOUDLY here — every
-      // named-package row would otherwise silently derive $0.
-      packages: this.packageService.getPackages(),
-    }).pipe(
+    // The service calculates every amount; a failure is shown loudly rather
+    // than as an empty (and misleading) month.
+    this.billingService.getStatements(this.monthKeyOf(date)).pipe(
       catchError(() => {
         this.hasError = true;
         this.finishLoading([]);
         return EMPTY;
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(({contacts, students, records, packages}) => {
-      this.catalog = toCatalog(packages);
-      this.finishLoading(this.buildEntries(date, contacts, students, records));
+    ).subscribe(statements => {
+      this.finishLoading((statements ?? []).map(toBillingEntry));
     });
   }
 
-  private buildEntries(
-    date: Date,
-    contacts: Contact[],
-    students: Student[],
-    records: BillingRecord[],
-  ): BillingEntry[] {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const periodFirst = this.periodKey(date, 1);
-    const periodFifteenth = this.periodKey(date, 15);
-    const recordMap = new Map<string, BillingRecord>();
-    for (const r of records) {
-      recordMap.set(`${r.contact_id}#${r.period_start}`, r);
+  /** Opens or closes a row's breakdown; never also navigates to the contact. */
+  toggleExpanded(entry: BillingEntry, event: Event): void {
+    event.stopPropagation();
+    if (!entry.contact_id) return;
+    if (this.expanded.has(entry.contact_id)) {
+      this.expanded.delete(entry.contact_id);
+    } else {
+      this.expanded.add(entry.contact_id);
     }
-
-    // Group billable students (active, with a package or a BTC & Me
-    // enrollment) by their parent contact.
-    const byContact = new Map<string, Student[]>();
-    for (const s of students) {
-      if (s.status !== StudentStatus.ACTIVE_STUDENT || !s.contact_id) continue;
-      if (!s.package && !s.btc_and_me) continue;
-      const list = byContact.get(s.contact_id) ?? [];
-      list.push(s);
-      byContact.set(s.contact_id, list);
-    }
-
-    const entries: BillingEntry[] = [];
-    for (const [contactId, contactStudents] of byContact) {
-      const contact = contacts.find(c => c.id === contactId);
-      if (!contact) continue;
-
-      const cycle = this.normalizeCycle(contact.billing_cycle);
-      const semi = cycle === BillingCycle.SEMI_MONTHLY;
-
-      // Sibling discount: a family-level percent keyed to PACKAGED enrollment
-      // — group-only students never count toward the 3+ threshold, and the
-      // flat BTC & Me fee is never discounted (added after the discount).
-      const packaged = contactStudents.filter(s => !!s.package);
-      const pct = contact.sibling_discount;
-      const enrolled = packaged.length;
-      const groupFee = groupSessionFee(contactStudents);
-
-      let dueFirst: number | null;
-      let dueFifteenth: number | null;
-      let total: number;
-      let preDiscountTotal: number;
-      if (semi) {
-        let first = 0;
-        let fifteenth = 0;
-        for (const s of packaged) {
-          const charge = studentSemiMonthlyCharge(s, year, month, this.catalog);
-          first += charge.first;
-          fifteenth += charge.fifteenth;
-        }
-        first = round2(first);
-        fifteenth = round2(fifteenth);
-        preDiscountTotal = round2(first + fifteenth);
-        // The flat group fee lands on the 1st for semi-monthly families.
-        const discFirst = round2(siblingDiscountedTotal(first, pct, enrolled) + groupFee);
-        const discFifteenth = siblingDiscountedTotal(fifteenth, pct, enrolled);
-        total = round2(discFirst + discFifteenth);
-        // A half with no charge (e.g. the blank side of a prorated first month,
-        // billed in full on the other date) renders as blank rather than $0.00.
-        dueFirst = discFirst === 0 ? null : discFirst;
-        dueFifteenth = discFifteenth === 0 ? null : discFifteenth;
-      } else {
-        preDiscountTotal = round2(packaged.reduce((sum, s) => sum + studentMonthlyCharge(s, year, month, this.catalog), 0));
-        total = round2(siblingDiscountedTotal(preDiscountTotal, pct, enrolled) + groupFee);
-        dueFirst = total;
-        dueFifteenth = null;
-      }
-      if (preDiscountTotal <= 0 && groupFee <= 0) continue; // nobody is billable this month
-
-      const discount = round2(preDiscountTotal + groupFee - total);
-
-      // Admin overrides (0 = no charge) replace the derived due for that
-      // period only; the total is the sum of the effective dues.
-      const overrideFirst = this.overrideOf(recordMap.get(`${contactId}#${periodFirst}`));
-      const overrideFifteenth = semi
-        ? this.overrideOf(recordMap.get(`${contactId}#${periodFifteenth}`))
-        : null;
-      const effectiveFirst = overrideFirst ?? dueFirst;
-      const effectiveFifteenth = overrideFifteenth ?? dueFifteenth;
-
-      const entry: BillingEntry = {
-        contact_id: contactId,
-        name: `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim(),
-        packages: [
-          ...packaged.map(s => `${studentDisplayName(s)}: ${packageFieldsForMonth(s, year, month).package}`),
-          ...contactStudents.filter(s => s.btc_and_me).map(s => `${studentDisplayName(s)}: BTC & Me`),
-        ].join('; '),
-        cycle,
-        due_first: effectiveFirst,
-        due_fifteenth: effectiveFifteenth,
-        derived_first: dueFirst,
-        derived_fifteenth: dueFifteenth,
-        override_first: overrideFirst,
-        override_fifteenth: overrideFifteenth,
-        total: round2((effectiveFirst ?? 0) + (effectiveFifteenth ?? 0)),
-        discount,
-        discount_percent: discount > 0 ? (pct ?? 0) : 0,
-        paid_first: recordMap.get(`${contactId}#${periodFirst}`)?.paid ?? false,
-        paid_fifteenth: semi ? (recordMap.get(`${contactId}#${periodFifteenth}`)?.paid ?? false) : false,
-        needs_attention: packaged.some(s => studentNeedsAttention(s, this.catalog)),
-      };
-      entries.push(entry);
-    }
-    return entries.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
   }
 
-  /** A record's stored override, normalised to null when absent. */
-  private overrideOf(record: BillingRecord | undefined): number | null {
-    const value = record?.amount_override;
-    return typeof value === 'number' ? value : null;
+  protected isExpanded(entry: BillingEntry): boolean {
+    return !!entry.contact_id && this.expanded.has(entry.contact_id);
   }
+
+  protected linePeriod(line: StatementLine): string { return linePeriod(line); }
+  protected lineSessions(line: StatementLine): string { return lineSessions(line); }
+  protected lineLabels(line: StatementLine): string[] { return flagLabels(line.flags); }
 
   /** True when a period's amount is an admin override rather than derived. */
   protected isOverridden(entry: BillingEntry, half: 'first' | 'fifteenth'): boolean {
@@ -419,9 +319,7 @@ export class Billing implements OnInit {
   }
 
   private formatMoney(value: number | undefined | null): string {
-    return (value ?? 0).toLocaleString('en-US', {
-      style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,
-    });
+    return formatMoney(value);
   }
 
   /** Sum of the Total column across all rows (there is no filtering, so this
@@ -446,6 +344,37 @@ export class Billing implements OnInit {
     return due === 0 ? 'No charge' : `${this.formatMoney(due)}*`;
   }
 
+  private pdfDiscount(entry: BillingEntry): string {
+    if (!entry.discount) return '—';
+    const amount = `-${this.formatMoney(entry.discount)}`;
+    return entry.discount_percent ? `${amount} (${entry.discount_percent}%)` : amount;
+  }
+
+  /**
+   * The breakdown rows under a family whose month is unusual (prorated,
+   * changed, custom-priced or discounted); an ordinary full month needs none.
+   */
+  private pdfDetailRows(entry: BillingEntry): RowInput[] {
+    const statement = entry.statement;
+    if (!statement || (entry.labels ?? []).length === 0) return [];
+    const styles: Partial<Styles> = {fontSize: 8, textColor: 90, fontStyle: 'italic'};
+    const row = (text: string, amount: number): RowInput => [
+      {content: `    ${text}`, colSpan: 6, styles},
+      {content: this.formatMoney(amount), styles},
+    ];
+    const rows = statement.lines.map(line => {
+      const labels = flagLabels(line.flags);
+      return row(`${lineSummary(line)}${labels.length ? ` [${labels.join(', ')}]` : ''}`, line.net);
+    });
+    if (statement.sibling_discount_amount > 0) {
+      rows.push(row(`Sibling discount ${statement.sibling_discount_percent}%`, -statement.sibling_discount_amount));
+    }
+    if (statement.group_fee > 0) {
+      rows.push(row(`BTC & Me fee (${statement.group_students.join(', ')})`, statement.group_fee));
+    }
+    return rows;
+  }
+
   exportPDF(): void {
     const monthStr = this.monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const doc = new jsPDF();
@@ -465,14 +394,17 @@ export class Billing implements OnInit {
     autoTable(doc, {
       startY: 28,
       head: [['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Discount', 'Total']],
-      body: this.dataSource.data.map(e => [
-        e.name ?? '',
-        e.packages ?? '',
-        e.cycle === BillingCycle.SEMI_MONTHLY ? 'Semi-monthly' : 'Monthly',
-        this.pdfDue(e, 'first'),
-        this.pdfDue(e, 'fifteenth'),
-        e.discount ? `-${this.formatMoney(e.discount)} (${e.discount_percent}%)` : '—',
-        this.formatMoney(e.total),
+      body: this.dataSource.data.flatMap((e): RowInput[] => [
+        [
+          e.name ?? '',
+          e.packages ?? '',
+          e.cycle === BillingCycle.SEMI_MONTHLY ? 'Semi-monthly' : 'Monthly',
+          this.pdfDue(e, 'first'),
+          this.pdfDue(e, 'fifteenth'),
+          this.pdfDiscount(e),
+          this.formatMoney(e.total),
+        ],
+        ...this.pdfDetailRows(e),
       ]),
       foot: [[
         'Grand Total', '', '', this.formatMoney(this.grandDueFirst),

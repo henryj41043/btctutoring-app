@@ -1,3 +1,5 @@
+import {Statement} from './statement.model';
+
 /** A derived row on the Billing page: one contact's charges for the selected month. */
 export class BillingEntry {
   contact_id?: string;
@@ -15,10 +17,14 @@ export class BillingEntry {
   override_first?: number | null;
   override_fifteenth?: number | null;
   total?: number;
-  /** Dollar amount taken off by the family's sibling discount (0 when none applies). */
+  /** Dollars taken off by the student and sibling discounts together (0 when none). */
   discount?: number;
-  /** The sibling-discount percent actually applied (0 when none applies). */
+  /** The sibling-discount percent, shown only when it is the sole discount (else 0). */
   discount_percent?: number;
+  /** Labels for what makes this month unusual, e.g. 'Prorated start'. */
+  labels?: string[];
+  /** The service-calculated statement behind the row (the expandable breakdown). */
+  statement?: Statement;
   paid_first?: boolean;
   paid_fifteenth?: boolean;
   /** True when a student can't be priced confidently (unconfigured/missing schedule). */

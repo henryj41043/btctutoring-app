@@ -77,4 +77,24 @@ describe('BillingService', () => {
     expect(req.request.body).toEqual(record);
     req.flush({ id: 'c-1#2026-07-01' });
   });
+
+  it('getStatements GETs the month of statements', () => {
+    let result: unknown;
+    service.getStatements('2026-09').subscribe(r => (result = r));
+    const req = httpMock.expectOne(`${base}/billing/statements?month=2026-09`);
+    expect(req.request.method).toBe('GET');
+    req.flush([{ contact_id: 'c-1' }]);
+    expect(result).toEqual([{ contact_id: 'c-1' }]);
+  });
+
+  it('previewStatement POSTs the month and the unsaved student', () => {
+    let result: unknown;
+    const student = { id: 's-1', contact_id: 'c-1' } as never;
+    service.previewStatement('2026-09', student).subscribe(r => (result = r));
+    const req = httpMock.expectOne(`${base}/billing/statements/preview`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ month: '2026-09', student });
+    req.flush({ statement: null });
+    expect(result).toEqual({ statement: null });
+  });
 });

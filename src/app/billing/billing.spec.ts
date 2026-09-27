@@ -7,20 +7,12 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Billing } from './billing';
 import { AuthService } from '../services/auth.service';
-import { ContactService } from '../services/contact.service';
-import { StudentService } from '../services/student.service';
 import { BillingService } from '../services/billing.service';
 import { NoteService } from '../services/note.service';
-import { Contact } from '../models/contact.model';
-import { Student } from '../models/student.model';
 import { BillingRecord } from '../models/billing-record.model';
 import { BillingEntry } from '../models/billing-entry.model';
-import { StudentStatus } from '../enums/student-status.enum';
 import { BillingCycle } from '../enums/billing-cycle.enum';
-import { Weekday } from '../enums/weekday.enum';
-import { studentMonthlyCharge } from '../utils/billing-amount';
-import { PackageService } from '../services/package.service';
-import { TEST_CATALOG, TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
+import { semiStatement, statement, statementDue, statementLine } from '../../testing/statement.fixture';
 
 jest.mock('jspdf', () => ({
   __esModule: true,
@@ -34,26 +26,15 @@ jest.mock('jspdf', () => ({
 }));
 jest.mock('jspdf-autotable', () => ({ __esModule: true, default: jest.fn() }));
 
-const contact = (over: Partial<Contact> = {}): Contact =>
-  ({ id: 'c-1', first_name: 'Casey', last_name: 'Lee', billing_cycle: BillingCycle.MONTHLY, ...over }) as Contact;
-
-const student = (over: Partial<Student> = {}): Student =>
-  ({
-    id: 's-1',
-    contact_id: 'c-1',
-    name: 'Pat',
-    status: StudentStatus.ACTIVE_STUDENT,
-    package: 'Succeed', // $362/mo
-    package_start_date: '2026-05-01T00:00:00', // before the billing month → full month
-    schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
-    ...over,
-  }) as Student;
+const click = (): Event => ({ stopPropagation: jest.fn() }) as unknown as Event;
 
 describe('Billing', () => {
   let isAdmin: boolean;
-  const contactService = { getContacts: jest.fn() };
-  const studentService = { getStudents: jest.fn() };
-  const billingService = { getBillingRecords: jest.fn(), getBillingRecordsByMonth: jest.fn(), upsertBillingRecord: jest.fn(), setAmountOverride: jest.fn() };
+  const billingService = {
+    getStatements: jest.fn(),
+    upsertBillingRecord: jest.fn(),
+    setAmountOverride: jest.fn(),
+  };
   let dialogResult: unknown;
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(dialogResult) })) };
   const noteService = { createNote: jest.fn() };
@@ -61,28 +42,30 @@ describe('Billing', () => {
     isAdmin: () => isAdmin,
     contact: () => ({ id: 'c-admin', first_name: 'Ann' }),
   };
-
-  const packageService = { getPackages: () => of(TEST_CATALOG_ROWS) };
   const router = { navigate: jest.fn() };
+
+  const providers = [
+    { provide: AuthService, useValue: authService },
+    { provide: BillingService, useValue: billingService },
+    { provide: NoteService, useValue: noteService },
+    { provide: Router, useValue: router },
+  ];
 
   const build = (): Billing => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [Billing],
-      providers: [
-        { provide: AuthService, useValue: authService },
-        { provide: ContactService, useValue: contactService },
-        { provide: StudentService, useValue: studentService },
-        { provide: BillingService, useValue: billingService },
-        { provide: NoteService, useValue: noteService },
-        { provide: PackageService, useValue: packageService },
-        { provide: Router, useValue: router },
-        { provide: MatDialog, useValue: dialog },
-      ],
+      providers: [...providers, { provide: MatDialog, useValue: dialog }],
     });
     const c = TestBed.createComponent(Billing).componentInstance;
     c.selectedDate = new Date(2026, 6, 10); // July 2026
     return c;
+  };
+
+  const loaded = (): { c: Billing; entry: BillingEntry } => {
+    const c = build();
+    c.ngOnInit();
+    return { c, entry: (c as any).dataSource.data[0] as BillingEntry };
   };
 
   beforeEach(() => {
@@ -90,30 +73,133 @@ describe('Billing', () => {
     isAdmin = true;
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
-    contactService.getContacts.mockReturnValue(of([contact()]));
-    studentService.getStudents.mockReturnValue(of([student()]));
-    billingService.getBillingRecordsByMonth.mockReturnValue(of([]));
+    billingService.getStatements.mockReturnValue(of([statement()]));
     billingService.setAmountOverride.mockReturnValue(of({ id: 'c-1#2026-07-01' }));
+    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
     noteService.createNote.mockReturnValue(of({ id: 'n-1' }));
     dialogResult = undefined;
   });
 
-  it('restores the saved month and ignores corrupt saved dates', () => {
-    sessionStorage.setItem('btc-billing-view',
-      JSON.stringify({ extra: { selectedDate: new Date(2026, 2, 10).toISOString() } }));
-    const c1 = build();
-    c1.ngOnInit();
-    expect((c1 as any).selectedDate.getMonth()).toBe(2); // March restored
+  describe('month selection', () => {
+    it('restores the saved month and ignores corrupt saved dates', () => {
+      sessionStorage.setItem('btc-billing-view',
+        JSON.stringify({ extra: { selectedDate: new Date(2026, 2, 10).toISOString() } }));
+      const c1 = build();
+      c1.ngOnInit();
+      expect((c1 as any).selectedDate.getMonth()).toBe(2); // March restored
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2026-03');
 
-    sessionStorage.setItem('btc-billing-view', JSON.stringify({ extra: { selectedDate: 'not-a-date' } }));
-    const c2 = build();
-    const before = (c2 as any).selectedDate.getMonth();
-    c2.ngOnInit();
-    expect((c2 as any).selectedDate.getMonth()).toBe(before); // untouched
+      sessionStorage.setItem('btc-billing-view', JSON.stringify({ extra: { selectedDate: 'not-a-date' } }));
+      const c2 = build();
+      c2.ngOnInit();
+      expect((c2 as any).selectedDate.getMonth()).toBe(6); // untouched
 
-    c2.onDateChange(new Date(2026, 4, 1));
-    expect(JSON.parse(sessionStorage.getItem('btc-billing-view')!).extra.selectedDate)
-      .toBe(new Date(2026, 4, 1).toISOString());
+      sessionStorage.setItem('btc-billing-view', JSON.stringify({ extra: { selectedDate: 5 } }));
+      const c3 = build();
+      c3.ngOnInit();
+      expect((c3 as any).selectedDate.getMonth()).toBe(6);
+    });
+
+    it('requests the selected month from the service', () => {
+      loaded();
+      expect(billingService.getStatements).toHaveBeenCalledWith('2026-07');
+      expect(billingService.getStatements).toHaveBeenCalledTimes(1);
+    });
+
+    it('pads single-digit months and keeps December in its own year', () => {
+      const c = build();
+      c.onDateChange(new Date(2026, 0, 20));
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2026-01');
+      c.onDateChange(new Date(2026, 11, 31));
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2026-12');
+    });
+
+    it('the day never matters: any date selects the 1st of its month', () => {
+      const c = build();
+      c.onDateChange(new Date(2026, 7, 23));
+      expect((c as any).selectedDate).toEqual(new Date(2026, 7, 1));
+      expect((c as any).monthStart).toEqual(new Date(2026, 7, 1));
+      expect(JSON.parse(sessionStorage.getItem('btc-billing-view')!).extra.selectedDate)
+        .toBe(new Date(2026, 7, 1).toISOString());
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2026-08');
+    });
+
+    it('ignores a null date', () => {
+      const { c } = loaded();
+      const before = (c as any).selectedDate;
+      c.onDateChange(null);
+      expect((c as any).selectedDate).toBe(before);
+      expect(billingService.getStatements).toHaveBeenCalledTimes(1);
+    });
+
+    it('choosing a month in the picker closes it and loads that month', () => {
+      const c = build();
+      const picker = { close: jest.fn() };
+      c.onMonthSelected(new Date(2026, 9, 1), picker);
+      expect(picker.close).toHaveBeenCalled();
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2026-10');
+    });
+
+    it('steps a month back and forward, across the year boundary', () => {
+      const { c } = loaded();
+      c.shiftMonth(-1);
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2026-06');
+      c.shiftMonth(1);
+      c.shiftMonth(1);
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2026-08');
+      c.onDateChange(new Date(2026, 11, 1));
+      c.shiftMonth(1);
+      expect(billingService.getStatements).toHaveBeenLastCalledWith('2027-01');
+    });
+  });
+
+  describe('loading', () => {
+    it('shows one row per statement', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement(),
+        semiStatement({ contact_id: 'c-2', contact_name: 'Sam Roe' }),
+      ]));
+      const { c, entry } = loaded();
+      expect((c as any).dataSource.data).toHaveLength(2);
+      expect(entry.name).toBe('Casey Lee');
+      expect(entry.packages).toBe('Pat: Succeed');
+      expect(entry.due_first).toBe(362);
+      expect(entry.total).toBe(362);
+      expect((c as any).loading).toBe(false);
+      expect((c as any).hasError).toBe(false);
+    });
+
+    it('shows nothing for non-admins and asks the service for nothing', () => {
+      isAdmin = false;
+      const { c } = loaded();
+      expect((c as any).dataSource.data).toEqual([]);
+      expect((c as any).loading).toBe(false);
+      expect(billingService.getStatements).not.toHaveBeenCalled();
+    });
+
+    it('shows an error loudly when the statements fail to load', () => {
+      billingService.getStatements.mockReturnValue(throwError(() => new Error('boom')));
+      const { c } = loaded();
+      expect((c as any).hasError).toBe(true);
+      expect((c as any).loading).toBe(false);
+      expect((c as any).dataSource.data).toEqual([]);
+    });
+
+    it('clears the error on the next successful load', () => {
+      billingService.getStatements.mockReturnValue(throwError(() => new Error('boom')));
+      const { c } = loaded();
+      billingService.getStatements.mockReturnValue(of([statement()]));
+      c.shiftMonth(1);
+      expect((c as any).hasError).toBe(false);
+      expect((c as any).dataSource.data).toHaveLength(1);
+    });
+
+    it('tolerates an empty response body', () => {
+      billingService.getStatements.mockReturnValue(of(null));
+      const { c } = loaded();
+      expect((c as any).dataSource.data).toEqual([]);
+      expect((c as any).hasError).toBe(false);
+    });
   });
 
   it('a row click navigates to the contact page; entries without an id are inert', () => {
@@ -125,354 +211,195 @@ describe('Billing', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  it('fetches only the selected month of billing records', () => {
-    const c = build(); // selectedDate = July 2026
-    c.ngOnInit();
-    expect(billingService.getBillingRecordsByMonth).toHaveBeenCalledWith('2026-07');
-  });
-
-  it('builds a monthly billing entry with the full package cost', () => {
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data).toHaveLength(1);
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.total).toBe(362);
-    expect(entry.due_first).toBe(362);
-    expect(entry.due_fifteenth).toBeNull();
-    expect(entry.cycle).toBe(BillingCycle.MONTHLY);
-  });
-
-  it('applies the sibling discount to a family with 3+ enrolled students', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
-    studentService.getStudents.mockReturnValue(
-      of([
-        student({ id: 's-1' }),
-        student({ id: 's-2', name: 'Sam' }),
-        student({ id: 's-3', name: 'Sky' }),
-      ]),
-    );
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    // 3 × $362 = $1086, less 10% = $977.40.
-    expect(entry.total).toBe(977.4);
-    expect(entry.due_first).toBe(977.4);
-    expect(entry.discount).toBe(108.6);
-    expect(entry.discount_percent).toBe(10);
-  });
-
-  it('does not discount a two-student family (below the 3+ threshold)', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
-    studentService.getStudents.mockReturnValue(
-      of([student({ id: 's-1' }), student({ id: 's-2', name: 'Sam' })]),
-    );
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.total).toBe(724);
-    expect(entry.discount).toBe(0);
-  });
-
-  it('does not apply the sibling discount to an only child', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.total).toBe(362);
-    expect(entry.discount).toBe(0);
-    expect(entry.discount_percent).toBe(0);
-  });
-
-  it('discounts both halves of a semi-monthly family', () => {
-    contactService.getContacts.mockReturnValue(
-      of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY, sibling_discount: 50 })]),
-    );
-    studentService.getStudents.mockReturnValue(
-      of([
-        student({ id: 's-1' }),
-        student({ id: 's-2', name: 'Sam' }),
-        student({ id: 's-3', name: 'Sky' }),
-      ]),
-    );
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    // 1086 → 543/543 halves → 50% off → 271.50/271.50 → total 543, discount 543.
-    expect(entry.due_first).toBe(271.5);
-    expect(entry.due_fifteenth).toBe(271.5);
-    expect(entry.total).toBe(543);
-    expect(entry.discount).toBe(543);
-  });
-
-  it('splits a semi-monthly contact across the 1st and 15th', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.due_first).toBe(181);
-    expect(entry.due_fifteenth).toBe(181);
-    expect(entry.due_first + entry.due_fifteenth).toBe(entry.total);
-  });
-
-  it('splits a semi-monthly prorated first month evenly across the 1st and 15th (start before the 15th)', () => {
-    // Default Monday schedule; July 2026 Mondays: 6, 13, 20, 27. Start Jul 10 →
-    // 3 remaining slots → 3 × $41.77 = $125.31, split evenly across both dates.
-    const s = student({ package_start_date: '2026-07-10T00:00:00' });
-    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-    studentService.getStudents.mockReturnValue(of([s]));
-    const c = build(); // viewing July 2026
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(studentMonthlyCharge(s, 2026, 6, TEST_CATALOG)).toBe(125.31);
-    expect(entry.due_first).toBe(62.66);
-    expect(entry.due_fifteenth).toBe(62.65);
-    expect(entry.total).toBe(125.31);
-  });
-
-  it('bills a semi-monthly prorated first month entirely on the 15th of the start month (start on/after the 15th)', () => {
-    // Start Jul 20 → 2 remaining Mondays → $83.54, all on July's 15th; 1st blank.
-    const s = student({ package_start_date: '2026-07-20T00:00:00' });
-    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-    studentService.getStudents.mockReturnValue(of([s]));
-    const july = build(); // viewing July 2026 — the START month shows the charge
-    july.ngOnInit();
-    const entry = (july as any).dataSource.data[0];
-    expect(entry.due_first).toBeNull(); // 1st left blank
-    expect(entry.due_fifteenth).toBe(83.54);
-    expect(entry.total).toBe(83.54);
-  });
-
-  it('shows a prorated monthly first month on the 1st of the start month', () => {
-    // Monthly cycle, start Jul 20 → bill date is July 1st with the prorated amount.
-    const s = student({ package_start_date: '2026-07-20T00:00:00' });
-    studentService.getStudents.mockReturnValue(of([s]));
-    const c = build(); // monthly contact fixture, viewing July 2026
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.due_first).toBe(83.54);
-    expect(entry.due_fifteenth).toBeNull();
-    expect(entry.total).toBe(83.54);
-  });
-
-  it('resumes the normal 50/50 split the month after a prorated first month', () => {
-    const s = student({ package_start_date: '2026-07-10T00:00:00' });
-    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-    studentService.getStudents.mockReturnValue(of([s]));
-    const c = build();
-    c.selectedDate = new Date(2026, 7, 1); // August
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.due_first).toBe(181);
-    expect(entry.due_fifteenth).toBe(181);
-  });
-
-  it('treats a legacy biweekly cycle as semi-monthly', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: 'biweekly' as any })]));
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data[0].cycle).toBe(BillingCycle.SEMI_MONTHLY);
-  });
-
-  it('reflects an existing paid record', () => {
-    billingService.getBillingRecordsByMonth.mockReturnValue(
-      of([{ contact_id: 'c-1', period_start: '2026-07-01', paid: true } as BillingRecord]),
-    );
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data[0].paid_first).toBe(true);
-  });
-
-  it('flags a contact whose student is missing a schedule', () => {
-    studentService.getStudents.mockReturnValue(of([student({ schedule: undefined })]));
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data[0].needs_attention).toBe(true);
-  });
-
-  it('excludes inactive students and contacts with no billable students', () => {
-    studentService.getStudents.mockReturnValue(of([student({ status: StudentStatus.PAST_STUDENT })]));
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data).toHaveLength(0);
-  });
-
-  it('shows nothing for non-admins', () => {
-    isAdmin = false;
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data).toHaveLength(0);
-  });
-
-  it('persists a paid toggle with the full record and updates the row', () => {
-    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'c-1#2026-07-01' }));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    c.togglePaid(entry, 'first', true);
-    const record = billingService.upsertBillingRecord.mock.calls.at(-1)![0];
-    expect(record.contact_id).toBe('c-1');
-    expect(record.period_start).toBe('2026-07-01');
-    expect(record.cycle).toBe(BillingCycle.MONTHLY);
-    expect(record.amount).toBe(362);
-    expect(record.paid).toBe(true);
-    expect(typeof record.paid_date).toBe('string');
-    expect(entry.paid_first).toBe(true);
-  });
-
-  it('files a payment note on the family contact when marked paid', () => {
-    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    c.togglePaid(entry, 'first', true);
-    const note = noteService.createNote.mock.calls.at(-1)![0];
-    expect(note.message).toBe('Payment received: $362.00 for Jul 1, 2026 (Pat: Succeed)');
-    expect(note.recipient_id).toBe('c-1');
-    expect(note.recipient).toBe('Casey Lee');
-    expect(note.author).toBe('Ann');
-    expect(note.author_id).toBe('c-admin');
-    expect(typeof note.date_time).toBe('string');
-  });
-
-  it('does not file a note when un-marking paid', () => {
-    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
-    const c = build();
-    c.ngOnInit();
-    c.togglePaid((c as any).dataSource.data[0], 'first', false);
-    expect(noteService.createNote).not.toHaveBeenCalled();
-  });
-
-  it('a note failure never blocks the paid toggle', () => {
-    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
-    noteService.createNote.mockReturnValue(throwError(() => new Error('note boom')));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    c.togglePaid(entry, 'first', true);
-    expect(entry.paid_first).toBe(true);
-  });
-
-  it('derives an entry with exact name, packages, amount and paid status', () => {
-    billingService.getBillingRecordsByMonth.mockReturnValue(
-      of([{ contact_id: 'c-1', period_start: '2026-07-01', paid: true } as BillingRecord]),
-    );
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.name).toBe('Casey Lee');
-    expect(entry.packages).toBe('Pat: Succeed');
-    expect(entry.total).toBe(362);
-    expect(entry.due_first).toBe(362);
-    expect(entry.paid_first).toBe(true);
-  });
-
-  it('survives load errors from any source by showing an empty table', () => {
-    contactService.getContacts.mockReturnValue(throwError(() => new Error('x')));
-    studentService.getStudents.mockReturnValue(throwError(() => new Error('x')));
-    billingService.getBillingRecordsByMonth.mockReturnValue(throwError(() => new Error('x')));
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data).toHaveLength(0);
-  });
-
-  describe('amount overrides', () => {
-    const record = (over: Partial<BillingRecord>): BillingRecord =>
-      ({ contact_id: 'c-1', period_start: '2026-07-01', cycle: 'monthly', amount: 362, paid: false, ...over }) as BillingRecord;
-
-    it('replaces the derived due with a stored override and keeps the derived amount alongside', () => {
-      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 150 })]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(150);
-      expect(entry.derived_first).toBe(362);
-      expect(entry.override_first).toBe(150);
-      expect(entry.total).toBe(150);
-      expect(c.isOverridden(entry, 'first')).toBe(true);
-      expect(c.isOverridden(entry, 'fifteenth')).toBe(false);
-      expect(c.overrideTooltip(entry, 'first')).toBe('Overridden — calculated amount $362.00');
-      expect((c as any).grandTotal).toBe(150);
+  describe('breakdown', () => {
+    it('opens and closes a row without navigating', () => {
+      const { c, entry } = loaded();
+      expect((c as any).isExpanded(entry)).toBe(false);
+      const event = click();
+      c.toggleExpanded(entry, event);
+      expect(event.stopPropagation).toHaveBeenCalled();
+      expect((c as any).isExpanded(entry)).toBe(true);
+      c.toggleExpanded(entry, click());
+      expect((c as any).isExpanded(entry)).toBe(false);
+      expect(router.navigate).not.toHaveBeenCalled();
     });
 
-    it('treats an override of 0 as "no charge"', () => {
-      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 0 })]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(0);
-      expect(entry.total).toBe(0);
-      expect(c.isOverridden(entry, 'first')).toBe(true);
-    });
-
-    it('overrides each semi-monthly half independently', () => {
-      contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-      billingService.getBillingRecordsByMonth.mockReturnValue(of([
-        record({ period_start: '2026-07-15', cycle: 'semi_monthly', amount_override: 100 }),
+    it('keeps rows independent', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement(), statement({ contact_id: 'c-2', contact_name: 'Sam Roe' }),
       ]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(181);
-      expect(entry.override_first).toBeNull();
-      expect(entry.due_fifteenth).toBe(100);
-      expect(entry.derived_fifteenth).toBe(181);
-      expect(entry.total).toBe(281);
+      const { c } = loaded();
+      const [a, b] = (c as any).dataSource.data as BillingEntry[];
+      c.toggleExpanded(a, click());
+      expect((c as any).isExpanded(a)).toBe(true);
+      expect((c as any).isExpanded(b)).toBe(false);
     });
 
-    it('ignores a monthly record on the 15th and non-numeric override values', () => {
-      billingService.getBillingRecordsByMonth.mockReturnValue(of([
-        record({ amount_override: null }),
-        record({ period_start: '2026-07-15', amount_override: 50 }),
+    it('an entry without a contact id never expands', () => {
+      const { c } = loaded();
+      const event = click();
+      c.toggleExpanded({} as BillingEntry, event);
+      expect(event.stopPropagation).toHaveBeenCalled();
+      expect((c as any).isExpanded({} as BillingEntry)).toBe(false);
+    });
+
+    it('collapses every row when the month changes', () => {
+      const { c, entry } = loaded();
+      c.toggleExpanded(entry, click());
+      c.shiftMonth(1);
+      expect((c as any).isExpanded((c as any).dataSource.data[0])).toBe(false);
+    });
+
+    it('describes lines for the template', () => {
+      const c = build();
+      const line = statementLine({ from: '2026-07-14', sessions_billed: 3, flags: ['prorated_start'] });
+      expect((c as any).linePeriod(line)).toBe('From Jul 14');
+      expect((c as any).lineSessions(line)).toBe('3 of 4');
+      expect((c as any).lineLabels(line)).toEqual(['Prorated start']);
+    });
+  });
+
+  describe('paid toggle', () => {
+    it('persists the full record and updates the row', () => {
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'first', true);
+      const record = billingService.upsertBillingRecord.mock.calls.at(-1)![0];
+      expect(record.contact_id).toBe('c-1');
+      expect(record.period_start).toBe('2026-07-01');
+      expect(record.cycle).toBe(BillingCycle.MONTHLY);
+      expect(record.amount).toBe(362);
+      expect(record.paid).toBe(true);
+      expect(typeof record.paid_date).toBe('string');
+      expect('amount_override' in record).toBe(false);
+      expect(entry.paid_first).toBe(true);
+    });
+
+    it('files a payment note on the family contact when marked paid', () => {
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'first', true);
+      const note = noteService.createNote.mock.calls.at(-1)![0];
+      expect(note.message).toBe('Payment received: $362.00 for Jul 1, 2026 (Pat: Succeed)');
+      expect(note.recipient_id).toBe('c-1');
+      expect(note.recipient).toBe('Casey Lee');
+      expect(note.author).toBe('Ann');
+      expect(note.author_id).toBe('c-admin');
+      expect(note.type).toBe('');
+      expect(typeof note.date_time).toBe('string');
+    });
+
+    it('omits the package list from the note when there is none', () => {
+      const { c, entry } = loaded();
+      entry.packages = '';
+      c.togglePaid(entry, 'first', true);
+      expect(noteService.createNote.mock.calls.at(-1)![0].message)
+        .toBe('Payment received: $362.00 for Jul 1, 2026');
+    });
+
+    it('does not file a note when un-marking paid', () => {
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'first', false);
+      expect(noteService.createNote).not.toHaveBeenCalled();
+      expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ paid: false, paid_date: undefined }),
+      );
+    });
+
+    it('a note failure never blocks the paid toggle', () => {
+      noteService.createNote.mockReturnValue(throwError(() => new Error('note boom')));
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'first', true);
+      expect(entry.paid_first).toBe(true);
+    });
+
+    it('carries the loaded override so the full-record upsert never drops it', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement({ dues: [statementDue({ override: 150, amount: 150 })] }),
       ]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.override_first).toBeNull();
-      expect(entry.due_first).toBe(362);
-      expect(entry.due_fifteenth).toBeNull();
-      expect(entry.total).toBe(362);
-    });
-
-    it('a paid toggle carries the loaded override so the full-record upsert never drops it', () => {
-      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 150 })]));
-      billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      const { c, entry } = loaded();
       c.togglePaid(entry, 'first', true);
       const saved = billingService.upsertBillingRecord.mock.calls.at(-1)![0] as BillingRecord;
       expect(saved.amount).toBe(150);
       expect(saved.amount_override).toBe(150);
     });
 
-    it('a paid toggle without an override sends no amount_override key', () => {
-      billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
-      const c = build();
-      c.ngOnInit();
-      c.togglePaid((c as any).dataSource.data[0], 'first', true);
+    it('carries a $0 override too', () => {
+      billingService.getStatements.mockReturnValue(of([
+        semiStatement({ dues: [
+          statementDue({ derived: 181, amount: 181 }),
+          statementDue({ day: 15, period_start: '2026-07-15', derived: 181, override: 0, amount: 0 }),
+        ] }),
+      ]));
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'fifteenth', true);
       const saved = billingService.upsertBillingRecord.mock.calls.at(-1)![0] as BillingRecord;
-      expect('amount_override' in saved).toBe(false);
+      expect(saved.amount).toBe(0);
+      expect(saved.amount_override).toBe(0);
     });
 
-    it('opens the override dialog with the derived/current amounts and never navigates', () => {
-      billingService.getBillingRecordsByMonth.mockReturnValue(of([record({ amount_override: 150 })]));
-      const c = build();
-      c.ngOnInit();
-      const event = { stopPropagation: jest.fn() } as unknown as Event;
-      c.openOverrideDialog((c as any).dataSource.data[0], 'first', event);
+    it('toggles the 15th of a semi-monthly family', () => {
+      billingService.getStatements.mockReturnValue(of([semiStatement()]));
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'fifteenth', true);
+      expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ period_start: '2026-07-15', cycle: 'semi_monthly', amount: 181, paid: true }),
+      );
+      expect(entry.paid_fifteenth).toBe(true);
+      expect(entry.paid_first).toBe(false);
+      expect(noteService.createNote.mock.calls.at(-1)![0].message)
+        .toBe('Payment received: $181.00 for Jul 15, 2026 (Pat: Succeed)');
+    });
+
+    it('toggles the 15th of a monthly entry using a zero amount', () => {
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'fifteenth', true);
+      expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ period_start: '2026-07-15', amount: 0 }),
+      );
+    });
+
+    it('keeps the row state when persisting fails', () => {
+      billingService.upsertBillingRecord.mockReturnValue(throwError(() => new Error('x')));
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'first', true);
+      expect(entry.paid_first).toBe(false);
+      expect(noteService.createNote).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('amount overrides', () => {
+    it('knows which halves are overridden', () => {
+      billingService.getStatements.mockReturnValue(of([
+        semiStatement({ dues: [
+          statementDue({ derived: 181, override: 0, amount: 0 }),
+          statementDue({ day: 15, period_start: '2026-07-15', derived: 181, amount: 181 }),
+        ] }),
+      ]));
+      const { c, entry } = loaded();
+      expect((c as any).isOverridden(entry, 'first')).toBe(true);
+      expect((c as any).isOverridden(entry, 'fifteenth')).toBe(false);
+      expect(c.overrideTooltip(entry, 'first')).toBe('Overridden — calculated amount $181.00');
+    });
+
+    it('opens the dialog with the derived/current amounts and never navigates', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement({ dues: [statementDue({ override: 150, amount: 150 })] }),
+      ]));
+      const { c, entry } = loaded();
+      const event = click();
+      c.openOverrideDialog(entry, 'first', event);
       expect(event.stopPropagation).toHaveBeenCalled();
-      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), {
         data: { contactName: 'Casey Lee', periodLabel: 'Due 1st — July 2026', derived: 362, current: 150 },
-      }));
+        width: '420px',
+      });
       expect(router.navigate).not.toHaveBeenCalled();
     });
 
     it('persists a dialog result and patches the row (custom amount, then clear)', () => {
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
+      const { c, entry } = loaded();
+      const rows = (c as any).dataSource.data;
       dialogResult = { amount_override: 200 };
-      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      c.openOverrideDialog(entry, 'first', click());
       expect(billingService.setAmountOverride).toHaveBeenCalledWith({
         contact_id: 'c-1', period_start: '2026-07-01', cycle: BillingCycle.MONTHLY, amount_override: 200,
       });
@@ -480,9 +407,12 @@ describe('Billing', () => {
       expect(entry.override_first).toBe(200);
       expect(entry.total).toBe(200);
       expect((c as any).grandTotal).toBe(200);
+      // A fresh array so the OnPush table re-renders its footer.
+      expect((c as any).dataSource.data).not.toBe(rows);
+      expect((c as any).dataSource.data).toEqual(rows);
 
       dialogResult = { amount_override: null };
-      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      c.openOverrideDialog(entry, 'first', click());
       expect(billingService.setAmountOverride).toHaveBeenLastCalledWith(expect.objectContaining({ amount_override: null }));
       expect(entry.due_first).toBe(362);
       expect(entry.override_first).toBeNull();
@@ -490,28 +420,21 @@ describe('Billing', () => {
     });
 
     it('a cancelled dialog or a failed save changes nothing', () => {
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      dialogResult = undefined;
-      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      const { c, entry } = loaded();
+      c.openOverrideDialog(entry, 'first', click());
       expect(billingService.setAmountOverride).not.toHaveBeenCalled();
       dialogResult = { amount_override: 0 };
       billingService.setAmountOverride.mockReturnValue(throwError(() => new Error('x')));
-      c.openOverrideDialog(entry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      c.openOverrideDialog(entry, 'first', click());
       expect(entry.due_first).toBe(362);
       expect(entry.override_first).toBeNull();
     });
 
-    it('handles the 15th half: dialog data, persistence, patching, and clearing back to a blank derived half', () => {
-      contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(c.overrideTooltip(entry, 'fifteenth')).toBe('Overridden — calculated amount $181.00');
-
+    it('handles the 15th half and clearing back to a blank derived half', () => {
+      billingService.getStatements.mockReturnValue(of([semiStatement()]));
+      const { c, entry } = loaded();
       dialogResult = { amount_override: 0 };
-      c.openOverrideDialog(entry, 'fifteenth', { stopPropagation: jest.fn() } as unknown as Event);
+      c.openOverrideDialog(entry, 'fifteenth', click());
       expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
         data: { contactName: 'Casey Lee', periodLabel: 'Due 15th — July 2026', derived: 181, current: null },
       }));
@@ -520,26 +443,26 @@ describe('Billing', () => {
       });
       expect(entry.due_fifteenth).toBe(0);
       expect(entry.override_fifteenth).toBe(0);
+      expect(entry.due_first).toBe(181);
       expect(entry.total).toBe(181);
 
-      // Clearing when the derived half is blank leaves the cell blank.
       entry.derived_fifteenth = null;
       dialogResult = { amount_override: null };
-      c.openOverrideDialog(entry, 'fifteenth', { stopPropagation: jest.fn() } as unknown as Event);
+      c.openOverrideDialog(entry, 'fifteenth', click());
       expect(entry.due_fifteenth).toBeNull();
       expect(entry.total).toBe(181);
     });
 
-    it('tolerates sparse entries: no contact id skips the dialog; blank name, blank derived, missing cycle default', () => {
-      const c = build();
-      c.ngOnInit();
-      c.openOverrideDialog({ name: 'X' } as BillingEntry, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+    it('tolerates sparse entries', () => {
+      const { c } = loaded();
+      c.openOverrideDialog({ name: 'X' } as BillingEntry, 'first', click());
       expect(dialog.open).not.toHaveBeenCalled();
 
       const sparse = { contact_id: 'c-9', derived_first: null, override_first: null } as BillingEntry;
       expect(c.overrideTooltip(sparse, 'first')).toBe('Overridden — calculated amount —');
+      expect(c.overrideTooltip({} as BillingEntry, 'fifteenth')).toBe('Overridden — calculated amount —');
       dialogResult = { amount_override: 25 };
-      c.openOverrideDialog(sparse, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      c.openOverrideDialog(sparse, 'first', click());
       expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
         data: expect.objectContaining({ contactName: '', derived: null, current: null }),
       }));
@@ -548,37 +471,10 @@ describe('Billing', () => {
       }));
       expect(sparse.due_first).toBe(25);
       expect(sparse.total).toBe(25);
-      // Clearing with no derived amount blanks the cell.
       dialogResult = { amount_override: null };
-      c.openOverrideDialog(sparse, 'first', { stopPropagation: jest.fn() } as unknown as Event);
+      c.openOverrideDialog(sparse, 'first', click());
       expect(sparse.due_first).toBeNull();
       expect(sparse.total).toBe(0);
-    });
-
-    it('exports overridden dues with a marker, "No charge" for zero, and a footnote', () => {
-      contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-      billingService.getBillingRecordsByMonth.mockReturnValue(of([
-        record({ cycle: 'semi_monthly', amount_override: 150 }),
-        record({ period_start: '2026-07-15', cycle: 'semi_monthly', amount_override: 0 }),
-      ]));
-      const c = build();
-      c.ngOnInit();
-      c.exportPDF();
-      const options = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
-      expect(options.body[0][3]).toBe('$150.00*');
-      expect(options.body[0][4]).toBe('No charge');
-      const doc = (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
-      expect(doc.text).toHaveBeenCalledWith('* manually overridden amount', 120, 23);
-    });
-
-    it('exports plain dues without the footnote when nothing is overridden', () => {
-      const c = build();
-      c.ngOnInit();
-      c.exportPDF();
-      const options = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
-      expect(options.body[0][3]).toBe('$362.00');
-      const doc = (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
-      expect(doc.text).not.toHaveBeenCalledWith('* manually overridden amount', 120, 23);
     });
   });
 
@@ -586,58 +482,6 @@ describe('Billing', () => {
     const c = build();
     expect((c as any).isSemiMonthly({ cycle: BillingCycle.SEMI_MONTHLY })).toBe(true);
     expect((c as any).isSemiMonthly({ cycle: BillingCycle.MONTHLY })).toBe(false);
-  });
-
-  it('treats an unknown/undefined billing cycle as monthly', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: undefined })]));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    expect(entry.cycle).toBe(BillingCycle.MONTHLY);
-    expect(entry.due_fifteenth).toBeNull();
-  });
-
-  it('toggles the 15th payment for a semi-monthly contact and clears paid_date when unchecked', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    c.togglePaid(entry, 'fifteenth', false);
-    expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ period_start: '2026-07-15', paid: false, paid_date: undefined }),
-    );
-    expect(entry.paid_fifteenth).toBe(false);
-  });
-
-  it('toggles the 15th of a monthly entry using a zero amount', () => {
-    billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0]; // monthly → due_fifteenth null
-    c.togglePaid(entry, 'fifteenth', true);
-    expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ period_start: '2026-07-15', amount: 0 }),
-    );
-  });
-
-  it('keeps the row state when persisting a paid toggle fails', () => {
-    billingService.upsertBillingRecord.mockReturnValue(throwError(() => new Error('x')));
-    const c = build();
-    c.ngOnInit();
-    const entry = (c as any).dataSource.data[0];
-    c.togglePaid(entry, 'first', true);
-    expect(entry.paid_first).toBe(false);
-  });
-
-  it('onDateChange reloads for a new month and ignores null', () => {
-    const c = build();
-    c.ngOnInit();
-    c.onDateChange(new Date(2026, 7, 5));
-    expect((c as any).monthStart.getMonth()).toBe(7);
-    const before = (c as any).selectedDate;
-    c.onDateChange(null);
-    expect((c as any).selectedDate).toBe(before);
   });
 
   it('wires the sort and paginator setters and ignores falsy values', () => {
@@ -648,75 +492,169 @@ describe('Billing', () => {
     (c as any).matPaginator = paginator;
     expect((c as any).dataSource.sort).toBe(sort);
     expect((c as any).dataSource.paginator).toBe(paginator);
-    // Falsy values are ignored (the @if guard in each setter).
     (c as any).matSort = undefined;
     (c as any).matPaginator = undefined;
     expect((c as any).dataSource.sort).toBe(sort);
+    expect((c as any).dataSource.paginator).toBe(paginator);
   });
 
-  it('skips orphan students and contacts billed at zero', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ id: 'c-2', first_name: 'Sam' })]));
-    studentService.getStudents.mockReturnValue(of([
-      student({ id: 's-orphan', contact_id: 'nope' }), // no matching contact
-      student({ id: 's-future', contact_id: 'c-2', package_start_date: '2026-09-01T00:00:00' }), // not started → $0
-    ]));
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data).toHaveLength(0);
-  });
+  describe('PDF export', () => {
+    const lastTable = () => (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
+    const lastDoc = () => (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
 
-  it('renders a contact with missing name parts as a trimmed name', () => {
-    contactService.getContacts.mockReturnValue(of([contact({ first_name: undefined, last_name: undefined })]));
-    const c = build();
-    c.ngOnInit();
-    expect((c as any).dataSource.data[0].name).toBe('');
-  });
+    it('covers monthly and semi-monthly rows', () => {
+      const { c } = loaded();
+      (c as any).dataSource.data = [
+        {
+          name: 'Casey Lee', packages: 'Pat: Succeed', cycle: BillingCycle.MONTHLY,
+          due_first: 362, due_fifteenth: null, total: 362,
+        } as BillingEntry,
+        {
+          name: 'Sam Roe', packages: 'Kai: Thrive; Rio: Thrive', cycle: BillingCycle.SEMI_MONTHLY,
+          due_first: 163, due_fifteenth: 163, total: 326, discount: 36, discount_percent: 10,
+        } as BillingEntry,
+        { name: 'Both', total: 10, discount: 5, discount_percent: 0 } as BillingEntry,
+        {} as BillingEntry,
+      ];
+      c.exportPDF();
 
-  it('exports a PDF covering monthly and semi-monthly rows', () => {
-    const c = build();
-    c.ngOnInit();
-    (c as any).dataSource.data = [
-      {
-        name: 'Casey Lee', packages: 'Pat: Succeed', cycle: BillingCycle.MONTHLY,
-        due_first: 362, due_fifteenth: null, total: 362,
-      } as BillingEntry,
-      {
-        name: 'Sam Roe', packages: 'Kai: Thrive; Rio: Thrive', cycle: BillingCycle.SEMI_MONTHLY,
-        due_first: 163, due_fifteenth: 163, total: 326, discount: 36, discount_percent: 10,
-      } as BillingEntry,
-      // Undefined amounts: due columns render blank ('—'), total uses the formatMoney `?? 0` fallback.
-      {} as BillingEntry,
-    ];
-    c.exportPDF();
+      const doc = lastDoc();
+      expect(doc.setFontSize).toHaveBeenNthCalledWith(1, 16);
+      expect(doc.setFontSize).toHaveBeenNthCalledWith(2, 10);
+      expect(doc.setFont).toHaveBeenNthCalledWith(1, 'helvetica', 'bold');
+      expect(doc.setFont).toHaveBeenNthCalledWith(2, 'helvetica', 'normal');
+      expect(doc.setTextColor).toHaveBeenNthCalledWith(1, 100);
+      expect(doc.setTextColor).toHaveBeenNthCalledWith(2, 0);
+      expect(doc.text).toHaveBeenCalledWith('Beyond the Chalkboard Tutoring', 14, 16);
+      expect(doc.text).toHaveBeenCalledWith('Billing: July 2026', 14, 23);
+      expect(doc.save).toHaveBeenCalledWith('billing-July-2026.pdf');
 
-    const doc = (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
-    expect(doc.text).toHaveBeenCalledWith('Beyond the Chalkboard Tutoring', 14, 16);
-    expect(doc.text).toHaveBeenCalledWith('Billing: July 2026', 14, 23);
-    expect(doc.save).toHaveBeenCalledWith('billing-July-2026.pdf');
+      const config = lastTable();
+      expect(config.startY).toBe(28);
+      expect(config.styles).toEqual({ fontSize: 9 });
+      expect(config.headStyles).toEqual({ fillColor: [17, 138, 178] });
+      expect(config.head).toEqual([['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Discount', 'Total']]);
+      expect(config.body).toEqual([
+        ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '—', '$362.00'],
+        ['Sam Roe', 'Kai: Thrive; Rio: Thrive', 'Semi-monthly', '$163.00', '$163.00', '-$36.00 (10%)', '$326.00'],
+        ['Both', '', 'Monthly', '—', '—', '-$5.00', '$10.00'],
+        ['', '', 'Monthly', '—', '—', '—', '$0.00'],
+      ]);
+      expect(config.foot).toEqual([
+        ['Grand Total', '', '', '$525.00', '$163.00', '', '$698.00'],
+      ]);
+      expect(config.showFoot).toBe('lastPage');
+      expect(config.footStyles).toEqual({ fillColor: [17, 138, 178] });
+    });
 
-    const config = (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
-    expect(config.head).toEqual([['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Discount', 'Total']]);
-    expect(config.body).toEqual([
-      ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '—', '$362.00'],
-      ['Sam Roe', 'Kai: Thrive; Rio: Thrive', 'Semi-monthly', '$163.00', '$163.00', '-$36.00 (10%)', '$326.00'],
-      ['', '', 'Monthly', '—', '—', '—', '$0.00'],
-    ]);
-    // Grand total in the last cell of a 7-cell foot, rendered on the last page only.
-    expect(config.foot).toEqual([
-      ['Grand Total', '', '', '$525.00', '$163.00', '', '$688.00'],
-    ]);
-    expect(config.showFoot).toBe('lastPage');
-    expect(config.footStyles).toEqual({ fillColor: [17, 138, 178] });
+    it('an ordinary full month has no breakdown rows', () => {
+      const { c } = loaded();
+      c.exportPDF();
+      expect(lastTable().body).toEqual([
+        ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '—', '$362.00'],
+      ]);
+      expect(lastDoc().text).not.toHaveBeenCalledWith('* manually overridden amount', 120, 23);
+    });
+
+    it('an unusual month lists its lines, discount and group fee', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement({
+          lines: [
+            statementLine({
+              from: '2026-07-14', sessions_billed: 3, amount: 250.62, net: 225.56,
+              discount_percent: 10, discount_amount: 25.06, flags: ['prorated_start', 'discount'],
+            }),
+            statementLine({ student_name: 'Sam', package: 'Start' }),
+          ],
+          flags: ['prorated_start', 'discount'],
+          sibling_discount_percent: 5,
+          sibling_discount_amount: 29.38,
+          group_fee: 75,
+          group_students: ['Sam'],
+          dues: [statementDue({ derived: 633.18, amount: 633.18 })],
+        }),
+      ]));
+      const { c } = loaded();
+      c.exportPDF();
+      const styles = { fontSize: 8, textColor: 90, fontStyle: 'italic' };
+      expect(lastTable().body).toEqual([
+        ['Casey Lee', 'Pat: Succeed; Sam: Start; Sam: BTC & Me', 'Monthly', '$633.18', '—', '-$54.44', '$633.18'],
+        [
+          { content: '    Pat: Succeed, from Jul 14, 3 of 4 sessions at $83.54, less 10% ($25.06) [Prorated start, Discount]', colSpan: 6, styles },
+          { content: '$225.56', styles },
+        ],
+        [
+          { content: '    Sam: Start, full month', colSpan: 6, styles },
+          { content: '$362.00', styles },
+        ],
+        [
+          { content: '    Sibling discount 5%', colSpan: 6, styles },
+          { content: '-$29.38', styles },
+        ],
+        [
+          { content: '    BTC & Me fee (Sam)', colSpan: 6, styles },
+          { content: '$75.00', styles },
+        ],
+      ]);
+    });
+
+    it('a flagged month without extras lists only its lines', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement({
+          lines: [statementLine({ to: '2026-07-18', sessions_billed: 2, amount: 167.08, net: 167.08, flags: ['prorated_end'] })],
+          flags: ['prorated_end'],
+        }),
+      ]));
+      const { c } = loaded();
+      c.exportPDF();
+      expect(lastTable().body).toHaveLength(2);
+      expect(lastTable().body[1][0].content)
+        .toBe('    Pat: Succeed, through Jul 18, 2 of 4 sessions at $83.54 [Prorated end]');
+    });
+
+    it('a labelled row without a statement has no breakdown rows', () => {
+      const { c } = loaded();
+      (c as any).dataSource.data = [{ name: 'X', labels: ['Discount'], total: 1 } as BillingEntry];
+      c.exportPDF();
+      expect(lastTable().body).toHaveLength(1);
+    });
+
+    it('marks overridden dues, "No charge" for zero, and adds a footnote', () => {
+      billingService.getStatements.mockReturnValue(of([
+        semiStatement({ dues: [
+          statementDue({ derived: 181, override: 150, amount: 150 }),
+          statementDue({ day: 15, period_start: '2026-07-15', derived: 181, override: 0, amount: 0 }),
+        ] }),
+      ]));
+      const { c } = loaded();
+      c.exportPDF();
+      expect(lastTable().body[0][3]).toBe('$150.00*');
+      expect(lastTable().body[0][4]).toBe('No charge');
+      expect(lastDoc().text).toHaveBeenCalledWith('* manually overridden amount', 120, 23);
+    });
+
+    it('adds the footnote when only the 15th is overridden', () => {
+      billingService.getStatements.mockReturnValue(of([
+        semiStatement({ dues: [
+          statementDue({ derived: 181, amount: 181 }),
+          statementDue({ day: 15, period_start: '2026-07-15', derived: 181, override: 5, amount: 5 }),
+        ] }),
+      ]));
+      const { c } = loaded();
+      c.exportPDF();
+      expect(lastTable().body[0][3]).toBe('$181.00');
+      expect(lastTable().body[0][4]).toBe('$5.00*');
+      expect(lastDoc().text).toHaveBeenCalledWith('* manually overridden amount', 120, 23);
+    });
   });
 
   describe('grand total', () => {
     it('sums the Total column across all rows, re-rounded', () => {
       const c = build();
-      // 0.1 + 0.2 is 0.30000000000000004 unrounded — pins the round2 wrapper.
       (c as any).dataSource.data = [
         { total: 0.1 } as BillingEntry,
         { total: 0.2 } as BillingEntry,
-        {} as BillingEntry, // `?? 0` fallback
+        {} as BillingEntry,
       ];
       expect((c as any).grandTotal).toBe(0.3);
     });
@@ -724,6 +662,8 @@ describe('Billing', () => {
     it('is zero with no rows', () => {
       const c = build();
       expect((c as any).grandTotal).toBe(0);
+      expect((c as any).grandDueFirst).toBe(0);
+      expect((c as any).grandDueFifteenth).toBe(0);
     });
 
     it('sums the due columns null-safely, re-rounded', () => {
@@ -733,135 +673,99 @@ describe('Billing', () => {
         { due_first: 0.2, due_fifteenth: null } as BillingEntry,
         {} as BillingEntry,
       ];
-      // 0.1 + 0.2 is 0.30000000000000004 unrounded — pins the round2 wrapper.
       expect((c as any).grandDueFirst).toBe(0.3);
       expect((c as any).grandDueFifteenth).toBe(0.2);
     });
+  });
 
-    // Rendered against the template so a missing matFooterCellDef (a runtime
-    // error mat-table throws) cannot slip through — no e2e visits this page.
-    it('renders a footer row with the grand total', () => {
+  // Rendered against the template so a template error (a missing cell def, a
+  // bad binding in the breakdown row) cannot slip through.
+  describe('template', () => {
+    const render = () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
         imports: [Billing],
-        providers: [
-          provideNoopAnimations(),
-          { provide: AuthService, useValue: authService },
-          { provide: ContactService, useValue: contactService },
-          { provide: StudentService, useValue: studentService },
-          { provide: BillingService, useValue: billingService },
-          { provide: NoteService, useValue: noteService },
-          { provide: PackageService, useValue: packageService },
-          { provide: Router, useValue: router },
-        ],
+        providers: [provideNoopAnimations(), ...providers],
       });
       const fixture = TestBed.createComponent(Billing);
       fixture.componentInstance.selectedDate = new Date(2026, 6, 10);
       fixture.detectChanges();
-      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-      expect(text).toContain('Grand Total');
-      expect(text).toContain('$362.00');
-    });
-  });
+      return fixture;
+    };
+    const text = (fixture: ReturnType<typeof render>): string =>
+      (fixture.nativeElement as HTMLElement).textContent ?? '';
 
-  describe('BTC & Me fee', () => {
-    it('adds the flat $75 per enrolled student to a monthly family', () => {
-      studentService.getStudents.mockReturnValue(of([student({ btc_and_me: true })]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(437); // 362 + 75
-      expect(entry.total).toBe(437);
-      expect(entry.packages).toBe('Pat: Succeed; Pat: BTC & Me');
+    it('renders the month, the rows and the footer', () => {
+      const fixture = render();
+      expect(text(fixture)).toContain('July 2026');
+      expect(text(fixture)).toContain('Casey Lee');
+      expect(text(fixture)).toContain('Grand Total');
+      expect(text(fixture)).toContain('$362.00');
+      expect(text(fixture)).not.toContain('Calculated total');
     });
 
-    it('bills a group-only family with no packaged student', () => {
-      studentService.getStudents.mockReturnValue(of([
-        student({ package: undefined, schedule: undefined, btc_and_me: true }),
+    it('renders labels and the breakdown once a row is opened', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement({
+          lines: [
+            statementLine({
+              from: '2026-07-14', sessions_billed: 3, amount: 250.62, net: 225.56,
+              discount_percent: 10, discount_amount: 25.06, flags: ['prorated_start', 'discount'],
+            }),
+            statementLine({ kind: 'prior_package', package: 'Previous package', to: '2026-07-13', rate: 0, amount: 63, net: 63 }),
+          ],
+          flags: ['prorated_start', 'discount'],
+          package_subtotal: 288.56,
+          sibling_discount_percent: 5,
+          sibling_discount_amount: 14.43,
+          group_fee: 75,
+          group_students: ['Pat'],
+          total: 349.13,
+          needs_attention: true,
+          dues: [statementDue({ derived: 349.13, amount: 349.13 })],
+        }),
       ]));
-      const c = build();
-      c.ngOnInit();
-      expect((c as any).dataSource.data).toHaveLength(1);
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(75);
-      expect(entry.total).toBe(75);
-      expect(entry.packages).toBe('Pat: BTC & Me');
-      expect(entry.needs_attention).toBe(false);
+      const fixture = render();
+      expect(text(fixture)).toContain('Prorated start');
+      expect(fixture.nativeElement.querySelector('.attention-icon')).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('.billing-detail')).toBeNull();
+
+      (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const detail = fixture.nativeElement.querySelector('.billing-detail') as HTMLElement;
+      expect(detail).not.toBeNull();
+      expect(detail.textContent).toContain('From Jul 14');
+      expect(detail.textContent).toContain('3 of 4');
+      expect(detail.textContent).toContain('-$25.06');
+      expect(detail.textContent).toContain('Previous package');
+      expect(detail.textContent).toContain('Sibling discount (5%)');
+      expect(detail.textContent).toContain('BTC & Me (Pat)');
+      expect(detail.textContent).toContain('$349.13');
+      expect(fixture.nativeElement.querySelector('.billing-detail-open')).not.toBeNull();
+      expect(router.navigate).not.toHaveBeenCalled();
     });
 
-    it('lands the whole fee on the 1st for a semi-monthly family', () => {
-      contactService.getContacts.mockReturnValue(of([
-        contact({ billing_cycle: BillingCycle.SEMI_MONTHLY }),
+    it('renders a group-only family without a line table', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement({
+          lines: [], package_subtotal: 0, group_fee: 75, group_students: ['Pat'], total: 75,
+          dues: [statementDue({ derived: 75, amount: 75 })],
+        }),
       ]));
-      studentService.getStudents.mockReturnValue(of([student({ btc_and_me: true })]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(256); // 181 + 75
-      expect(entry.due_fifteenth).toBe(181);
+      const fixture = render();
+      (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.detail-table')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.detail-summary')).not.toBeNull();
     });
 
-    it('never discounts the fee; group-only siblings do not hit the threshold', () => {
-      contactService.getContacts.mockReturnValue(of([contact({ sibling_discount: 10 })]));
-      studentService.getStudents.mockReturnValue(of([
-        student({ id: 's-1', name: 'Pat' }),
-        student({ id: 's-2', name: 'Quinn' }),
-        student({ id: 's-3', name: 'Zoe', package: undefined, schedule: undefined, btc_and_me: true }),
-      ]));
-      const c = build();
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      // 2 packaged students -> no sibling discount; 724 + 75 flat.
-      expect(entry.total).toBe(799);
-      expect(entry.discount).toBe(0);
-    });
-
-    it('skips inactive or unenrolled unpackaged students as before', () => {
-      studentService.getStudents.mockReturnValue(of([
-        student({ package: undefined, schedule: undefined }), // no package, not enrolled
-      ]));
-      const c = build();
-      c.ngOnInit();
-      expect((c as any).dataSource.data).toHaveLength(0);
-    });
-  });
-
-  describe('scheduled package changes', () => {
-    const pendingStudent = () => student({
-      pending_changes: [
-        { package: 'Achieve', effective: '2026-09-01' }, // $546/mo
-        { package: 'Apex', effective: '2027-01-01' }, // $1820/mo
-      ],
-    });
-
-    it('a September view bills and labels the future package', () => {
-      studentService.getStudents.mockReturnValue(of([pendingStudent()]));
-      const c = build();
-      c.selectedDate = new Date(2026, 8, 10); // September 2026
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(546);
-      expect(entry.packages).toBe('Pat: Achieve');
-    });
-
-    it('a January view bills and labels the second queued package', () => {
-      studentService.getStudents.mockReturnValue(of([pendingStudent()]));
-      const c = build();
-      c.selectedDate = new Date(2027, 0, 10); // January 2027
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(1820);
-      expect(entry.packages).toBe('Pat: Apex');
-    });
-
-    it('the August view still bills and labels the current package', () => {
-      studentService.getStudents.mockReturnValue(of([pendingStudent()]));
-      const c = build();
-      c.selectedDate = new Date(2026, 7, 10); // August 2026
-      c.ngOnInit();
-      const entry = (c as any).dataSource.data[0] as BillingEntry;
-      expect(entry.due_first).toBe(362);
-      expect(entry.packages).toBe('Pat: Succeed');
+    it('renders the error, empty and non-admin states', () => {
+      billingService.getStatements.mockReturnValue(throwError(() => new Error('boom')));
+      expect(text(render())).toContain("Billing couldn't be calculated for this month.");
+      billingService.getStatements.mockReturnValue(of([]));
+      expect(text(render())).toContain('No billable contacts for this month.');
+      isAdmin = false;
+      expect(text(render())).toContain('Billing is available to administrators only.');
     });
   });
 });

@@ -4,6 +4,8 @@ import {HttpClient, HttpParams} from '@angular/common/http';
 import {Observable} from 'rxjs';
 import {AmountOverrideRequest, BillingRecord} from '../models/billing-record.model';
 import {Response} from '../models/response.model';
+import {Statement} from '../models/statement.model';
+import {Student} from '../models/student.model';
 
 @Injectable({
   providedIn: 'root'
@@ -39,5 +41,17 @@ export class BillingService {
   /** Sets (number, 0 = no charge) or clears (null) a period's amount override. */
   setAmountOverride(request: AmountOverrideRequest): Observable<Response> {
     return this.httpClient.put<Response>(`${this.baseUrl}/billing/override`, request);
+  }
+
+  /** Every family's service-calculated statement for a month ('YYYY-MM'). */
+  getStatements(month: string): Observable<Statement[]> {
+    const params: HttpParams = new HttpParams().set('month', month);
+    return this.httpClient.get<Statement[]>(`${this.baseUrl}/billing/statements`, { params });
+  }
+
+  /** The family's statement with an unsaved student change applied (nothing is written). */
+  previewStatement(month: string, student: Student): Observable<{statement: Statement | null}> {
+    return this.httpClient.post<{statement: Statement | null}>(
+      `${this.baseUrl}/billing/statements/preview`, {month, student});
   }
 }
