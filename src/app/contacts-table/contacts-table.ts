@@ -1,3 +1,4 @@
+import {DatePipe} from '@angular/common';
 import {staffStatusLabel} from '../enums/staff-status.enum';
 import {contactStatusChipClass} from '../utils/status-chip';
 import {normalizeParentStatus} from '../utils/legacy-status';
@@ -11,7 +12,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
-import {MatSort, MatSortModule} from '@angular/material/sort';
+import {MatSort, MatSortModule, SortDirection} from '@angular/material/sort';
 import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatDialog} from '@angular/material/dialog';
@@ -35,6 +36,7 @@ import {TableStateStore} from '../utils/table-state';
 @Component({
   selector: 'app-contacts-table',
   imports: [
+    DatePipe,
     MatButtonModule,
     MatCardModule,
     MatTableModule,
@@ -68,9 +70,13 @@ export class ContactsTable implements OnInit {
   // once loading finishes.
   // Restores the admin's place (page/sort/filters) after navigating away.
   private readonly viewState = new TableStateStore('btc-contacts-view');
+  private sortRef: MatSort | undefined;
   @ViewChild(MatSort) set matSort(sort: MatSort) {
     if (sort) {
       this.viewState.attachSort(sort);
+      this.sortRef = sort;
+      // Before dataSource.sort is assigned, so the first render is ordered.
+      this.syncApplicantView();
       this.dataSource.sort = sort;
     }
   }
@@ -81,7 +87,15 @@ export class ContactsTable implements OnInit {
     }
   }
 
-  contactColumns: string[] = ['first_name', 'last_name', 'email', 'phone_number', 'service', 'status', 'actions'];
+  /** The applicant's inquiry date — shown (and sorted newest first) only
+   *  while the table is filtered down to employment inquiries. */
+  static readonly APPLIED_COLUMN = 'hiring_inquiry_received';
+  private static readonly BASE_COLUMNS: readonly string[] =
+    ['first_name', 'last_name', 'email', 'phone_number', 'service', 'status', 'actions'];
+  /** Statuses only an employment inquiry can have (hiring pipeline). */
+  private static readonly APPLICANT_STATUSES: readonly string[] =
+    ['Inquiry submitted', 'Declined offer', 'BTC not Pursuing'];
+  contactColumns: string[] = [...ContactsTable.BASE_COLUMNS];
   dataSource = new MatTableDataSource<Contact>([]);
   protected readonly statusChipClass = contactStatusChipClass;
   protected readonly serviceOptions: string[] = Object.values(Service);
@@ -161,9 +175,57 @@ export class ContactsTable implements OnInit {
     this.refilter();
   }
 
+  /**
+   * True while the filters narrow the table to employment inquiries: the
+   * service filter is exactly Employment Inquiry, or (with no other service
+   * chosen) every selected status is a hiring-pipeline status.
+   */
+  get isApplicantView(): boolean {
+    const services = this.serviceFilter;
+    if (services.some(s => s !== Service.EMPLOYMENT_INQUIRY)) {
+      return false;
+    }
+    if (services.length > 0) {
+      return true;
+    }
+    return this.statusFilter.length > 0
+      && this.statusFilter.every(s => ContactsTable.APPLICANT_STATUSES.includes(s));
+  }
+
+  /**
+   * Shows/hides the Applied column with the applicant view and keeps the
+   * order sensible: entering the view with no sort chosen orders newest
+   * first; leaving it drops a sort on the (now hidden) Applied column.
+   */
+  private syncApplicantView(): void {
+    const applicant = this.isApplicantView;
+    const columns = [...ContactsTable.BASE_COLUMNS];
+    if (applicant) {
+      columns.splice(columns.indexOf('service'), 0, ContactsTable.APPLIED_COLUMN);
+    }
+    this.contactColumns = columns;
+    const sort = this.sortRef;
+    if (!sort) {
+      return;
+    }
+    if (applicant && !sort.active) {
+      this.setSort(sort, ContactsTable.APPLIED_COLUMN, 'desc');
+    } else if (!applicant && sort.active === ContactsTable.APPLIED_COLUMN) {
+      this.setSort(sort, '', '');
+    }
+  }
+
+  private setSort(sort: MatSort, active: string, direction: SortDirection): void {
+    sort.active = active;
+    sort.direction = direction;
+    // Optional-chained: unit specs stub bare objects without the emitter.
+    sort.sortChange?.emit({active, direction});
+  }
+
   /** Re-runs the predicate (the filter string only needs to change) and
    *  persists the criteria for the session. */
   private refilter(): void {
+    this.syncApplicantView();
     this.dataSource.filter = JSON.stringify({
       text: this.filterText, services: this.serviceFilter, statuses: this.statusFilter,
       scholarship: this.scholarshipFilter,
@@ -190,6 +252,7 @@ export class ContactsTable implements OnInit {
       if (this.filterText || this.serviceFilter.length || this.statusFilter.length || this.scholarshipFilter) {
         this.dataSource.filter = saved;
       }
+      this.syncApplicantView();
     } catch { /* corrupt/unavailable storage — start unfiltered */ }
   }
 

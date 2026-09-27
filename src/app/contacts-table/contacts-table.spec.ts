@@ -468,4 +468,117 @@ describe('ContactsTable', () => {
     expect((c as any).statusLabel({ service: 'Hiring', status: 'Onboarding' })).toBe('Onboarding');
     expect((c as any).statusLabel({ service: 'Hiring' })).toBe('');
   });
+
+  describe('applicant view (employment inquiries)', () => {
+    const APPLIED = 'hiring_inquiry_received';
+    const columns = (c: ContactsTable) =>
+      (c as unknown as { contactColumns: string[] }).contactColumns;
+    const fakeSort = (active = '', direction: 'asc' | 'desc' | '' = '') =>
+      ({ active, direction, sortChange: { emit: jest.fn(), subscribe: jest.fn() } }) as unknown as MatSort & {
+        sortChange: { emit: jest.Mock; subscribe: jest.Mock };
+      };
+
+    beforeEach(() => sessionStorage.clear());
+
+    it('hides the Applied column by default', () => {
+      const c = build();
+      c.ngOnInit();
+      expect(c.isApplicantView).toBe(false);
+      expect(columns(c)).not.toContain(APPLIED);
+    });
+
+    it('shows Applied (before Service) when the service filter is exactly Employment Inquiry', () => {
+      const c = build();
+      c.ngOnInit();
+      c.onServiceFilterChange(['Employment Inquiry']);
+      expect(c.isApplicantView).toBe(true);
+      expect(columns(c).indexOf(APPLIED)).toBe(columns(c).indexOf('service') - 1);
+      c.onServiceFilterChange(['Employment Inquiry', 'Hiring']);
+      expect(c.isApplicantView).toBe(false);
+      expect(columns(c)).not.toContain(APPLIED);
+    });
+
+    it('shows Applied when only hiring-pipeline statuses are selected (the client\'s view)', () => {
+      const c = build();
+      c.ngOnInit();
+      c.onStatusFilterChange(['Inquiry submitted']);
+      expect(c.isApplicantView).toBe(true);
+      c.onStatusFilterChange(['Inquiry submitted', 'Declined offer', 'BTC not Pursuing']);
+      expect(c.isApplicantView).toBe(true);
+      // MIA applies to families too, so it is not an applicant-only view.
+      c.onStatusFilterChange(['Inquiry submitted', 'MIA']);
+      expect(c.isApplicantView).toBe(false);
+      // A different service chosen rules it out whatever the statuses.
+      c.onStatusFilterChange(['Inquiry submitted']);
+      c.onServiceFilterChange(['Tutoring']);
+      expect(c.isApplicantView).toBe(false);
+    });
+
+    it('orders newest first when entering the view with no sort chosen', () => {
+      const c = build();
+      c.ngOnInit();
+      const sort = fakeSort();
+      c.matSort = sort;
+      c.onStatusFilterChange(['Inquiry submitted']);
+      expect(sort.active).toBe(APPLIED);
+      expect(sort.direction).toBe('desc');
+      expect(sort.sortChange.emit).toHaveBeenCalledWith({ active: APPLIED, direction: 'desc' });
+    });
+
+    it('keeps a sort the admin already chose', () => {
+      const c = build();
+      c.ngOnInit();
+      const sort = fakeSort('last_name', 'asc');
+      c.matSort = sort;
+      c.onStatusFilterChange(['Inquiry submitted']);
+      expect(sort.active).toBe('last_name');
+      expect(sort.sortChange.emit).not.toHaveBeenCalled();
+    });
+
+    it('drops the Applied sort when leaving the view', () => {
+      const c = build();
+      c.ngOnInit();
+      const sort = fakeSort();
+      c.matSort = sort;
+      c.onStatusFilterChange(['Inquiry submitted']);
+      c.onStatusFilterChange([]);
+      expect(sort.active).toBe('');
+      expect(sort.direction).toBe('');
+      expect(columns(c)).not.toContain(APPLIED);
+      // Another sort survives leaving the view.
+      sort.active = 'email';
+      sort.direction = 'asc';
+      c.onStatusFilterChange(['Inquiry submitted']);
+      c.onStatusFilterChange([]);
+      expect(sort.active).toBe('email');
+    });
+
+    it('applies the default order when the table renders with restored applicant filters', () => {
+      sessionStorage.setItem('btc-contacts-filters', JSON.stringify({
+        text: '', services: ['Employment Inquiry'], statuses: [], scholarship: '',
+      }));
+      const c = build();
+      c.ngOnInit();
+      expect(columns(c)).toContain(APPLIED);
+      const sort = fakeSort();
+      c.matSort = sort;
+      expect(sort.active).toBe(APPLIED);
+      expect(sort.direction).toBe('desc');
+    });
+
+    it('sorts newest first with undated applicants last', () => {
+      const c = build();
+      c.ngOnInit();
+      c.dataSource.data = [
+        { first_name: 'Old', service: 'Employment Inquiry', hiring_inquiry_received: 1707886800000 },
+        { first_name: 'Undated', service: 'Employment Inquiry' },
+        { first_name: 'New', service: 'Employment Inquiry', hiring_inquiry_received: 1759464000000 },
+      ] as unknown as Contact[];
+      const sorted = c.dataSource.sortData(
+        [...c.dataSource.data],
+        { active: APPLIED, direction: 'desc' } as MatSort,
+      );
+      expect(sorted.map(r => r.first_name)).toEqual(['New', 'Old', 'Undated']);
+    });
+  });
 });
