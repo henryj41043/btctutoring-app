@@ -32,6 +32,106 @@
     min-width: 800px;
   }
 
+  .month-field {
+    width: 210px;
+
+    input {
+      cursor: pointer;
+    }
+  }
+
+  .expand-cell {
+    width: 44px;
+    padding-right: 0;
+  }
+
+  .billing-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .billing-label {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: var(--btc-sky-tint, #e3f3f9);
+    color: var(--btc-teal-deep);
+    font-size: .72rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .billing-detail-row {
+    height: 0;
+    display: none;
+
+    &.billing-detail-open {
+      display: table-row;
+    }
+  }
+
+  .detail-cell {
+    padding: 0 16px 16px 60px;
+    background: rgba(0, 0, 0, 0.02);
+  }
+
+  .billing-detail {
+    padding-top: 12px;
+  }
+
+  .detail-table {
+    min-width: 0;
+    border-collapse: collapse;
+    font-size: .85rem;
+
+    th, td {
+      padding: 6px 10px;
+      text-align: left;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    th {
+      color: var(--btc-teal-deep);
+      font-weight: 700;
+    }
+
+    .num {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .billing-label {
+      margin-left: 4px;
+    }
+  }
+
+  .detail-summary {
+    margin: 12px 0 0 auto;
+    max-width: 360px;
+    font-size: .85rem;
+
+    div {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 3px 10px;
+    }
+
+    dt, dd {
+      margin: 0;
+    }
+
+    .detail-total {
+      font-weight: 800;
+      color: var(--btc-teal-deep);
+      border-top: 1px solid rgba(0, 0, 0, 0.15);
+      margin-top: 4px;
+      padding-top: 6px;
+    }
+  }
+
   .total-cell {
     font-weight: 800;
     color: var(--btc-teal-deep);
