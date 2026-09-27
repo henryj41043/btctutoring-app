@@ -306,6 +306,7 @@ describe('Contact', () => {
 
     for (const key of [
       'id', 'first_name', 'last_name', 'email', 'phone_number', 'service', 'status',
+      'address_line1', 'address_line2', 'city', 'state', 'zip',
       'billing_cycle', 'special_circumstance',
       'inquiry_note_from_parent', 'scholarship_name', 'title',
       'zoom_link', 'user_group',
@@ -1419,6 +1420,70 @@ describe('Contact', () => {
       studentService.updateStudent.mockReturnValue(of({}));
       c.saveTrialDate(student, new Date(2026, 7, 22));
       expect(student.trial_date).toBe('2026-08-22');
+    });
+  });
+
+  describe('mailing address (admin-only)', () => {
+    const address = {
+      address_line1: '1 Main St', address_line2: 'Apt 2', city: 'Scranton', state: 'PA', zip: '18503',
+    };
+
+    it('loads the stored address into the form', () => {
+      contactService.getContact.mockReturnValue(of([fullContact(address)]));
+      const c = build();
+      c.ngOnInit();
+      for (const [key, value] of Object.entries(address)) {
+        expect(form(c).controls[key].value).toBe(value);
+      }
+    });
+
+    it('reads a contact without an address as blanks', () => {
+      const c = build();
+      c.ngOnInit();
+      for (const key of Object.keys(address)) {
+        expect(form(c).controls[key].value).toBe('');
+      }
+    });
+
+    it('saves the address with the contact', () => {
+      const c = build();
+      c.ngOnInit();
+      for (const [key, value] of Object.entries(address)) {
+        form(c).controls[key].setValue(value);
+      }
+      contactService.updateContact.mockReturnValue(of({} as ContactModel));
+      c.updateContact();
+      expect(contactService.updateContact).toHaveBeenCalledWith(expect.objectContaining(address));
+    });
+
+    it('accepts ZIP and ZIP+4, rejects anything else, and allows a blank', () => {
+      const c = build();
+      c.ngOnInit();
+      const zip = form(c).controls['zip'];
+      zip.setValue('18503');
+      expect(zip.valid).toBe(true);
+      zip.setValue('18503-1234');
+      expect(zip.valid).toBe(true);
+      zip.setValue('1850');
+      expect(zip.hasError('pattern')).toBe(true);
+      zip.setValue('');
+      expect(zip.valid).toBe(true);
+    });
+
+    it('is disabled for non-admins, so it never travels in their payload', () => {
+      isAdmin = false;
+      contactService.getContact.mockReturnValue(of([fullContact(address)]));
+      const c = build();
+      c.ngOnInit();
+      for (const key of Object.keys(address)) {
+        expect(form(c).controls[key].disabled).toBe(true);
+        expect(key in form(c).value).toBe(false);
+      }
+    });
+
+    it('offers the US state codes', () => {
+      const c = build();
+      expect((c as unknown as { usStates: string[] }).usStates).toContain('PA');
     });
   });
 

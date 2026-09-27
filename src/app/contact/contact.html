@@ -32,6 +32,39 @@
       <mat-checkbox formControlName="exclude_bulk_email" class="exclude-bulk-email">
         Exclude from bulk email (skipped by the contacts table's Copy Emails)
       </mat-checkbox>
+      @if (authService.isAdmin()) {
+        <div class="mailing-address">
+          <h3>Mailing Address</h3>
+          <mat-form-field class="address-line">
+            <mat-label>Street Address</mat-label>
+            <input matInput formControlName="address_line1" autocomplete="off">
+          </mat-form-field>
+          <mat-form-field class="address-line">
+            <mat-label>Apt, Suite, Unit (optional)</mat-label>
+            <input matInput formControlName="address_line2" autocomplete="off">
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>City</mat-label>
+            <input matInput formControlName="city" autocomplete="off">
+          </mat-form-field>
+          <mat-form-field class="address-state">
+            <mat-label>State</mat-label>
+            <mat-select formControlName="state">
+              <mat-option value="">—</mat-option>
+              @for (stateCode of usStates; track stateCode) {
+                <mat-option [value]="stateCode">{{stateCode}}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field class="address-zip">
+            <mat-label>ZIP Code</mat-label>
+            <input matInput formControlName="zip" autocomplete="off">
+            @if (contactForm.controls['zip'].hasError('pattern')) {
+              <mat-error>Enter a 5-digit ZIP or ZIP+4</mat-error>
+            }
+          </mat-form-field>
+        </div>
+      }
       <mat-form-field>
         <mat-label>Select Service</mat-label>
         <mat-select formControlName="service">
