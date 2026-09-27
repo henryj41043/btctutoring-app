@@ -9,8 +9,8 @@ import {
   MatDialogTitle,
 } from '@angular/material/dialog';
 import {MakeupEditDialog, MakeupEditResult} from '../makeup-edit-dialog/makeup-edit-dialog';
-import {catchError, EMPTY, of} from 'rxjs';
-import {FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {catchError, debounceTime, EMPTY, merge, of, switchMap} from 'rxjs';
+import {FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatSelectModule} from '@angular/material/select';
@@ -25,6 +25,8 @@ import {Contact} from '../models/contact.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {StudentService} from '../services/student.service';
 import {ScheduleService} from '../services/schedule.service';
+import {BillingService} from '../services/billing.service';
+import {formatMoney} from '../utils/statement-view';
 import {PackageService} from '../services/package.service';
 import {PackageRow} from '../models/package-row.model';
 import {
@@ -113,6 +115,7 @@ export class StudentDialog implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private scheduleService: ScheduleService = inject(ScheduleService);
   private packageService: PackageService = inject(PackageService);
+  private billingService: BillingService = inject(BillingService);
   private destroyRef: DestroyRef = inject(DestroyRef);
 
   protected readonly CUSTOM_PACKAGE = CUSTOM_PACKAGE;
@@ -183,12 +186,17 @@ export class StudentDialog implements OnInit {
       custom_monthly_cost: [student.custom_monthly_cost ?? null],
       custom_sessions_per_week: [student.custom_sessions_per_week ?? null],
       custom_session_length_min: [student.custom_session_length_min ?? null],
+      // Billing v2: a per-student monthly price and discount, on any package.
+      price_override: [student.price_override ?? null, [Validators.min(0)]],
+      discount_percent: [student.discount_percent ?? null, [Validators.min(0), Validators.max(100)]],
+      discount_reason: [student.discount_reason ?? ''],
       // Carried through untouched — owned by the Manage Schedule + billing flows.
       schedule: [student.schedule ?? null],
       package_start_date: [student.package_start_date ?? null],
       auto_renew: [student.auto_renew ?? false],
     });
     this.buildPlanningOverrideRows(student);
+    this.watchPricing();
     this.pendingMonthOptions = nextMonthFirsts(new Date());
     // Stored effective dates outside the rolling window must stay selectable.
     for (const stored of pendingChangesOf(student).map(c => c.effective).reverse()) {
@@ -199,6 +207,108 @@ export class StudentDialog implements OnInit {
         ];
       }
     }
+  }
+
+  // ── Custom pricing: live preview of this month's bill ──
+  /** e.g. "This month: Pat $410.40 · family total $683.40" (blank = nothing to show). */
+  protected pricingPreview: string = '';
+
+  /** The pricing fields only apply to an enrolled student being edited. */
+  get showPricing(): boolean {
+    return this.mode === 'edit' && !this.locked && !!this.studentForm.get('package')?.value;
+  }
+
+  /** A Custom package already carries its own price; only the discount applies. */
+  get showPriceOverride(): boolean {
+    return this.studentForm.get('package')?.value !== CUSTOM_PACKAGE;
+  }
+
+  /**
+   * The custom price / discount as they will be saved: a blank field clears
+   * a stored value (null) and is otherwise left out of the payload.
+   */
+  private applyPricing(student: Student): void {
+    const stored = this.data.student ?? {};
+    const numberOf = (value: unknown): number | null =>
+      value === null || value === undefined || value === '' || isNaN(Number(value)) ? null : Number(value);
+
+    const price = this.showPriceOverride ? numberOf(student.price_override) : null;
+    if (price !== null) {
+      student.price_override = price;
+    } else if (stored.price_override !== undefined && stored.price_override !== null) {
+      student.price_override = null;
+    } else {
+      delete student.price_override;
+    }
+
+    const percent = numberOf(student.discount_percent) || null;
+    if (percent !== null) {
+      student.discount_percent = percent;
+      student.discount_reason = (student.discount_reason ?? '').trim();
+    } else {
+      delete student.discount_reason;
+      if (stored.discount_percent !== undefined && stored.discount_percent !== null) {
+        student.discount_percent = null;
+      } else {
+        delete student.discount_percent;
+      }
+    }
+  }
+
+  /** Re-prices this month on the service whenever a pricing field settles. */
+  private watchPricing(): void {
+    if (this.mode !== 'edit' || !this.data.student?.id) {
+      return;
+    }
+    const controls = ['price_override', 'discount_percent'].map(name => this.studentForm.get(name)!.valueChanges);
+    merge(...controls).pipe(
+      debounceTime(400),
+      switchMap(() => {
+        const draft = this.pricingDraft();
+        if (!draft) {
+          return of(null);
+        }
+        const now = new Date();
+        return this.billingService
+          .previewStatement(monthKey(now.getFullYear(), now.getMonth()), draft)
+          .pipe(catchError(() => of(null)));
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(result => {
+      const statement = result?.statement;
+      if (!statement) {
+        this.pricingPreview = '';
+        return;
+      }
+      const own = statement.lines
+        .filter(line => line.student_id === this.data.student!.id)
+        .reduce((sum, line) => sum + line.net, 0);
+      this.pricingPreview =
+        `This month: ${studentDisplayName(this.data.student!)} ${formatMoney(round2(own))}` +
+        ` · family total ${formatMoney(statement.total)}`;
+    });
+  }
+
+  /**
+   * The stored student with the form's pricing applied — null when the
+   * fields are invalid or the package itself is being changed (that month
+   * is priced by the package-change flow instead).
+   */
+  private pricingDraft(): Student | null {
+    const form = this.studentForm;
+    if (form.get('price_override')!.invalid || form.get('discount_percent')!.invalid) {
+      return null;
+    }
+    if (form.get('package')!.value !== this.data.student!.package) {
+      return null;
+    }
+    const draft: Student = {
+      ...this.data.student!,
+      price_override: form.get('price_override')!.value,
+      discount_percent: form.get('discount_percent')!.value,
+    };
+    this.applyPricing(draft);
+    return draft;
   }
 
   /** Effective-month choices for a scheduled package change (next 6 firsts). */
@@ -393,6 +503,15 @@ export class StudentDialog implements OnInit {
       name: (raw.name ?? '').trim(),
       birthday: this.toDateString(raw.birthday),
     };
+    if (this.studentForm.get('price_override')!.invalid) {
+      this.fail('The custom monthly price must be $0 or more.');
+      return;
+    }
+    if (this.studentForm.get('discount_percent')!.invalid) {
+      this.fail('The discount must be between 0 and 100 percent.');
+      return;
+    }
+    this.applyPricing(student);
     const changes = this.pendingChangesFromRows(pendingRows as Record<string, unknown>[]);
     // Per-tutor planning overrides: blank rows mean "use the default". An
     // explicit [] only goes out when stored overrides are being cleared —
