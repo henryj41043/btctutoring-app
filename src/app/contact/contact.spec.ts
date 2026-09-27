@@ -1593,14 +1593,31 @@ describe('Contact', () => {
 
         // Only the non-MIA student is updated, with the partial payload shape.
         expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+        const d = new Date();
+        const today = `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`;
         expect(studentService.updateStudent).toHaveBeenCalledWith({
           id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.MIA,
+          service_end_date: today, end_status: StudentStatus.MIA,
         });
         // The cascaded student's upcoming pending tutoring sessions are dropped.
         expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledTimes(1);
         expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith('s-1');
         // Students are re-fetched afterwards (initial load + post-cascade).
         expect(studentService.getStudentsByContact).toHaveBeenCalledTimes(2);
+      });
+
+      it('a student who was not in service gets no end date', () => {
+        family('Active Client');
+        studentService.getStudentsByContact.mockReturnValue(
+          of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ONBOARDING }]),
+        );
+        const c = build();
+        c.ngOnInit();
+        form(c).controls['status'].setValue('MIA');
+        c.updateContact();
+        expect(studentService.updateStudent).toHaveBeenCalledWith({
+          id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.MIA,
+        });
       });
 
       it('still reloads the students when a session cleanup fails', () => {

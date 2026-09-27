@@ -19,3 +19,27 @@ export function cascadeTargetFor(parentStatus?: string): StudentStatus | null {
       return null;
   }
 }
+
+/** A local date as 'YYYY-MM-DD'. */
+export function localDateKey(date: Date): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * The service end date for a student leaving service NOW: an already
+ * recorded end date on or before today stands, otherwise service ends today.
+ * Null when the student was not in service (nothing to end).
+ */
+export function serviceEndForLeaving(
+  student: {status?: string; service_end_date?: string | null},
+  now: Date = new Date(),
+): string | null {
+  if (student.status !== StudentStatus.ACTIVE_STUDENT) {
+    return null;
+  }
+  const today = localDateKey(now);
+  const stored = (student.service_end_date ?? '').slice(0, 10);
+  return stored && stored <= today ? stored : today;
+}

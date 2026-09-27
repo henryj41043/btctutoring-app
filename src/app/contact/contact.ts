@@ -27,7 +27,7 @@ import {TwentyFiveStatus} from '../enums/twenty-five-status.enum';
 import {HireType} from '../enums/hire-type.enum';
 import {StaffStatus, staffStatusLabel} from '../enums/staff-status.enum';
 import {ParentStatus} from '../enums/parent-status.enum';
-import {cascadeTargetFor} from '../utils/parent-status-cascade';
+import {cascadeTargetFor, serviceEndForLeaving} from '../utils/parent-status-cascade';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {BillingCycle} from '../enums/billing-cycle.enum';
@@ -1113,13 +1113,17 @@ export class Contact implements OnInit {
       return;
     }
     forkJoin(
-      pending.map(s =>
-        this.studentService
+      pending.map(s => {
+        // A student leaving service keeps an end date, so billing still
+        // shows (and prorates) the months they were served.
+        const end = serviceEndForLeaving(s);
+        return this.studentService
           .updateStudent({
             id: s.id,
             contact_id: s.contact_id,
             name: s.name,
             status: target,
+            ...(end ? {service_end_date: end, end_status: target} : {}),
           } as Student)
           .pipe(
             switchMap(() => this.scheduleService.deleteFuturePendingSessions(s.id!)),
@@ -1127,8 +1131,8 @@ export class Contact implements OnInit {
               console.log(error);
               return of(null);
             }),
-          ),
-      ),
+          );
+      }),
     )
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {

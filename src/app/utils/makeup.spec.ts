@@ -3,6 +3,7 @@ import {
   bankMakeupMinutes,
   consumeMakeupMinutes,
   pruneExpiredBatches,
+  serviceEndInstant,
   unexpiredBatchViews,
 } from './makeup';
 import {Student} from '../models/student.model';
@@ -234,5 +235,61 @@ describe('unexpiredBatchViews', () => {
 
   it('returns an empty list for batch-less (legacy) students', () => {
     expect(unexpiredBatchViews({ make_up_minutes: 60 } as never, now)).toEqual([]);
+  });
+});
+
+describe('service end date', () => {
+  // Local wall times: the end date is the student's last day, through 23:59:59.
+  const lastDay = new Date(2026, 6, 10, 23, 59, 59, 999);
+  const during = new Date(2026, 6, 10, 18, 0, 0);
+  const after = new Date(2026, 6, 11, 0, 0, 0);
+  const fresh = (now: Date) => new Date(now.getTime() - 5 * DAY).toISOString();
+
+  it('serviceEndInstant is the end of the last day', () => {
+    expect(serviceEndInstant(student({service_end_date: '2026-07-10'}))).toEqual(lastDay);
+    expect(serviceEndInstant(student({service_end_date: '2026-07-10T00:00:00'}))).toEqual(lastDay);
+    expect(serviceEndInstant(student())).toBeNull();
+    expect(serviceEndInstant(student({service_end_date: null}))).toBeNull();
+    expect(serviceEndInstant(student({service_end_date: 'soon'}))).toBeNull();
+  });
+
+  it('minutes stay available through the last day', () => {
+    const s = student({
+      service_end_date: '2026-07-10',
+      make_up_batches: [{minutes: 45, earned_date: fresh(during)}],
+    });
+    expect(availableMakeupMinutes(s, during)).toBe(45);
+    expect(availableMakeupMinutes(s, lastDay)).toBe(45);
+  });
+
+  it('every minute expires once service has ended, exempt or not', () => {
+    const s = student({
+      service_end_date: '2026-07-10',
+      make_up_batches: [{minutes: 45, earned_date: fresh(after)}],
+    });
+    expect(availableMakeupMinutes(s, after)).toBe(0);
+    expect(availableMakeupMinutes({...s, make_up_never_expire: true}, after)).toBe(0);
+    expect(pruneExpiredBatches({...s}, after).make_up_batches).toEqual([]);
+    expect(unexpiredBatchViews(s, after)).toEqual([]);
+  });
+
+  it('a legacy scalar balance expires too', () => {
+    const s = student({service_end_date: '2026-07-10', make_up_minutes: 60});
+    expect(availableMakeupMinutes(s, during)).toBe(60);
+    expect(availableMakeupMinutes(s, after)).toBe(0);
+  });
+
+  it('caps the displayed expiry at the end of service', () => {
+    const earned = fresh(during);
+    const natural = new Date(new Date(earned).getTime() + 90 * DAY);
+    const views = (over: Partial<Student>) =>
+      unexpiredBatchViews(student({make_up_batches: [{minutes: 30, earned_date: earned}], ...over}), during);
+    expect(views({service_end_date: '2026-07-10'})[0].expires).toEqual(lastDay);
+    // An end date later than the natural expiry changes nothing.
+    expect(views({service_end_date: '2027-01-01'})[0].expires).toEqual(natural);
+    expect(views({})[0].expires).toEqual(natural);
+    // Exempt minutes still end with service, and never expire without an end date.
+    expect(views({make_up_never_expire: true, service_end_date: '2026-07-10'})[0].expires).toEqual(lastDay);
+    expect(views({make_up_never_expire: true})[0].expires).toBeNull();
   });
 });

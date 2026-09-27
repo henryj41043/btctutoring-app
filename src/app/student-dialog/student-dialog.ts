@@ -190,6 +190,9 @@ export class StudentDialog implements OnInit {
       price_override: [student.price_override ?? null, [Validators.min(0)]],
       discount_percent: [student.discount_percent ?? null, [Validators.min(0), Validators.max(100)]],
       discount_reason: [student.discount_reason ?? ''],
+      // Billing v2: the last day of service and the status that follows it.
+      service_end_date: [this.toDate((student.service_end_date ?? '').slice(0, 10))],
+      end_status: [student.end_status ?? StudentStatus.PAST_STUDENT],
       // Carried through untouched — owned by the Manage Schedule + billing flows.
       schedule: [student.schedule ?? null],
       package_start_date: [student.package_start_date ?? null],
@@ -207,6 +210,114 @@ export class StudentDialog implements OnInit {
         ];
       }
     }
+  }
+
+  // ── End of service ──
+  /** The statuses a student can take once service has ended. */
+  protected readonly endStatusOptions: string[] = [
+    StudentStatus.PAST_STUDENT, StudentStatus.MIA, StudentStatus.DECLINED_SERVICES,
+  ];
+  /** The earliest end date offered: today. */
+  protected readonly today: Date = this.startOfDay(new Date());
+  /** True when the pending confirmation is about an end date, not a status change. */
+  protected confirmingEndDate: boolean = false;
+  /** Sessions from this instant on are removed once the save succeeds (undefined = all upcoming). */
+  private cleanupFrom: Date | undefined;
+  /** The end date was cleared: the calendar is refilled after the save. */
+  private endDateCleared: boolean = false;
+
+  /** Offered to a student who is (or was) in service. */
+  get showServiceEnd(): boolean {
+    if (this.mode !== 'edit' || this.locked) {
+      return false;
+    }
+    return this.data.student?.status === StudentStatus.ACTIVE_STUDENT || !!this.data.student?.service_end_date;
+  }
+
+  /** The end date being entered, as 'YYYY-MM-DD' (undefined when blank). */
+  private get endDateKey(): string | undefined {
+    return this.toDateString(this.studentForm.get('service_end_date')?.value) || undefined;
+  }
+
+  /** e.g. 'Oct 15, 2026' for the confirmation and hints. */
+  protected get endDateLabel(): string {
+    const date = this.toDate(this.endDateKey);
+    return date ? date.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'}) : '';
+  }
+
+  /** Client policy: an end date needs at least one month's notice (a warning, never a block). */
+  get shortNotice(): boolean {
+    const end = this.toDate(this.endDateKey);
+    if (!end || this.endDateKey === this.storedEndKey) {
+      return false;
+    }
+    const earliest = new Date(this.today.getFullYear(), this.today.getMonth() + 1, this.today.getDate());
+    return end.getTime() < earliest.getTime();
+  }
+
+  private get storedEndKey(): string | undefined {
+    return (this.data.student?.service_end_date ?? '').slice(0, 10) || undefined;
+  }
+
+  private startOfDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  /**
+   * The end date / end status as they will be saved:
+   * - leaving Active for an end status: the end date defaults to today (a
+   *   future date entered alongside is pulled back — service stops now);
+   * - back to Active with a past end date: the end date is cleared;
+   * - otherwise the entered date, or null to clear a stored one.
+   */
+  private applyServiceEnd(student: Student): void {
+    const todayKey = this.toDateString(this.today)!;
+    const entered = this.endDateKey;
+    const stored = this.storedEndKey;
+    const endStatus = this.endStatusOptions.includes(student.status ?? '') ? student.status : undefined;
+    this.endDateCleared = false;
+
+    let end: string | undefined;
+    if (this.leavingActive(student) && endStatus) {
+      end = entered && entered <= todayKey ? entered : todayKey;
+      student.end_status = endStatus;
+    } else if (student.status === StudentStatus.ACTIVE_STUDENT) {
+      const reactivated = this.data.student?.status !== StudentStatus.ACTIVE_STUDENT;
+      end = reactivated && entered && entered < todayKey ? undefined : entered;
+      student.end_status = end ? (student.end_status || StudentStatus.PAST_STUDENT) : undefined;
+    } else {
+      // Not in service (and not leaving it now): the stored values stand.
+      end = stored;
+      student.end_status = undefined;
+    }
+
+    if (end) {
+      student.service_end_date = end;
+    } else if (stored) {
+      student.service_end_date = null;
+      this.endDateCleared = student.status === StudentStatus.ACTIVE_STUDENT;
+    } else {
+      delete student.service_end_date;
+    }
+    if (!student.end_status) {
+      delete student.end_status;
+    }
+  }
+
+  /**
+   * What the save must clean up: every upcoming pending tutoring session
+   * when leaving Active, or only those after a newly set end date.
+   */
+  private cleanupPlan(student: Student): {from?: Date} | null {
+    if (this.leavingActive(student)) {
+      return {};
+    }
+    const end = student.service_end_date;
+    if (student.status === StudentStatus.ACTIVE_STUDENT && end && end !== this.storedEndKey) {
+      const last = this.toDate(end)!;
+      return {from: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1)};
+    }
+    return null;
   }
 
   // ── Custom pricing: live preview of this month's bill ──
@@ -512,6 +623,7 @@ export class StudentDialog implements OnInit {
       return;
     }
     this.applyPricing(student);
+    this.applyServiceEnd(student);
     const changes = this.pendingChangesFromRows(pendingRows as Record<string, unknown>[]);
     // Per-tutor planning overrides: blank rows mean "use the default". An
     // explicit [] only goes out when stored overrides are being cleared —
@@ -540,7 +652,10 @@ export class StudentDialog implements OnInit {
     } else {
       student.pending_changes = changes; // [] = clear them all
     }
-    if (this.leavingActive(student) && !this.deactivationConfirmed) {
+    const cleanup = this.cleanupPlan(student);
+    if (cleanup && !this.deactivationConfirmed) {
+      this.cleanupFrom = cleanup.from;
+      this.confirmingEndDate = !!cleanup.from;
       this.promptDeactivation(student.id!);
       return;
     }
@@ -577,6 +692,9 @@ export class StudentDialog implements OnInit {
         if (this.deactivationConfirmed && student.id) {
           this.savedStudentId = student.id;
           this.deleteUpcomingSessions(finish);
+        } else if (this.endDateCleared) {
+          // Service continues: put the coming months back on the calendar.
+          this.scheduleService.fillAhead(student).subscribe(() => finish());
         } else {
           finish();
         }
@@ -600,8 +718,10 @@ export class StudentDialog implements OnInit {
   private promptDeactivation(studentId: string): void {
     this.submitting = true;
     this.hasError = false;
-    this.scheduleService
-      .futurePendingTutoring(studentId)
+    const upcoming = this.cleanupFrom
+      ? this.scheduleService.futurePendingTutoring(studentId, new Date(), {from: this.cleanupFrom})
+      : this.scheduleService.futurePendingTutoring(studentId);
+    upcoming
       .pipe(catchError(() => of(null)))
       .subscribe(sessions => {
         this.submitting = false;
@@ -630,8 +750,10 @@ export class StudentDialog implements OnInit {
     this.submitting = true;
     this.hasError = false;
     this.deleteSessionsFailed = false;
-    this.scheduleService
-      .deleteFuturePendingSessions(this.savedStudentId!)
+    const removal = this.cleanupFrom
+      ? this.scheduleService.deleteFuturePendingSessions(this.savedStudentId!, new Date(), {from: this.cleanupFrom})
+      : this.scheduleService.deleteFuturePendingSessions(this.savedStudentId!);
+    removal
       .pipe(
         catchError(error => {
           console.log(error);
