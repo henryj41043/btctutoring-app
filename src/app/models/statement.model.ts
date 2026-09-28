@@ -61,4 +61,8 @@ export interface Statement {
   total_due: number;
   flags: LineFlag[];
   needs_attention: boolean;
+  /** Set once the month has closed: the statement no longer recalculates. */
+  frozen_at?: string;
+  /** A month from before Billing v2: totals from the billing records, no line detail. */
+  legacy?: boolean;
 }

@@ -202,6 +202,44 @@ describe('Billing', () => {
     });
   });
 
+  describe('closed months', () => {
+    const FROZEN = '2026-08-01T10:00:00.000Z';
+
+    it('an open month is not marked closed', () => {
+      const { c } = loaded();
+      expect((c as any).monthClosed).toBe(false);
+      expect((c as any).closedOn).toBe('');
+    });
+
+    it('a frozen month is marked closed with its date', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement(),
+        statement({ contact_id: 'c-2', contact_name: 'Sam Roe', frozen_at: FROZEN }),
+      ]));
+      const { c } = loaded();
+      expect((c as any).monthClosed).toBe(true);
+      expect((c as any).closedOn).toBe('Aug 1, 2026');
+    });
+
+    it('a closed month can still be marked paid and overridden', () => {
+      billingService.getStatements.mockReturnValue(of([statement({ frozen_at: FROZEN })]));
+      const { c, entry } = loaded();
+      c.togglePaid(entry, 'first', true);
+      expect(entry.paid_first).toBe(true);
+      dialogResult = { amount_override: 300 };
+      c.openOverrideDialog(entry, 'first', click());
+      expect(entry.due_first).toBe(300);
+    });
+
+    it('the PDF header says when the month closed', () => {
+      billingService.getStatements.mockReturnValue(of([statement({ frozen_at: FROZEN })]));
+      const { c } = loaded();
+      c.exportPDF();
+      const doc = (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
+      expect(doc.text).toHaveBeenCalledWith('Billing: July 2026 (closed Aug 1, 2026)', 14, 23);
+    });
+  });
+
   it('a row click navigates to the contact page; entries without an id are inert', () => {
     const c = build();
     c.openContact({ contact_id: 'c-1' } as never);
@@ -757,6 +795,27 @@ describe('Billing', () => {
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('.detail-table')).toBeNull();
       expect(fixture.nativeElement.querySelector('.detail-summary')).not.toBeNull();
+    });
+
+    it('renders the closed label and the legacy note', () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement({ lines: [], legacy: true, frozen_at: '2026-08-01T10:00:00.000Z' }),
+      ]));
+      const fixture = render();
+      expect(text(fixture)).toContain('Closed Aug 1, 2026');
+      expect(fixture.nativeElement.querySelector('.legacy-note')).toBeNull();
+      (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.legacy-note')).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('.detail-table')).toBeNull();
+    });
+
+    it('an open month shows neither', () => {
+      const fixture = render();
+      expect(text(fixture)).not.toContain('Closed');
+      (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.legacy-note')).toBeNull();
     });
 
     it('renders the error, empty and non-admin states', () => {
