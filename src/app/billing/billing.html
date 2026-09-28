@@ -2,7 +2,15 @@
   <div class="btc-page-header">
     <div class="billing-heading">
       <h2>Billing</h2>
-      <span class="billing-period">{{monthStart | date:'MMMM y'}}</span>
+      <span class="billing-period">
+        {{monthStart | date:'MMMM y'}}
+        @if (monthClosed) {
+          <span class="billing-label closed-label"
+                matTooltip="This month has closed. Amounts no longer recalculate; mark payments and use an override to correct one.">
+            Closed {{closedOn}}
+          </span>
+        }
+      </span>
     </div>
     <div class="billing-controls">
       <button matIconButton type="button" aria-label="Previous month" matTooltip="Previous month"
@@ -167,6 +175,12 @@
           <td mat-cell *matCellDef="let item" [attr.colspan]="billingColumns.length" class="detail-cell">
             @if (isExpanded(item) && item.statement; as statement) {
               <div class="billing-detail">
+                @if (statement.legacy) {
+                  <p class="legacy-note">
+                    Billed before the itemised statements began: the amounts come from the billing
+                    records of the time, without a line breakdown.
+                  </p>
+                }
                 @if (statement.lines.length) {
                   <table class="detail-table">
                     <thead>

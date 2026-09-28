@@ -189,6 +189,19 @@ export class Billing implements OnInit {
     }
   }
 
+  /** True when the shown month has closed: its amounts no longer recalculate. */
+  protected get monthClosed(): boolean {
+    return this.dataSource.data.some(e => !!e.statement?.frozen_at);
+  }
+
+  /** e.g. 'Oct 1, 2026': when the shown month was closed. */
+  protected get closedOn(): string {
+    const stamp = this.dataSource.data.find(e => !!e.statement?.frozen_at)?.statement?.frozen_at;
+    return stamp
+      ? new Date(stamp).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})
+      : '';
+  }
+
   protected isExpanded(entry: BillingEntry): boolean {
     return !!entry.contact_id && this.expanded.has(entry.contact_id);
   }
@@ -385,7 +398,7 @@ export class Billing implements OnInit {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
-    doc.text(`Billing: ${monthStr}`, 14, 23);
+    doc.text(this.monthClosed ? `Billing: ${monthStr} (closed ${this.closedOn})` : `Billing: ${monthStr}`, 14, 23);
     if (this.dataSource.data.some(e => this.isOverridden(e, 'first') || this.isOverridden(e, 'fifteenth'))) {
       doc.text('* manually overridden amount', 120, 23);
     }

@@ -211,3 +211,16 @@
   font-weight: 700;
   color: var(--btc-teal-deep);
 }
+
+.billing .closed-label {
+  margin-left: 8px;
+  background: var(--btc-ink, #062e3b);
+  color: #fff;
+}
+
+.billing .legacy-note {
+  margin: 0 0 10px;
+  font-size: .85rem;
+  font-style: italic;
+  color: var(--btc-teal-deep);
+}
