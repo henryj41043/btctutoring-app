@@ -14,8 +14,13 @@
     <div class="cognito-warning">
       <mat-icon color="warn">warning</mat-icon>
       <p>
-        All <strong>students</strong> and <strong>notes</strong> associated with this contact
-        will also be permanently deleted.
+        All <strong>students</strong>, <strong>notes</strong> and <strong>documents</strong>
+        associated with this contact will also be permanently deleted.
+        @if (documentCount > 0) {
+          <span class="document-count">
+            This contact has {{documentCount}} {{documentCount === 1 ? 'document' : 'documents'}}.
+          </span>
+        }
       </p>
     </div>
     @if (contact.user_profile_created) {

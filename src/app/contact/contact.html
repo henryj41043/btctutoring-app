@@ -567,9 +567,11 @@
     }
   </div>
 
-  <!-- Both sections admin-gate and load themselves, hiding while empty. -->
+  <!-- These sections admin-gate and load themselves. Reminders and emails
+       hide while empty; documents always shows so a file can be added. -->
   <app-contact-reminders-section class="contact-reminders contact-section" [contactId]="id"/>
   <app-contact-emails-section class="contact-emails contact-section" [contactId]="id"/>
+  <app-contact-documents-section class="contact-documents contact-section" [contactId]="id"/>
 
   @if (!(contactForm.pristine && contactForm.untouched) || updatedSuccessfully || updateError) {
     <div class="contact-save-bar">

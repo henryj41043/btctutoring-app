@@ -1,0 +1,132 @@
+/* The host carries the page's .contact-section card classes; this file owns
+   the section's internals (the parent's scoped styles can't reach them). */
+:host {
+  display: block;
+}
+
+h2 {
+  margin: 0 0 12px;
+  padding-bottom: 10px;
+  font-size: 1.4rem;
+  color: var(--btc-ink);
+  border-bottom: 2px solid color-mix(in srgb, var(--btc-sky) 60%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.file-picker {
+  display: none;
+}
+
+.documents-hint,
+.documents-empty {
+  margin: 0 0 10px;
+  font-size: .85rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.documents-error,
+.upload-error {
+  color: var(--mat-sys-error);
+}
+
+.documents-error {
+  margin: 0 0 10px;
+}
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  min-height: 40px;
+
+  .upload-name {
+    flex: 0 1 40%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  mat-progress-bar {
+    flex: 1;
+  }
+
+  .upload-percent {
+    flex: 0 0 3.5em;
+    text-align: right;
+    font-size: .85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .upload-error {
+    flex: 1;
+    font-size: .9rem;
+  }
+}
+
+.document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.document-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--btc-sky) 45%, transparent);
+  border-radius: var(--btc-radius-sm);
+  padding-right: 6px;
+}
+
+.document-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--btc-sky) 18%, transparent);
+  }
+
+  .document-icon {
+    flex: 0 0 auto;
+    color: var(--btc-teal-deep);
+  }
+
+  .document-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .document-meta {
+    flex: 0 0 auto;
+    font-size: .85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.confirm-delete {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: .9rem;
+
+  .delete-button {
+    color: var(--mat-sys-error);
+  }
+}
