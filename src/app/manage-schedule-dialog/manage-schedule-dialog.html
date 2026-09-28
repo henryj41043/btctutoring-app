@@ -76,6 +76,68 @@
       }
     </div>
 
+    @if (showFirstWeek) {
+      <div class="first-week">
+        <div class="first-week-header">
+          <p class="first-week-title">First-week sessions</p>
+          <button matButton type="button" (click)="addFirstWeekSession()">
+            <mat-icon>add</mat-icon>
+            Add one-off session
+          </button>
+        </div>
+        <p class="schedule-info">
+          Optional. For a student who starts mid-week and takes the missed session on another day
+          that week. These count toward the first month's bill; the regular schedule applies after.
+        </p>
+        @for (row of firstWeek; track $index) {
+          <div class="slot-row">
+            <mat-form-field>
+              <mat-label>Date</mat-label>
+              <input matInput [matDatepicker]="firstWeekPicker" [(ngModel)]="row.date"
+                     [min]="firstWeekMin" [max]="firstWeekMax">
+              <mat-datepicker #firstWeekPicker/>
+              <mat-datepicker-toggle [for]="firstWeekPicker" matSuffix/>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Start time</mat-label>
+              <mat-select [(ngModel)]="row.start_time">
+                @for (t of timeOptions; track t.value) {
+                  <mat-option [value]="t.value">{{t.label}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Length</mat-label>
+              <mat-select [(ngModel)]="row.length_min">
+                <mat-option [value]="null">Default ({{def.sessionLengthMin}} min)</mat-option>
+                @for (option of lengthOptions; track option) {
+                  <mat-option [value]="option">{{option}} min</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Tutor</mat-label>
+              <mat-select [(ngModel)]="row.tutor_id">
+                <mat-option [value]="null">Primary ({{tutor ? contactDisplayName(tutor) : '—'}})</mat-option>
+                @for (option of tutorOptions; track option.id) {
+                  <mat-option [value]="option.id">{{contactDisplayName(option)}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <button matIconButton type="button" aria-label="Remove one-off session"
+                    (click)="removeFirstWeekSession($index)">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        }
+      </div>
+    }
+    @if (storedFirstWeek.length) {
+      <p class="schedule-info">
+        First-week one-off sessions: {{storedFirstWeek.join('; ')}}. Editing the weekly schedule leaves them as they are.
+      </p>
+    }
+
     @if (!pendingMode) {
       <mat-slide-toggle [(ngModel)]="autoRenew">Auto-renew this schedule each month</mat-slide-toggle>
       <p class="schedule-info auto-renew-hint">

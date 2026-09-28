@@ -252,6 +252,61 @@ describe('ScheduleService', () => {
       expect(result).toBe(saved);
     });
 
+    it('adds the first-week one-off sessions outside any series and stores them', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      const firstWeek = [
+        {date: '2026-07-04', start_time: '11:00', end_time: '11:45'},
+        {date: '2026-07-05', start_time: '09:00', end_time: '09:30', tutor_id: 't-2'},
+        {date: '2026-07-06', start_time: '09:00', end_time: '09:30', tutor_id: 't-x'},
+      ];
+      const byId = new Map([['t-2', tutor({id: 't-2', first_name: 'Theo'})]]);
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 1), true, byId, firstWeek).subscribe();
+
+      const created = sessionsService.createSessions.mock.calls.at(-1)![0] as Session[];
+      expect(created).toHaveLength(12); // 9 regular + 3 one-offs
+      const oneOffs = created.slice(9);
+      expect(oneOffs.every(s => s.series_id === undefined)).toBe(true);
+      expect(created.slice(0, 9).every(s => !!s.series_id)).toBe(true);
+      expect(oneOffs[0]).toEqual(expect.objectContaining({
+        type: SessionType.TUTORING,
+        status: SessionStatus.PENDING,
+        notes: '',
+        student_id: student().id,
+        tutor_id: 't-1',
+        tutor_name: tutor().first_name,
+        // 11:00 Eastern in July (EDT, UTC-4).
+        start_datetime: '2026-07-04T15:00:00.000Z',
+        end_datetime: '2026-07-04T15:45:00.000Z',
+      }));
+      expect(oneOffs.map(s => [s.tutor_id, s.tutor_name])).toEqual([
+        ['t-1', tutor().first_name], ['t-2', 'Theo'], ['t-x', ''],
+      ]);
+      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+      expect(saved.first_week_sessions).toEqual(firstWeek);
+    });
+
+    it('a new schedule without one-offs clears any stored ones', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      service.createSchedule(
+        student({first_week_sessions: [{date: '2026-01-02', start_time: '09:00', end_time: '09:30'}]}),
+        tutor(), slots, new Date(2026, 6, 1), true,
+      ).subscribe();
+      expect((sessionsService.createSessions.mock.calls.at(-1)![0] as Session[])).toHaveLength(9);
+      expect((studentService.updateStudent.mock.calls.at(-1)![0] as Student).first_week_sessions).toEqual([]);
+    });
+
+    it('creates only the one-offs when the start month has no regular session left', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      // Fri Jul 31 2026: no Monday or Wednesday remains in July.
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 31), true, new Map(), [
+        {date: '2026-08-01', start_time: '11:00', end_time: '11:45'},
+      ]).subscribe();
+      expect((sessionsService.createSessions.mock.calls.at(-1)![0] as Session[])).toHaveLength(1);
+    });
+
     it('mints one series per distinct effective tutor', () => {
       sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
       studentService.updateStudent.mockReturnValue(of({} as Student));

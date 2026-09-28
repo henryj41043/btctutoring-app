@@ -15,9 +15,10 @@ import {MatInputModule} from '@angular/material/input';
 import {MatSelectModule} from '@angular/material/select';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {MatIconModule} from '@angular/material/icon';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {catchError, EMPTY, of, switchMap, take} from 'rxjs';
-import {PendingChange, Student} from '../models/student.model';
+import {FirstWeekSession, PendingChange, Student} from '../models/student.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
@@ -39,10 +40,11 @@ export interface ManageScheduleDialogData {
   student: Student;
   tutor?: Contact;
   /**
-   * Pending mode: the effective date ('YYYY-MM-01') of the SCHEDULED package
+   * Pending mode: the effective date ('YYYY-MM-DD') of the SCHEDULED package
    * change whose slots are being edited. Validates against that change's
    * package definition and persists only that change's schedule inside
-   * pending_changes — no sessions are created or deleted, and the live
+   * pending_changes. Pending sessions already generated from that date on
+   * are removed and refilled by the service; the live
    * schedule/package_start_date/auto_renew stay untouched.
    */
   pendingEffective?: string;
@@ -57,6 +59,19 @@ interface ScheduleSlotInput {
   /** CUSTOM packages only: this slot's length; null = the package default. */
   length_min: number | null;
 }
+
+/** A first-week one-off session being entered. */
+interface FirstWeekInput {
+  date: Date | null;
+  start_time: string; // 'HH:mm'
+  /** null = the package's session length. */
+  length_min: number | null;
+  /** null = the student's primary tutor. */
+  tutor_id: string | null;
+}
+
+/** The start week: the start date and the six days after it. */
+export const FIRST_WEEK_DAYS = 7;
 
 @Component({
   selector: 'app-manage-schedule-dialog',
@@ -73,6 +88,7 @@ interface ScheduleSlotInput {
     MatDatepickerModule,
     MatSelectModule,
     MatSlideToggleModule,
+    MatIconModule,
   ],
   templateUrl: './manage-schedule-dialog.html',
   standalone: true,
@@ -107,6 +123,9 @@ export class ManageScheduleDialog implements OnInit {
   /** Every resolvable tutor contact (options + fetched former staff). */
   private staffById = new Map<string, Contact>();
 
+  /** One-off sessions of the start week (create mode only). */
+  firstWeek: FirstWeekInput[] = [];
+
   errorMessage: string = '';
   hasError: boolean = false;
   saving: boolean = false;
@@ -133,6 +152,80 @@ export class ManageScheduleDialog implements OnInit {
   get isCustomPackage(): boolean {
     const pkg = this.pendingMode ? this.change?.package : this.student.package;
     return pkg === CUSTOM_PACKAGE;
+  }
+
+  /** First-week sessions are entered when a schedule is first set up. */
+  get showFirstWeek(): boolean {
+    return !this.pendingMode && !this.isEdit;
+  }
+
+  /** The one-off sessions already stored for this schedule's start week (shown read-only when editing). */
+  get storedFirstWeek(): string[] {
+    if (this.pendingMode || !this.isEdit) {
+      return [];
+    }
+    return (this.student.first_week_sessions ?? []).map(s => {
+      const date = this.parseDateKey(s.date);
+      const label = date
+        ? date.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})
+        : s.date;
+      const time = this.timeOptions.find(t => t.value === s.start_time)?.label ?? s.start_time;
+      return `${label}, ${time}`;
+    });
+  }
+
+  /** The first and last day a first-week session may fall on. */
+  get firstWeekMin(): Date | null {
+    return this.startDate
+      ? new Date(this.startDate.getFullYear(), this.startDate.getMonth(), this.startDate.getDate())
+      : null;
+  }
+
+  get firstWeekMax(): Date | null {
+    return this.startDate
+      ? new Date(this.startDate.getFullYear(), this.startDate.getMonth(),
+          this.startDate.getDate() + FIRST_WEEK_DAYS - 1)
+      : null;
+  }
+
+  addFirstWeekSession(): void {
+    this.firstWeek = [...this.firstWeek, {date: null, start_time: '', length_min: null, tutor_id: null}];
+  }
+
+  removeFirstWeekSession(index: number): void {
+    this.firstWeek = this.firstWeek.filter((_, i) => i !== index);
+  }
+
+  /**
+   * The entered one-off sessions as they will be saved, or an error message
+   * when a row is incomplete or falls outside the start week.
+   */
+  private firstWeekSessions(): FirstWeekSession[] | string {
+    if (!this.showFirstWeek) {
+      return [];
+    }
+    const min = this.firstWeekMin!;
+    const max = this.firstWeekMax!;
+    const sessions: FirstWeekSession[] = [];
+    for (const row of this.firstWeek) {
+      if (!row.date || !row.start_time) {
+        return 'Please choose a date and start time for every first-week session.';
+      }
+      const day = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate());
+      if (day < min || day > max) {
+        return 'A first-week session must fall within seven days of the start date.';
+      }
+      const month = `${day.getMonth() + 1}`.padStart(2, '0');
+      const date = `${day.getFullYear()}-${month}-${`${day.getDate()}`.padStart(2, '0')}`;
+      sessions.push({
+        date,
+        start_time: row.start_time,
+        end_time: this.scheduleService.addMinutesToTime(
+          row.start_time, row.length_min ?? this.def!.sessionLengthMin),
+        ...(row.tutor_id ? {tutor_id: row.tutor_id} : {}),
+      });
+    }
+    return sessions;
   }
 
   /** Pending mode opened for a change that is no longer on the student. */
@@ -285,6 +378,12 @@ export class ManageScheduleDialog implements OnInit {
       return;
     }
 
+    const firstWeek = this.firstWeekSessions();
+    if (typeof firstWeek === 'string') {
+      this.fail(firstWeek);
+      return;
+    }
+
     // The override key is OMITTED when null: dynamoose rejects a nested
     // null (buildStudentAttributes strips nulls at the top level only).
     // CUSTOM packages may give each slot its own length; fixed packages
@@ -340,7 +439,7 @@ export class ManageScheduleDialog implements OnInit {
       }
     }
 
-    this.persist(slots);
+    this.persist(slots, firstWeek);
   }
 
   /** The effective date as a local Date (component parse — never new Date(string)). */
@@ -366,7 +465,7 @@ export class ManageScheduleDialog implements OnInit {
     return this.parseDateKey(later);
   }
 
-  private persist(slots: ScheduleSlot[]): void {
+  private persist(slots: ScheduleSlot[], firstWeek: FirstWeekSession[] = []): void {
     this.saving = true;
     if (this.pendingMode) {
       // Only this change's slots change — no live-schedule fields. The whole
@@ -398,7 +497,8 @@ export class ManageScheduleDialog implements OnInit {
     const tutor = this.tutor!;
     const request$ = this.isEdit
       ? this.scheduleService.updateSchedule(this.student, tutor, slots, this.autoRenew, this.staffById)
-      : this.scheduleService.createSchedule(this.student, tutor, slots, this.startDate!, this.autoRenew, this.staffById);
+      : this.scheduleService.createSchedule(
+          this.student, tutor, slots, this.startDate!, this.autoRenew, this.staffById, firstWeek);
     request$
       .pipe(
         catchError(() => {
