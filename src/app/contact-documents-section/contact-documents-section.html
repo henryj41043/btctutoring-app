@@ -1,0 +1,73 @@
+<h2>
+  Documents
+  <button matButton type="button" class="upload-button" (click)="filePicker.click()">
+    <mat-icon>upload_file</mat-icon>
+    Upload document
+  </button>
+</h2>
+<input #filePicker type="file" class="file-picker" multiple [accept]="accept"
+       aria-label="Choose documents to upload" (change)="onFilesPicked($event)">
+<p class="documents-hint">PDF, Word, JPG or PNG, up to 15 MB each.</p>
+
+@for (upload of uploads; track upload.key) {
+  <div class="upload-row" [class.upload-row--failed]="upload.error">
+    <span class="upload-name">{{upload.name}}</span>
+    @if (upload.error) {
+      <span class="upload-error">{{upload.error}}</span>
+      <button matIconButton type="button" aria-label="Dismiss" (click)="dismissUpload(upload)">
+        <mat-icon>close</mat-icon>
+      </button>
+    } @else {
+      <mat-progress-bar mode="determinate" [value]="upload.percent"></mat-progress-bar>
+      <span class="upload-percent">{{upload.percent}}%</span>
+    }
+  </div>
+}
+
+@if (actionError) {
+  <p class="documents-error">{{actionError}}</p>
+}
+
+@if (loading) {
+  <mat-spinner [diameter]="28"></mat-spinner>
+} @else if (loadFailed) {
+  <p class="documents-error">The documents could not be loaded. Reload the page to try again.</p>
+} @else if (documents.length === 0 && uploads.length === 0) {
+  <p class="documents-empty">No documents yet.</p>
+} @else {
+  <div class="document-list">
+    @for (document of documents; track document.id) {
+      <div class="document-row">
+        <button type="button" class="document-open" (click)="open(document)"
+                [matTooltip]="opensInBrowser(document.content_type) ? 'Open in a new tab' : 'Download'">
+          <mat-icon class="document-icon">{{documentIcon(document.content_type)}}</mat-icon>
+          <span class="document-name">{{document.file_name}}</span>
+          <span class="document-meta">
+            {{formatFileSize(document.size)}} · {{document.uploaded_at | date:'mediumDate'}}
+            @if (document.uploaded_by) {
+              · {{document.uploaded_by}}
+            }
+          </span>
+        </button>
+        @if (busyId === document.id) {
+          <mat-spinner [diameter]="20"></mat-spinner>
+        } @else if (pendingDeleteId === document.id) {
+          <span class="confirm-delete">
+            Delete {{document.file_name}}?
+            <button matButton type="button" class="delete-button" (click)="confirmDelete(document)">Delete</button>
+            <button matButton type="button" (click)="cancelDelete()">Cancel</button>
+          </span>
+        } @else {
+          <button matIconButton type="button" aria-label="Download document" matTooltip="Download"
+                  (click)="download(document, $event)">
+            <mat-icon>download</mat-icon>
+          </button>
+          <button matIconButton type="button" aria-label="Delete document" matTooltip="Delete"
+                  (click)="askDelete(document, $event)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+      </div>
+    }
+  </div>
+}

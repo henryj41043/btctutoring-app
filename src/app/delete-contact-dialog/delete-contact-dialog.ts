@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
@@ -15,6 +15,7 @@ import {Contact} from '../models/contact.model';
 import {ContactService} from '../services/contact.service';
 import {StudentService} from '../services/student.service';
 import {NoteService} from '../services/note.service';
+import {DocumentService} from '../services/document.service';
 import {AuthService} from '../services/auth.service';
 import {contactDisplayName} from '../utils/contact-name';
 
@@ -34,23 +35,39 @@ import {contactDisplayName} from '../utils/contact-name';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
 })
-export class DeleteContactDialog {
+export class DeleteContactDialog implements OnInit {
   readonly contact = inject<Contact>(MAT_DIALOG_DATA);
   private contactService = inject(ContactService);
   private studentService = inject(StudentService);
   private noteService = inject(NoteService);
+  private documentService = inject(DocumentService);
   private authService = inject(AuthService);
   private dialogRef = inject(MatDialogRef<DeleteContactDialog>);
   private cdr = inject(ChangeDetectorRef);
 
   protected deleting = false;
   protected error: string | null = null;
+  /** How many uploaded documents go with the contact (shown in the warning). */
+  protected documentCount = 0;
 
   /** Name-less (newsletter) contacts read as their email address. */
   protected readonly displayName = contactDisplayName(this.contact);
 
   /** True when the contact being deleted is the currently logged-in user. */
   protected readonly isSelf = this.contact.id === this.authService.contact().id;
+
+  ngOnInit(): void {
+    if (this.isSelf || !this.contact.id) {
+      return;
+    }
+    // Only for the warning text: a failed count never blocks the delete.
+    this.documentService.getDocumentsForContact(this.contact.id).pipe(
+      catchError(() => EMPTY),
+    ).subscribe(documents => {
+      this.documentCount = documents.length;
+      this.cdr.markForCheck();
+    });
+  }
 
   confirm(): void {
     this.deleting = true;
@@ -69,7 +86,8 @@ export class DeleteContactDialog {
         )
       : of(null);
 
-    // Step 2 → 3 → 4: Delete students + notes in parallel, then delete the contact.
+    // Step 2 → 3 → 4: Delete students, notes and documents in parallel, then
+    // delete the contact.
     cognitoDelete$.pipe(
       switchMap(() => {
         const students$ = this.studentService.getStudentsByContact(this.contact.id!).pipe(
@@ -86,7 +104,8 @@ export class DeleteContactDialog {
               : of([])
           )
         );
-        return forkJoin([students$, notes$]);
+        const documents$ = this.documentService.deleteForContact(this.contact.id!);
+        return forkJoin([students$, notes$, documents$]);
       }),
       switchMap(() => this.contactService.deleteContact(this.contact.id!)),
       catchError(() => {

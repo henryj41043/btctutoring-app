@@ -60,6 +60,7 @@ import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
 import {ContactRemindersSection} from '../contact-reminders-section/contact-reminders-section';
 import {ContactEmailsSection} from '../contact-emails-section/contact-emails-section';
+import {ContactDocumentsSection} from '../contact-documents-section/contact-documents-section';
 import {ContactScholarshipSection} from '../contact-scholarship-section/contact-scholarship-section';
 import {Router} from '@angular/router';
 
@@ -90,6 +91,7 @@ const ADDRESS_CONTROLS = ['address_line1', 'address_line2', 'city', 'state', 'zi
     PhoneFormatDirective,
     ContactRemindersSection,
     ContactEmailsSection,
+    ContactDocumentsSection,
     ContactScholarshipSection,
   ],
   templateUrl: './contact.html',
