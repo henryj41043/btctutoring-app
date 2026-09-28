@@ -410,7 +410,10 @@ export class EventCalendar implements OnInit {
       const editable = this.isSessionEditable(session);
       // Group sessions are fixed 45-minute weekly occurrences — dragging or
       // resizing would bypass the length rule and the roster-aware dialog.
-      const adjustable = editable && !isGroup;
+      // Once attendance was taken the session is final for the tutor: only
+      // an admin may still move it.
+      const finalized = !!session.status && session.status !== SessionStatus.PENDING;
+      const adjustable = editable && !isGroup && (!finalized || this.authService.isAdmin());
       const timeRange = `${formatDate(new Date(session.start_datetime as string), 'h:mm a', this.locale)} to ${formatDate(new Date(session.end_datetime as string), 'h:mm a', this.locale)}`;
       return {
         title: isAdmin
@@ -501,8 +504,6 @@ export class EventCalendar implements OnInit {
     }
     this.events = this.sortByTime(this.events.map((iEvent) => {
       if (iEvent === event) {
-        event.meta.start = newStart.toISOString();
-        event.meta.end = newEnd?.toISOString();
         return {
           ...event,
           start: newStart,
@@ -511,10 +512,13 @@ export class EventCalendar implements OnInit {
       }
       return iEvent;
     }));
-    this.handleEvent('Dropped or resized', event);
+    this.handleEvent('Dropped or resized', event, {
+      start: newStart.toISOString(),
+      ...(newEnd ? {end: newEnd.toISOString()} : {}),
+    });
   }
 
-  handleEvent(action: string, event: CalendarEvent): void {
+  handleEvent(action: string, event: CalendarEvent, movedTo?: {start: string; end?: string}): void {
     if (this.isReminderEvent(event)) {
       // Reminders route to their own dialog; they are never drag/resized.
       if (action === 'Deleted') {
@@ -538,7 +542,7 @@ export class EventCalendar implements OnInit {
         this.openEditSessionDialog(event.meta);
         break;
       case 'Dropped or resized':
-        this.openEditSessionDialog(event.meta);
+        this.openEditSessionDialog(event.meta, movedTo);
         break;
       case 'Deleted':
         this.openDeleteSessionDialog(event.meta);
@@ -580,14 +584,18 @@ export class EventCalendar implements OnInit {
     });
   }
 
-  openEditSessionDialog(item: any): void {
+  openEditSessionDialog(item: any, movedTo?: {start: string; end?: string}): void {
     console.log('openEditSessionDialog');
     if ((item as Session).type === SessionType.GROUP) {
       this.openGroupSessionDialog('edit', item as Session);
       return;
     }
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
-      data: {type: 'edit', session: item, existingSessions: this.allSessions},
+      data: {
+        type: 'edit', session: item, existingSessions: this.allSessions,
+        // A drag or resize: the form opens on the dropped times.
+        ...(movedTo ? {movedTo} : {}),
+      },
     });
 
     sessionDialogRef.afterClosed().subscribe((result: Session): void => {

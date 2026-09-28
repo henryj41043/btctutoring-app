@@ -15,4 +15,10 @@ export interface SessionDialogData {
    * the backend rule — non-admins may only create their own make-ups.
    */
   lockToMakeup?: boolean;
+  /**
+   * A calendar drag or resize: the new start and end (ISO). The form opens
+   * on these times while `session` keeps the stored ones, so the change is
+   * still seen as a change (series scope, availability and schedule checks).
+   */
+  movedTo?: {start: string; end?: string};
 }

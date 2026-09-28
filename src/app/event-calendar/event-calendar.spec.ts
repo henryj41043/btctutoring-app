@@ -769,4 +769,80 @@ describe('EventCalendar', () => {
       expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
     });
   });
+
+  describe('attendance lock', () => {
+    const at = (over: Partial<Session>): Session => ({
+      id: 'x',
+      type: SessionType.TUTORING,
+      tutor_id: 't-self',
+      tutor_name: 'Tess',
+      student_name: 'Pat',
+      start_datetime: '2026-06-01T14:00:00.000Z',
+      end_datetime: '2026-06-01T15:00:00.000Z',
+      ...over,
+    } as Session);
+    const load = (sessions: Session[]) => {
+      sessionsService.getAllSessions.mockReturnValue(of(sessions));
+      sessionsService.getSessionsByTutor.mockReturnValue(of(sessions));
+      const c = build();
+      c.ngOnInit();
+      return c;
+    };
+
+    it('a tutor cannot drag or resize a session once attendance was taken', () => {
+      isAdmin = false;
+      groups = ['Tutors'];
+      contactId = 't-self';
+      const c = load([
+        at({id: 'pending', status: SessionStatus.PENDING}),
+        at({id: 'done', status: SessionStatus.COMPLETED}),
+        at({id: 'cancelled', status: SessionStatus.CANCELLED}),
+        at({id: 'unset', status: undefined}),
+      ]);
+      const movable = Object.fromEntries(c.events.map(e => [(e.meta as Session).id, e.draggable]));
+      expect(movable).toEqual({pending: true, done: false, cancelled: false, unset: true});
+      const done = c.events.find(e => (e.meta as Session).id === 'done')!;
+      expect(done.resizable).toEqual({beforeStart: false, afterEnd: false});
+      // It still opens for the notes.
+      expect(done.actions!.length).toBeGreaterThan(0);
+    });
+
+    it('an admin may still move a finalized session', () => {
+      isAdmin = true;
+      const c = load([at({id: 'done', status: SessionStatus.COMPLETED})]);
+      expect(c.events[0].draggable).toBe(true);
+      expect(c.events[0].resizable).toEqual({beforeStart: true, afterEnd: true});
+    });
+
+    it('a drop opens the dialog on the new times and leaves the stored session alone', () => {
+      isAdmin = true;
+      afterClosed = undefined as never;
+      const c = load([at({id: 'pending', status: SessionStatus.PENDING})]);
+      const event = c.events[0];
+      c.eventTimesChanged({
+        event,
+        newStart: new Date('2026-06-02T16:00:00.000Z'),
+        newEnd: new Date('2026-06-02T17:00:00.000Z'),
+      } as never);
+      const data = dialog.open.mock.calls.at(-1)![1] as {data: {session: Session; movedTo?: unknown; type: string}};
+      expect(data.data.type).toBe('edit');
+      expect(data.data.movedTo).toEqual({
+        start: '2026-06-02T16:00:00.000Z',
+        end: '2026-06-02T17:00:00.000Z',
+      });
+      expect(data.data.session.start_datetime).toBe('2026-06-01T14:00:00.000Z');
+      expect('start' in (data.data.session as object)).toBe(false);
+    });
+
+    it('a drop without an end carries the start only; a click carries nothing', () => {
+      isAdmin = true;
+      afterClosed = undefined as never;
+      const c = load([at({id: 'pending', status: SessionStatus.PENDING})]);
+      c.eventTimesChanged({event: c.events[0], newStart: new Date('2026-06-02T16:00:00.000Z')} as never);
+      expect((dialog.open.mock.calls.at(-1)![1] as {data: {movedTo?: unknown}}).data.movedTo)
+        .toEqual({start: '2026-06-02T16:00:00.000Z'});
+      c.handleEvent('Clicked', c.events[0]);
+      expect('movedTo' in (dialog.open.mock.calls.at(-1)![1] as {data: object}).data).toBe(false);
+    });
+  });
 });

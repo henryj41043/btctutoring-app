@@ -2,6 +2,7 @@ import {DestroyRef, Component, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
@@ -20,7 +21,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {DatePipe} from '@angular/common';
 import {SessionsService} from '../services/sessions.service';
-import {Session} from '../models/session.model';
+import {AttendanceResult, Session} from '../models/session.model';
 import {Response} from '../models/response.model';
 import {catchError, EMPTY, forkJoin, Observable, of} from 'rxjs';
 import {ContactService} from '../services/contact.service';
@@ -37,7 +38,7 @@ import {ScheduleService} from '../services/schedule.service';
 import {PackageCatalog, PackageDef, resolvePackageDef, toCatalog} from '../utils/package-config';
 import {PackageService} from '../services/package.service';
 import {PackageRow} from '../models/package-row.model';
-import {availableMakeupMinutes, bankMakeupMinutes, consumeMakeupMinutes} from '../utils/makeup';
+import {availableMakeupMinutes} from '../utils/makeup';
 import {studentDisplayName} from '../utils/student-name';
 import {contactDisplayName} from '../utils/contact-name';
 import {studentVisibleToTutor} from '../utils/slot-tutor';
@@ -55,6 +56,7 @@ import {mutatesStudent, validateMakeupPendingBalance,
   selector: 'app-session-dialog',
   providers: [provideNativeDateAdapter()],
   imports: [
+    MatIconModule,
     MatDialogTitle,
     MatDialogContent,
     MatDialogActions,
@@ -167,7 +169,6 @@ export class SessionDialog implements OnInit {
   private scheduleWarningOverridden: boolean = false;
   private pendingAction: (() => void) | null = null;
   private pendingSession: Session | null = null;
-  private pendingStudentUpdate: Student | null = null;
 
   // Deleting a CANCELLED session leaves its banked make-up minutes on the
   // student (un-banking retroactively could go negative) — warn first.
@@ -329,9 +330,13 @@ export class SessionDialog implements OnInit {
       }
       this.selectedStudent = this.dialogData.session.student_id;
       this.selectedTutor = this.dialogData.session.tutor_id;
-      this.date = new Date(this.dialogData.session.start_datetime as string);
-      this.startTime = new Date(this.dialogData.session.start_datetime as string);
-      this.endTime = new Date(this.dialogData.session.end_datetime as string);
+      // A calendar drag or resize opens the form on the dropped times.
+      const moved = this.dialogData.movedTo;
+      const start = moved?.start ?? (this.dialogData.session.start_datetime as string);
+      const end = moved?.end ?? (this.dialogData.session.end_datetime as string);
+      this.date = new Date(start);
+      this.startTime = new Date(start);
+      this.endTime = new Date(end);
       this.selectedAttendance = this.dialogData.session.status;
       this.notes = this.dialogData.session.notes as string;
     }
@@ -467,38 +472,169 @@ export class SessionDialog implements OnInit {
   cancelStatusChange(): void {
     this.showStatusConfirm = false;
     this.pendingSession = null;
-    this.pendingStudentUpdate = null;
   }
 
+  /**
+   * Takes attendance. The service owns the status change AND the make-up
+   * minutes that go with it, so the browser no longer writes the student.
+   * When the date, time, tutor, student or type changed in the same save,
+   * those are saved first (the session is still Pending); then attendance.
+   * The notes email, when ticked, goes out once attendance is saved.
+   */
   confirmStatusChange(): void {
     if (this.submitting || !this.pendingSession) return;
     this.submitting = true;
-    const doUpdate = () => {
-      this.sessionsService.updateSession(this.pendingSession!).pipe(
+    const session = this.pendingSession;
+    const takeAttendance = () => {
+      this.sessionsService.setAttendance(session.id!, {status: session.status as string, notes: session.notes}).pipe(
+        catchError(err => {
+          this.errorMessage = this.attendanceError(err, 'Taking attendance failed');
+          this.hasError = true;
+          this.submitting = false;
+          return EMPTY;
+        })
+      ).subscribe(result => {
+        this.hasError = false;
+        this.closeAfterUpdate(result.session);
+      });
+    };
+
+    const otherFieldsChanged = !this.scheduleFieldsUnchanged()
+      || session.type !== this.dialogData.session.type;
+    if (otherFieldsChanged) {
+      this.sessionsService.updateSession({...session, status: SessionStatus.PENDING}).pipe(
         catchError(err => {
           this.errorMessage = 'Update session failed';
           this.hasError = true;
           this.submitting = false;
           return EMPTY;
         })
-      ).subscribe(response => {
-        this.hasError = false;
-        this.dialogRef.close(response as Session);
+      ).subscribe(() => {
+        this.syncTrialDateAfterReschedule(session);
+        takeAttendance();
       });
-    };
-
-    if (this.pendingStudentUpdate) {
-      this.studentService.updateStudent(this.pendingStudentUpdate).pipe(
-        catchError(err => {
-          this.errorMessage = 'Failed to update student minutes';
-          this.hasError = true;
-          this.submitting = false;
-          return EMPTY;
-        })
-      ).subscribe(() => doUpdate());
     } else {
-      doUpdate();
+      takeAttendance();
     }
+  }
+
+  /** The service's own message when it sent one (e.g. not enough make-up minutes). */
+  private attendanceError(err: unknown, fallback: string): string {
+    const message = (err as {error?: {message?: unknown}} | null | undefined)?.error?.message;
+    return typeof message === 'string' && message ? message : fallback;
+  }
+
+  // ── Attendance lock + admin correction ───────────────────────────────────
+  /** Attendance was taken: the session is final for the tutor. */
+  get isFinalized(): boolean {
+    return this.isStatusLocked;
+  }
+
+  /**
+   * Date, time, tutor, student and type are frozen in view mode, and for a
+   * non-admin once attendance was taken. Notes stay editable.
+   */
+  get fieldsLocked(): boolean {
+    return this.isReadOnly || (this.isFinalized && !this.authService.isAdmin());
+  }
+
+  /** Only an admin may correct attendance that was already taken. */
+  get canCorrectAttendance(): boolean {
+    return this.isFinalized && !this.isReadOnly && this.authService.isAdmin();
+  }
+
+  /** The admin opened "Change attendance". */
+  correcting: boolean = false;
+  correctionStatus: SessionStatus | null = null;
+  correctionReason: string = '';
+  /** The service's preview of the make-up minutes before and after. */
+  correctionPreview: AttendanceResult['makeup'] | null = null;
+
+  /** The statuses an admin can move the session to (every one but its own). */
+  get correctionOptions(): SessionStatus[] {
+    return this.attendanceOptions.filter(option => option !== this.dialogData.session.status);
+  }
+
+  startCorrection(): void {
+    this.correcting = true;
+    this.correctionStatus = null;
+    this.correctionReason = '';
+    this.correctionPreview = null;
+    this.hasError = false;
+  }
+
+  cancelCorrection(): void {
+    this.correcting = false;
+    this.correctionPreview = null;
+    this.hasError = false;
+  }
+
+  /** Asks the service what the change would do to the make-up minutes. */
+  onCorrectionStatusChange(status: SessionStatus): void {
+    this.correctionStatus = status;
+    this.correctionPreview = null;
+    const id = this.dialogData.session.id;
+    if (!status || !id) {
+      return;
+    }
+    // The reason is checked on the real save; the preview needs a placeholder.
+    this.sessionsService.setAttendance(id, {status, reason: this.correctionReason.trim() || 'preview'}, true).pipe(
+      catchError(() => of(null)),
+    ).subscribe(result => {
+      if (this.correctionStatus === status) {
+        this.correctionPreview = result?.makeup ?? null;
+      }
+    });
+  }
+
+  /** e.g. 'Make-up minutes: 180 → 120' ('' when the change moves none). */
+  get correctionSummary(): string {
+    const preview = this.correctionPreview;
+    if (!preview || (preview.delta === 0 && preview.unrecovered === 0)) {
+      return '';
+    }
+    return `Make-up minutes: ${preview.before} → ${preview.after}`;
+  }
+
+  confirmCorrection(): void {
+    if (this.submitting) return;
+    const id = this.dialogData.session.id;
+    if (!this.correctionStatus || !id) {
+      this.errorMessage = 'Choose the corrected attendance.';
+      this.hasError = true;
+      return;
+    }
+    const reason = this.correctionReason.trim();
+    if (!reason) {
+      this.errorMessage = 'A reason is required to change attendance.';
+      this.hasError = true;
+      return;
+    }
+    this.submitting = true;
+    this.hasError = false;
+    this.sessionsService.setAttendance(id, {status: this.correctionStatus, reason}).pipe(
+      catchError(err => {
+        this.errorMessage = this.attendanceError(err, 'Changing attendance failed');
+        this.hasError = true;
+        this.submitting = false;
+        return EMPTY;
+      }),
+    ).subscribe(result => this.dialogRef.close(result.session));
+  }
+
+  /** e.g. 'Changed from Cancelled to Completed by Abby on Sep 28, 2026. Reason: …' */
+  get lastCorrection(): string {
+    const history = this.dialogData?.session?.attendance_history ?? [];
+    const last = [...history].reverse().find(change => !!change?.reason);
+    if (!last) {
+      return '';
+    }
+    const when = new Date(last.at);
+    const date = isNaN(when.getTime())
+      ? ''
+      : ` on ${when.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}`;
+    const who = last.by_name ? ` by ${last.by_name}` : '';
+    return `Changed from ${last.from} to ${last.to}${who}${date}. Reason: ${last.reason}`;
   }
 
   onStudentChange(studentId: string): void {
@@ -666,13 +802,9 @@ export class SessionDialog implements OnInit {
               return;
             }
           }
-          // Only cancelled tutoring (banks minutes) and finalized make-up (deducts
-          // minutes) mutate the student; completing a tutoring session does not.
-          if (mutatesStudent(this.selectedType, newStatus)) {
-            this.pendingStudentUpdate = this.selectedType === SessionType.MAKE_UP
-              ? consumeMakeupMinutes({ ...student }, duration)
-              : bankMakeupMinutes({ ...student }, duration, session.start_datetime as string);
-          }
+          // The make-up minutes themselves are moved by the service when
+          // attendance is saved (cancelled tutoring banks, a held or missed
+          // make-up deducts); the check above only fails fast.
         } else if (student && newStatus === SessionStatus.PENDING && this.selectedType === SessionType.MAKE_UP) {
           // Editing a still-pending make-up session (e.g. lengthening it): the
           // student's total pending make-up minutes must still fit their balance.

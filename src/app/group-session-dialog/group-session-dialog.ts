@@ -17,7 +17,7 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatTimepickerModule} from '@angular/material/timepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {provideNativeDateAdapter} from '@angular/material/core';
-import {catchError, EMPTY, forkJoin, of} from 'rxjs';
+import {catchError, EMPTY, forkJoin, map, of, switchMap} from 'rxjs';
 import {SessionsService} from '../services/sessions.service';
 import {ContactService} from '../services/contact.service';
 import {StudentService} from '../services/student.service';
@@ -117,6 +117,67 @@ export class GroupSessionDialog implements OnInit {
   /** Tutors edit only attendance + notes; the schedule/roster is admin-owned. */
   get isRestricted(): boolean {
     return !this.isAdmin;
+  }
+
+  // ── Attendance lock + admin correction ───────────────────────────────────
+  /** Attendance was taken: the status is final for the tutor. */
+  get isFinalized(): boolean {
+    const stored = this.data.session?.status;
+    return this.mode === 'edit' && !!stored && stored !== SessionStatus.PENDING;
+  }
+
+  get canCorrectAttendance(): boolean {
+    return this.isFinalized && this.isAdmin;
+  }
+
+  protected correcting: boolean = false;
+  protected correctionStatus: SessionStatus | null = null;
+  protected correctionReason: string = '';
+
+  /** The statuses an admin can move the session to (every one but its own). */
+  get correctionOptions(): SessionStatus[] {
+    return this.attendanceOptions.filter(option => option !== this.data.session?.status);
+  }
+
+  startCorrection(): void {
+    this.correcting = true;
+    this.correctionStatus = null;
+    this.correctionReason = '';
+    this.hasError = false;
+  }
+
+  cancelCorrection(): void {
+    this.correcting = false;
+    this.hasError = false;
+  }
+
+  confirmCorrection(): void {
+    if (this.submitting) {
+      return;
+    }
+    const id = this.data.session?.id;
+    if (!this.correctionStatus || !id) {
+      this.fail('Choose the corrected attendance.');
+      return;
+    }
+    const reason = this.correctionReason.trim();
+    if (!reason) {
+      this.fail('A reason is required to change attendance.');
+      return;
+    }
+    this.submitting = true;
+    this.hasError = false;
+    this.sessionsService.setAttendance(id, {status: this.correctionStatus, reason}).pipe(
+      catchError(error => {
+        this.fail(this.serviceMessage(error) ?? 'Changing attendance failed. Please try again.');
+        return EMPTY;
+      }),
+    ).subscribe(result => this.dialogRef.close(result.session));
+  }
+
+  private serviceMessage(error: unknown): string | null {
+    const message = (error as {error?: {message?: unknown}} | null | undefined)?.error?.message;
+    return typeof message === 'string' && message ? message : null;
   }
 
   get seriesActionLabel(): string {
@@ -323,16 +384,28 @@ export class GroupSessionDialog implements OnInit {
       ?? {id: original.tutor_id, first_name: original.tutor_name} as Contact;
   }
 
+  /**
+   * Saves one occurrence. Taking attendance goes through the attendance
+   * route (the service checks the role and records the change): the other
+   * fields are saved first with the status still as stored.
+   */
   private persistSingle(session: Session): void {
     this.submitting = true;
     this.hasError = false;
-    this.sessionsService.updateSession(session).pipe(
+    const stored = this.data.session!.status;
+    const takingAttendance = !!session.status && session.status !== stored && !!session.id;
+    this.sessionsService.updateSession(takingAttendance ? {...session, status: stored} : session).pipe(
+      switchMap(response => takingAttendance
+        ? this.sessionsService
+            .setAttendance(session.id!, {status: session.status as string, notes: session.notes})
+            .pipe(map(result => result.session))
+        : of(response as Session)),
       catchError(error => {
         console.log(error);
-        this.fail('Failed to save the session. Please try again.');
+        this.fail(this.serviceMessage(error) ?? 'Failed to save the session. Please try again.');
         return EMPTY;
       }),
-    ).subscribe(response => this.dialogRef.close(response as Session));
+    ).subscribe(response => this.dialogRef.close(response));
   }
 
   private updateSeriesFuture(): void {
