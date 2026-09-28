@@ -25,6 +25,7 @@ import { SessionType } from '../enums/session-type.enum';
 import { SessionStatus } from '../enums/session-status.enum';
 import { ReminderService } from '../services/reminder.service';
 import { EmailService } from '../services/email.service';
+import { DocumentService } from '../services/document.service';
 import { PackageService } from '../services/package.service';
 import { TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
 
@@ -89,6 +90,7 @@ describe('Contact', () => {
   // TestBed.createComponent instantiates children even without detectChanges.
   const reminderService = { getReminders: jest.fn(() => of([])) };
   const emailService = { getEmailsForContact: jest.fn(() => of([])), getOriginalUrl: jest.fn(() => of({ url: '' })) };
+  const documentService = { getDocumentsForContact: jest.fn(() => of([])) };
 
   const defaults = () => {
     contactService.getContact.mockReturnValue(of([fullContact()]));
@@ -117,6 +119,7 @@ describe('Contact', () => {
         { provide: BillingService, useValue: billingService },
         { provide: ReminderService, useValue: reminderService },
         { provide: EmailService, useValue: emailService },
+        { provide: DocumentService, useValue: documentService },
         { provide: PackageService, useValue: packageServiceStub },
         { provide: SessionsService, useValue: sessionsService },
       ],
