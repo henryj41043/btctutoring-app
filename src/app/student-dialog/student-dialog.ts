@@ -26,25 +26,21 @@ import {StudentStatus} from '../enums/student-status.enum';
 import {StudentService} from '../services/student.service';
 import {ScheduleService} from '../services/schedule.service';
 import {BillingService} from '../services/billing.service';
-import {formatMoney} from '../utils/statement-view';
+import {formatMoney, lineSummary} from '../utils/statement-view';
 import {PackageService} from '../services/package.service';
 import {PackageRow} from '../models/package-row.model';
 import {
   CUSTOM_PACKAGE,
   PackageCatalog,
   packageSelectOptions,
-  perSessionCost,
-  resolvePackageDef,
   round2,
   toCatalog,
 } from '../utils/package-config';
-import {countSlotsBeforeInMonth} from '../utils/proration';
-import {monthKey} from '../utils/billing-amount';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {
-  effectiveMonthLabel,
+  changeDateBounds,
+  monthKey,
   newChangesWithoutSchedule,
-  nextMonthFirsts,
   pendingChangeNote,
   pendingChangesOf,
   validatePendingChanges,
@@ -200,16 +196,7 @@ export class StudentDialog implements OnInit {
     });
     this.buildPlanningOverrideRows(student);
     this.watchPricing();
-    this.pendingMonthOptions = nextMonthFirsts(new Date());
-    // Stored effective dates outside the rolling window must stay selectable.
-    for (const stored of pendingChangesOf(student).map(c => c.effective).reverse()) {
-      if (!this.pendingMonthOptions.some(o => o.value === stored)) {
-        this.pendingMonthOptions = [
-          {value: stored, label: effectiveMonthLabel(stored)},
-          ...this.pendingMonthOptions,
-        ];
-      }
-    }
+    this.lockCurrentPackage();
   }
 
   // ── End of service ──
@@ -422,8 +409,77 @@ export class StudentDialog implements OnInit {
     return draft;
   }
 
-  /** Effective-month choices for a scheduled package change (next 6 firsts). */
-  protected pendingMonthOptions: {value: string; label: string}[] = [];
+  // ── Scheduled package changes: any future date inside the look-ahead ──
+  /** The earliest (tomorrow) and latest (end of the look-ahead) change dates. */
+  protected readonly changeBounds = changeDateBounds(new Date());
+  /** Each row's preview of the month its change lands in (both partial lines). */
+  private readonly rowPreviews = new Map<FormGroup, string[]>();
+
+  // ── The current package: locked once service has started ──
+  /** The admin unlocked the package to fix a data-entry mistake. */
+  protected correctingPackage: boolean = false;
+
+  /** Service has started: the package changes through a scheduled change. */
+  get serviceStarted(): boolean {
+    const stored = this.data.student;
+    const start = (stored?.package_start_date ?? '').slice(0, 10);
+    return this.mode === 'edit' && !!stored?.package && !!start && start <= this.toDateString(this.today)!;
+  }
+
+  get packageLocked(): boolean {
+    return this.serviceStarted && !this.correctingPackage;
+  }
+
+  private readonly packageControls = [
+    'package', 'custom_monthly_cost', 'custom_sessions_per_week', 'custom_session_length_min',
+  ];
+
+  private lockCurrentPackage(): void {
+    for (const name of this.packageControls) {
+      const control = this.studentForm.get(name)!;
+      if (this.packageLocked) {
+        control.disable({emitEvent: false});
+      } else {
+        control.enable({emitEvent: false});
+      }
+    }
+  }
+
+  /** Unlocks (or re-locks, restoring the stored values) the current package. */
+  toggleCorrection(): void {
+    this.correctingPackage = !this.correctingPackage;
+    if (!this.correctingPackage) {
+      const stored = this.data.student ?? {};
+      this.studentForm.patchValue({
+        package: stored.package ?? '',
+        custom_monthly_cost: stored.custom_monthly_cost ?? null,
+        custom_sessions_per_week: stored.custom_sessions_per_week ?? null,
+        custom_session_length_min: stored.custom_session_length_min ?? null,
+      });
+    }
+    this.lockCurrentPackage();
+  }
+
+  /** The custom price in effect for the current package, if any. */
+  get currentCustomPrice(): number | null {
+    if (!this.showPriceOverride) {
+      return null;
+    }
+    const value: unknown = this.studentForm.get('price_override')?.value;
+    if (value === null || value === undefined || value === '' || isNaN(Number(value)) || Number(value) < 0) {
+      return null;
+    }
+    return Number(value);
+  }
+
+  protected formatMoney(value: number | null | undefined): string {
+    return formatMoney(value);
+  }
+
+  /** The preview lines for a row ([] while incomplete or unavailable). */
+  previewAt(index: number): string[] {
+    return this.rowPreviews.get(this.pendingRows.at(index)) ?? [];
+  }
 
   /** The scheduled-change rows (one FormGroup per change). */
   get pendingRows(): FormArray<FormGroup> {
@@ -437,12 +493,20 @@ export class StudentDialog implements OnInit {
    * opens for it again after save.
    */
   private pendingRow(change: Partial<PendingChange> = {}): FormGroup {
+    const hasPrice = typeof change.price_override === 'number';
     const row = this.formBuilder.group({
       package: [change.package ?? ''],
       custom_monthly_cost: [change.custom_monthly_cost ?? null],
       custom_sessions_per_week: [change.custom_sessions_per_week ?? null],
       custom_session_length_min: [change.custom_session_length_min ?? null],
-      effective: [change.effective ?? ''],
+      // A Date from the picker; 'YYYY-MM-DD' once saved.
+      effective: [this.toDate(change.effective) as Date | string | null],
+      // Price after the change: the package's standard price, the custom
+      // price now in effect, or a new custom price.
+      price_mode: [
+        !hasPrice ? 'standard' : change.price_override === this.data.student?.price_override ? 'keep' : 'custom',
+      ],
+      price_override: [change.price_override ?? null, [Validators.min(0)]],
       // Carried through untouched — owned by the pending-schedule dialog.
       schedule: [change.schedule ?? null],
       // Backend-owned advance-notice stamp, carried through.
@@ -453,17 +517,59 @@ export class StudentDialog implements OnInit {
         row.get('schedule')!.setValue(null, {emitEvent: false});
       });
     }
+    this.watchRowPreview(row);
     return row;
   }
 
-  /** Adds a blank scheduled change, defaulting to the first month not already used. */
+  /** Re-prices the month a change lands in whenever its row settles. */
+  private watchRowPreview(row: FormGroup): void {
+    row.valueChanges.pipe(
+      debounceTime(400),
+      switchMap(() => {
+        const draft = this.changeDraft();
+        const effective = this.toDateString(row.get('effective')!.value);
+        if (!draft || !effective) {
+          return of(null);
+        }
+        return this.billingService
+          .previewStatement(effective.slice(0, 7), draft)
+          .pipe(catchError(() => of(null)));
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(result => {
+      const own = (result?.statement?.lines ?? []).filter(line => line.student_id === this.data.student?.id);
+      this.rowPreviews.set(row, own.map(line => `${lineSummary(line)}: ${formatMoney(line.net)}`));
+    });
+  }
+
+  /** The stored student with the form's scheduled changes — null until they are valid. */
+  private changeDraft(): Student | null {
+    const stored = this.data.student;
+    if (this.mode !== 'edit' || !stored?.id) {
+      return null;
+    }
+    const changes = this.pendingChangesFromRows(this.pendingRows.getRawValue() as Record<string, unknown>[]);
+    const error = validatePendingChanges(
+      changes, stored.package, pendingChangesOf(stored).map(c => c.effective), new Date());
+    return error ? null : {...stored, pending_changes: changes};
+  }
+
+  /** Adds a blank scheduled change, defaulting to the next 1st not already used. */
   addPendingChange(): void {
-    const used = new Set(this.pendingRows.controls.map(r => r.get('effective')?.value as string));
-    const effective = this.pendingMonthOptions.find(o => !used.has(o.value))?.value ?? '';
+    const used = new Set(this.pendingRows.controls.map(r => this.toDateString(r.get('effective')?.value)));
+    const now = new Date();
+    let effective: string | undefined;
+    for (let i = 1; i <= 3 && !effective; i++) {
+      const first = this.toDateString(new Date(now.getFullYear(), now.getMonth() + i, 1))!;
+      if (!used.has(first)) {
+        effective = first;
+      }
+    }
     this.pendingRows.push(this.pendingRow({effective}));
   }
 
   removePendingChange(index: number): void {
+    this.rowPreviews.delete(this.pendingRows.at(index));
     this.pendingRows.removeAt(index);
   }
 
@@ -472,7 +578,7 @@ export class StudentDialog implements OnInit {
     const row = this.pendingRows.at(index);
     return pendingChangeNote({
       package: row?.get('package')?.value || undefined,
-      effective: row?.get('effective')?.value || undefined,
+      effective: this.toDateString(row?.get('effective')?.value),
     });
   }
 
@@ -661,10 +767,11 @@ export class StudentDialog implements OnInit {
     }
     this.submitting = true;
     this.hasError = false;
-    const packageChanged = this.applyMidMonthPackageChange(student);
-    // The mid-month flow wins when both fire; the pending-schedule dialog can
-    // follow on a later edit. Otherwise the first new/edited change without a
-    // schedule gets its slots defined next.
+    // A corrected current package needs its slots redefined first; the
+    // pending-schedule dialog can follow on a later edit. Otherwise the first
+    // new/edited change without a schedule gets its slots defined next.
+    const prior = this.data.student;
+    const packageChanged = !!prior?.package && prior.package !== student.package;
     const scheduleTarget = packageChanged
       ? undefined
       : newChangesWithoutSchedule(this.data.student, changes)[0];
@@ -780,13 +887,17 @@ export class StudentDialog implements OnInit {
     return (rows ?? []).map(row => {
       const change: PendingChange = {
         package: (row['package'] as string) ?? '',
-        effective: (row['effective'] as string) ?? '',
+        effective: this.toDateString(row['effective'] as Date | string | null) ?? '',
       };
       for (const key of ['custom_monthly_cost', 'custom_sessions_per_week', 'custom_session_length_min'] as const) {
         const value = row[key];
         if (value !== null && value !== undefined && value !== '' && !isNaN(Number(value))) {
           change[key] = Number(value);
         }
+      }
+      const price = this.priceOfRow(row);
+      if (price !== undefined) {
+        change.price_override = price;
       }
       const schedule = row['schedule'];
       if (Array.isArray(schedule) && schedule.length > 0) {
@@ -800,36 +911,22 @@ export class StudentDialog implements OnInit {
   }
 
   /**
-   * When an existing student's package changes, stamps the student so billing
-   * prorates the old package before today and the new package after (Option A):
-   * records the old package's per-session portion for the sessions already
-   * received this month, and restarts the package from today. Returns true if a
-   * change was applied (the caller then routes the admin to Manage Schedule to
-   * redefine the new package's slots).
+   * The custom price a row carries: none for a Custom package (it has its
+   * own cost) or the standard price; the price now in effect for 'keep'; the
+   * entered amount for 'custom' (NaN when blank, so validation rejects it).
    */
-  private applyMidMonthPackageChange(student: Student): boolean {
-    const prior = this.data.student;
-    const oldPackage = prior?.package;
-    if (!oldPackage || oldPackage === student.package) {
-      return false;
+  private priceOfRow(row: Record<string, unknown>): number | undefined {
+    if (row['package'] === CUSTOM_PACKAGE) {
+      return undefined;
     }
-
-    const changeDate = new Date();
-    const oldDef = resolvePackageDef(oldPackage, this.catalog, {
-      monthlyCost: prior?.custom_monthly_cost,
-      sessionsPerWeek: prior?.custom_sessions_per_week,
-      sessionLengthMin: prior?.custom_session_length_min,
-    });
-    const priorSlots = countSlotsBeforeInMonth(prior?.schedule ?? [], changeDate);
-    const priorCharge = oldDef ? round2(perSessionCost(oldDef) * priorSlots) : 0;
-
-    const y = changeDate.getFullYear();
-    const m = (changeDate.getMonth() + 1).toString().padStart(2, '0');
-    const d = changeDate.getDate().toString().padStart(2, '0');
-    student.package_start_date = `${y}-${m}-${d}T00:00:00`;
-    student.mid_month_prior_charge = priorCharge;
-    student.mid_month_change_period = monthKey(y, changeDate.getMonth());
-    return true;
+    if (row['price_mode'] === 'keep') {
+      return this.currentCustomPrice ?? undefined;
+    }
+    if (row['price_mode'] === 'custom') {
+      const value = row['price_override'];
+      return value === null || value === undefined || value === '' ? NaN : Number(value);
+    }
+    return undefined;
   }
 
   confirmDelete(): void {

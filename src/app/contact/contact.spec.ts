@@ -929,42 +929,18 @@ describe('Contact', () => {
       expect(() => c.openStudentDialog('delete', { id: 's-1' } as Student)).not.toThrow();
     });
 
-    it('recomputes billing when a save flips the BTC & Me flag', () => {
+    it('never rewrites billing records after a student change (the Billing page reads the service)', () => {
       afterClosed = true;
       const before = { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, btc_and_me: false } as Student;
       studentService.getStudentsByContact.mockReturnValue(
         of([{ ...before, btc_and_me: true }]),
       );
-      billingService.getBillingRecordsByContact.mockReturnValue(of([]));
       const c = build();
       c.ngOnInit();
       c.openStudentDialog('edit', before);
-      expect(billingService.getBillingRecordsByContact).toHaveBeenCalled();
-    });
-
-    it('does not recompute when the BTC & Me flag is unchanged', () => {
-      afterClosed = true;
-      const before = { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, btc_and_me: true } as Student;
-      studentService.getStudentsByContact.mockReturnValue(of([{ ...before }]));
-      billingService.getBillingRecordsByContact.mockReturnValue(of([]));
-      const c = build();
-      c.ngOnInit();
-      c.openStudentDialog('edit', before);
-      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
-    });
-
-    it('recomputes when deleting an enrolled student drops the fee', () => {
-      afterClosed = true;
-      const before = { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, btc_and_me: true } as Student;
-      // A packaged sibling remains, so the family still has a record to adjust.
-      studentService.getStudentsByContact.mockReturnValue(of([
-        { id: 's-2', contact_id: 'c-1', name: 'Quinn', status: StudentStatus.ACTIVE_STUDENT, package: 'Succeed' } as Student,
-      ]));
-      billingService.getBillingRecordsByContact.mockReturnValue(of([]));
-      const c = build();
-      c.ngOnInit();
       c.openStudentDialog('delete', before);
-      expect(billingService.getBillingRecordsByContact).toHaveBeenCalled();
+      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
+      expect(billingService.upsertBillingRecord).not.toHaveBeenCalled();
     });
 
     it('opens the pending-schedule dialog for THAT change after a scheduled package change', () => {
@@ -983,8 +959,6 @@ describe('Contact', () => {
       const scheduleCall = dialog.open.mock.calls.find(call => call[0] === ManageScheduleDialog);
       expect(scheduleCall).toBeDefined();
       expect((scheduleCall![1] as { data: { pendingEffective?: string } }).data.pendingEffective).toBe('2027-01-01');
-      // Pending changes affect a future month only — no billing recompute.
-      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
     });
 
     it('lists each scheduled change on the student card and opens the pending-schedule dialog per change', () => {
@@ -1003,12 +977,12 @@ describe('Contact', () => {
       // Legacy single change still renders.
       expect(c.pendingChanges({ pending_package: 'Achieve', pending_package_effective: '2026-09-01' } as Student))
         .toHaveLength(1);
-      c.openManageScheduleDialog(student, false, '2027-01-01');
+      c.openManageScheduleDialog(student, '2027-01-01');
       const scheduleCall = dialog.open.mock.calls.find(call => call[0] === ManageScheduleDialog);
       expect((scheduleCall![1] as { data: { pendingEffective?: string } }).data.pendingEffective).toBe('2027-01-01');
     });
 
-    it('opens Manage Schedule after a mid-month package change', () => {
+    it('opens Manage Schedule after a corrected current package', () => {
       afterClosed = { openScheduleForStudentId: 's-1' };
       studentService.getStudentsByContact.mockReturnValue(
         of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, assigned_tutor_id: 't-1' }]),
@@ -1017,101 +991,12 @@ describe('Contact', () => {
       const c = build();
       c.ngOnInit();
       c.openStudentDialog('edit', { id: 's-1' } as Student);
-      // First open is the Student dialog; the package-change result opens Manage Schedule.
+      // First open is the Student dialog; the correction result opens Manage Schedule.
       const opened = dialog.open.mock.calls.map(call => call[0]);
       expect(opened).toContain(ManageScheduleDialog);
     });
   });
 
-  describe('mid-month billing recompute', () => {
-    const period = (day: number): string => {
-      const now = new Date();
-      const m = (now.getMonth() + 1).toString().padStart(2, '0');
-      return `${now.getFullYear()}-${m}-${day.toString().padStart(2, '0')}`;
-    };
-    const enrolled = (over = {}) => ({
-      id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT,
-      package: 'Succeed', package_start_date: '2020-01-01T00:00:00',
-      schedule: [{ weekday: 'MONDAY', start_time: '10:00', end_time: '10:30' }], ...over,
-    });
-    const recompute = (c: Contact) => (c as unknown as { recomputeCurrentPeriodBilling: () => void }).recomputeCurrentPeriodBilling();
-
-    it('adjusts an existing monthly record to the recomputed amount, keeping paid state', () => {
-      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
-      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
-      billingService.getBillingRecordsByContact.mockReturnValue(
-        of([{ contact_id: 'c-1', period_start: period(1), cycle: 'monthly', amount: 999, paid: true, paid_date: 'd1' }]),
-      );
-      const c = build();
-      c.ngOnInit();
-      recompute(c);
-      expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
-        expect.objectContaining({ period_start: period(1), amount: 362, paid: true, paid_date: 'd1' }),
-      );
-    });
-
-    it('does not create a record where none existed', () => {
-      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
-      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
-      billingService.getBillingRecordsByContact.mockReturnValue(of([])); // nothing generated yet
-      const c = build();
-      c.ngOnInit();
-      recompute(c);
-      expect(billingService.upsertBillingRecord).not.toHaveBeenCalled();
-    });
-
-    it('adjusts both halves of an existing semi-monthly record set', () => {
-      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.SEMI_MONTHLY })]));
-      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
-      billingService.getBillingRecordsByContact.mockReturnValue(
-        of([
-          { contact_id: 'c-1', period_start: period(1), cycle: 'semi_monthly', amount: 500, paid: false },
-          { contact_id: 'c-1', period_start: period(15), cycle: 'semi_monthly', amount: 500, paid: false },
-        ]),
-      );
-      const c = build();
-      c.ngOnInit();
-      recompute(c);
-      const amounts = billingService.upsertBillingRecord.mock.calls.map(call => call[0].amount);
-      expect(amounts).toEqual([181, 181]);
-    });
-
-    it('does nothing when the contact has no enrolled students', () => {
-      studentService.getStudentsByContact.mockReturnValue(of([]));
-      const c = build();
-      c.ngOnInit();
-      recompute(c);
-      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when no contact is loaded', () => {
-      const c = build(); // no ngOnInit → loadedContact undefined
-      recompute(c);
-      expect(billingService.getBillingRecordsByContact).not.toHaveBeenCalled();
-    });
-
-    it('swallows a billing-records fetch error', () => {
-      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
-      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
-      billingService.getBillingRecordsByContact.mockReturnValue(throwError(() => new Error('x')));
-      const c = build();
-      c.ngOnInit();
-      expect(() => recompute(c)).not.toThrow();
-      expect(billingService.upsertBillingRecord).not.toHaveBeenCalled();
-    });
-
-    it('swallows a billing-record upsert error', () => {
-      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.MONTHLY })]));
-      studentService.getStudentsByContact.mockReturnValue(of([enrolled()]));
-      billingService.getBillingRecordsByContact.mockReturnValue(
-        of([{ contact_id: 'c-1', period_start: period(1), cycle: 'monthly', amount: 999, paid: false }]),
-      );
-      billingService.upsertBillingRecord.mockReturnValue(throwError(() => new Error('x')));
-      const c = build();
-      c.ngOnInit();
-      expect(() => recompute(c)).not.toThrow();
-    });
-  });
 
   describe('cancel, discard, auto-renew', () => {
     const seedStudent = (c: Contact) => {

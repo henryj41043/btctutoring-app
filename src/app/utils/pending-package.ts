@@ -1,14 +1,29 @@
 import {PendingChange, Student} from '../models/student.model';
 import {ScheduleSlot} from './proration';
-import {monthKey} from './billing-amount';
 import {CUSTOM_PACKAGE} from './package-config';
 
-/** The package-defining fields (current or scheduled) for one billing month. */
-export interface PackageFields {
-  package?: string;
-  custom_monthly_cost?: number;
-  custom_sessions_per_week?: number;
-  custom_session_length_min?: number;
+/** Months generated ahead of the current one (mirrors the service). */
+export const HORIZON_MONTHS_AHEAD = 3;
+
+/** A month key 'YYYY-MM' (month is 0-indexed). */
+export function monthKey(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
+/** A local date as 'YYYY-MM-DD'. */
+export function dateKeyOf(date: Date): string {
+  return `${monthKey(date.getFullYear(), date.getMonth())}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * The dates a NEW package change may take effect on: tomorrow through the
+ * last day of the calendar look-ahead (client rule 2026-09: future only).
+ */
+export function changeDateBounds(now: Date): {min: Date; max: Date} {
+  return {
+    min: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
+    max: new Date(now.getFullYear(), now.getMonth() + HORIZON_MONTHS_AHEAD + 1, 0),
+  };
 }
 
 const byEffective = (a: PendingChange, b: PendingChange): number =>
@@ -55,32 +70,6 @@ export function pendingChangesOf(student: Student | undefined): PendingChange[] 
   return [];
 }
 
-/**
- * The package fields that govern a given month: the LATEST scheduled change
- * whose effective month has been reached by the viewed month, else the
- * current package. Lets a future month's billing resolve the new package
- * BEFORE the backend's 1st-of-month cron promotes it. Mirror of the backend.
- */
-export function packageFieldsForMonth(student: Student, year: number, month: number): PackageFields {
-  const key = monthKey(year, month);
-  const reached = pendingChangesOf(student).filter(c => c.effective.slice(0, 7) <= key);
-  const governing = reached[reached.length - 1];
-  if (governing) {
-    return {
-      package: governing.package,
-      custom_monthly_cost: governing.custom_monthly_cost,
-      custom_sessions_per_week: governing.custom_sessions_per_week,
-      custom_session_length_min: governing.custom_session_length_min,
-    };
-  }
-  return {
-    package: student.package,
-    custom_monthly_cost: student.custom_monthly_cost,
-    custom_sessions_per_week: student.custom_sessions_per_week,
-    custom_session_length_min: student.custom_session_length_min,
-  };
-}
-
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -101,29 +90,6 @@ export function pendingChangeNote(change: Partial<PendingChange> | undefined): s
     return null;
   }
   return `→ ${change.package} from ${MONTH_NAMES[month - 1].slice(0, 3)} ${day}`;
-}
-
-/** 'YYYY-MM-01' → 'September 2026' (falls back to the raw value when malformed). */
-export function effectiveMonthLabel(effective: string): string {
-  const [year, month] = effective.split('-').map(Number);
-  if (!year || !month || month > 12) {
-    return effective;
-  }
-  return `${MONTH_NAMES[month - 1]} ${year}`;
-}
-
-/**
- * The next `count` month-1sts after `now`, as effective-date options:
- * {value: '2026-09-01', label: 'September 2026'}.
- */
-export function nextMonthFirsts(now: Date, count: number = 6): {value: string; label: string}[] {
-  const options: {value: string; label: string}[] = [];
-  for (let i = 1; i <= count; i++) {
-    const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const value = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-01`;
-    options.push({value, label: `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`});
-  }
-  return options;
 }
 
 /** The scheduled change taking effect on `effective`, if any. */
@@ -166,17 +132,28 @@ export function newChangesWithoutSchedule(prior: Student | undefined, next: Pend
     .filter(c => !stored.some(p => sameChange(p, c)));
 }
 
-const EFFECTIVE_PATTERN = /^\d{4}-\d{2}-01$/;
+const EFFECTIVE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** True for a real calendar date written 'YYYY-MM-DD'. */
+function isRealDate(key: string): boolean {
+  if (!EFFECTIVE_PATTERN.test(key)) {
+    return false;
+  }
+  const [year, month, day] = key.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
 
 /**
  * Validates a scheduled-change list before saving. Returns the first error
  * message, or null when the list is valid. Rules: every row needs a package
- * and an effective month; effective dates are the 1st of a FUTURE month
- * (already-stored dates stay saveable so a stuck past entry can still be
- * edited or removed); no two changes share a month; each step's package must
- * differ from the previous step (the prior change, or the current package)
- * — except Custom → Custom when any custom value differs; a Custom change
- * needs all three custom values.
+ * and a date; a date that is not already stored must be in the FUTURE and
+ * inside the calendar look-ahead (stored dates stay saveable so a stuck
+ * entry can still be edited or removed); no two changes share a date; each
+ * step's package must differ from the previous step (the prior change, or
+ * the current package) — except Custom → Custom when any custom value
+ * differs; a Custom change needs all three custom values; a custom price
+ * must be $0 or more.
  */
 export function validatePendingChanges(
   changes: PendingChange[],
@@ -184,25 +161,36 @@ export function validatePendingChanges(
   storedEffectives: string[],
   now: Date,
 ): string | null {
+  const today = dateKeyOf(now);
+  const latest = dateKeyOf(changeDateBounds(now).max);
   for (const c of changes) {
     if (!c.package) {
       return 'Pick a package for every scheduled change.';
     }
     if (!c.effective) {
-      return 'Pick the month each scheduled package change takes effect.';
+      return 'Pick the date each scheduled package change takes effect.';
     }
-    if (!EFFECTIVE_PATTERN.test(c.effective)) {
-      return 'A scheduled change must take effect on the 1st of a month.';
+    if (!isRealDate(c.effective)) {
+      return 'A scheduled change needs a valid date.';
     }
-    if (c.effective.slice(0, 7) <= monthKey(now.getFullYear(), now.getMonth())
-      && !storedEffectives.includes(c.effective)) {
-      return 'A scheduled change must take effect in a future month.';
+    if (!storedEffectives.includes(c.effective)) {
+      if (c.effective <= today) {
+        return 'A scheduled change must take effect on a future date.';
+      }
+      if (c.effective > latest) {
+        return 'A scheduled change can be set no further ahead than the calendar (three months after this one).';
+      }
+    }
+    const price: unknown = c.price_override;
+    if (price !== undefined && price !== null
+      && (typeof price !== 'number' || !Number.isFinite(price) || price < 0)) {
+      return 'A custom price must be $0 or more.';
     }
   }
   const sorted = [...changes].sort(byEffective);
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i].effective === sorted[i - 1].effective) {
-      return 'Two scheduled changes share the same month — pick different months.';
+      return 'Two scheduled changes share the same date — pick different dates.';
     }
   }
   let prev: PendingChange | {package: string | undefined} = {package: currentPackage};

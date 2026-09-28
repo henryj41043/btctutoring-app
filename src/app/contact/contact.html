@@ -288,7 +288,7 @@
                     <button matIconButton type="button" class="pending-change-button"
                             [disabled]="!student.assigned_tutor_id"
                             [matTooltip]="student.assigned_tutor_id ? 'Set this change\'s schedule' : 'Assign a tutor first'"
-                            (click)="openManageScheduleDialog(student, false, change.effective)"
+                            (click)="openManageScheduleDialog(student, change.effective)"
                             aria-label="Set schedule for this scheduled change">
                       <mat-icon>calendar_month</mat-icon>
                     </button>

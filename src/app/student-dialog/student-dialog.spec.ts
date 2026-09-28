@@ -10,11 +10,10 @@ import { PackageService } from '../services/package.service';
 import { BillingService } from '../services/billing.service';
 import { statement, statementLine } from '../../testing/statement.fixture';
 import { TEST_CATALOG_ROWS } from '../../testing/package-catalog.fixture';
-import { nextMonthFirsts } from '../utils/pending-package';
+import { changeDateBounds, dateKeyOf, monthKey } from '../utils/pending-package';
 import { Student } from '../models/student.model';
 import { StudentStatus } from '../enums/student-status.enum';
 import { Weekday } from '../enums/weekday.enum';
-import { monthKey } from '../utils/billing-amount';
 
 const packageServiceStub = { getPackages: () => of(TEST_CATALOG_ROWS) };
 
@@ -351,39 +350,99 @@ describe('StudentDialog', () => {
       const rows = (c: StudentDialog) => c.pendingRows;
       const row = (c: StudentDialog, i: number) => rows(c).at(i);
       const setRow = (c: StudentDialog, i: number, values: Record<string, unknown>) => row(c, i).patchValue(values);
-      // Rolling window from today; the first two options are used by tests.
-      const months = () => nextMonthFirsts(new Date());
+      const now = new Date();
+      // The 1sts of the next months: the defaults offered to a new row.
+      const firstOf = (i: number): string => dateKeyOf(new Date(now.getFullYear(), now.getMonth() + i, 1));
+      // Any day works: five days out is always a future date inside the look-ahead.
+      const soon = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
+      const view = (c: StudentDialog) =>
+        c as unknown as {
+          changeBounds: { min: Date; max: Date };
+          currentCustomPrice: number | null;
+          formatMoney: (v: number | null) => string;
+        };
+
+      it('offers tomorrow through the end of the look-ahead', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        expect(view(c).changeBounds).toEqual(changeDateBounds(new Date()));
+        expect(view(c).changeBounds.min).toEqual(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+      });
 
       it('adding a change saves a list and closes with the pending-schedule signal for it', () => {
         const c = build({ mode: 'edit', student: richStudent() });
         studentService.updateStudent.mockReturnValue(of({} as Student));
         c.addPendingChange();
         expect(rows(c)).toHaveLength(1);
-        expect(row(c, 0).get('effective')!.value).toBe(months()[0].value); // defaulted
+        expect(dateKeyOf(row(c, 0).get('effective')!.value)).toBe(firstOf(1)); // defaulted
         setRow(c, 0, { package: 'Succeed' });
         c.save();
         const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-        expect(payload.pending_changes).toEqual([{ package: 'Succeed', effective: months()[0].value }]);
+        expect(payload.pending_changes).toEqual([{ package: 'Succeed', effective: firstOf(1) }]);
         expect('pending_package' in payload).toBe(false);
         expect(dialogRef.close).toHaveBeenCalledWith({
-          openPendingScheduleFor: { studentId: 's-1', effective: months()[0].value },
+          openPendingScheduleFor: { studentId: 's-1', effective: firstOf(1) },
         });
       });
 
-      it('a second added change defaults to the next unused month and the OLDEST new one is the schedule target', () => {
+      it('saves a change on any future day picked from the calendar', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        c.addPendingChange();
+        setRow(c, 0, { package: 'Succeed', effective: soon });
+        expect(c.pendingNoteAt(0)).toBe(
+          `→ Succeed from ${soon.toLocaleDateString('en-US', { month: 'short' })} ${soon.getDate()}`,
+        );
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_changes).toEqual([{ package: 'Succeed', effective: dateKeyOf(soon) }]);
+        expect(dialogRef.close).toHaveBeenCalledWith({
+          openPendingScheduleFor: { studentId: 's-1', effective: dateKeyOf(soon) },
+        });
+      });
+
+      it('rejects today, a past day and a day beyond the look-ahead', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        c.addPendingChange();
+        setRow(c, 0, { package: 'Succeed', effective: new Date() });
+        c.save();
+        expect(priv(c).errorMessage).toBe('A scheduled change must take effect on a future date.');
+        setRow(c, 0, { effective: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) });
+        c.save();
+        expect(priv(c).errorMessage).toBe('A scheduled change must take effect on a future date.');
+        setRow(c, 0, { effective: new Date(now.getFullYear(), now.getMonth() + 4, 1) });
+        c.save();
+        expect(priv(c).errorMessage).toContain('no further ahead than the calendar');
+        setRow(c, 0, { effective: null });
+        c.save();
+        expect(priv(c).errorMessage).toBe('Pick the date each scheduled package change takes effect.');
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+      });
+
+      it('a second added change defaults to the next unused 1st and the OLDEST new one is the schedule target', () => {
         const c = build({ mode: 'edit', student: richStudent() });
         studentService.updateStudent.mockReturnValue(of({} as Student));
         c.addPendingChange();
         c.addPendingChange();
-        expect(row(c, 1).get('effective')!.value).toBe(months()[1].value);
-        setRow(c, 0, { package: 'Succeed', effective: months()[1].value });
-        setRow(c, 1, { package: 'Achieve', effective: months()[0].value });
+        expect(dateKeyOf(row(c, 1).get('effective')!.value)).toBe(firstOf(2));
+        setRow(c, 0, { package: 'Succeed', effective: firstOf(2) });
+        setRow(c, 1, { package: 'Achieve', effective: firstOf(1) });
         c.save();
         const payload = studentService.updateStudent.mock.calls[0][0] as Student;
         expect(payload.pending_changes!.map(p => p.package)).toEqual(['Succeed', 'Achieve']); // as entered; backend sorts
         expect(dialogRef.close).toHaveBeenCalledWith({
-          openPendingScheduleFor: { studentId: 's-1', effective: months()[0].value },
+          openPendingScheduleFor: { studentId: 's-1', effective: firstOf(1) },
         });
+      });
+
+      it('leaves the date blank once the next three 1sts are all used', () => {
+        const c = build({ mode: 'edit', student: richStudent() });
+        for (let i = 0; i < 4; i++) {
+          c.addPendingChange();
+        }
+        expect([0, 1, 2].map(i => dateKeyOf(row(c, i).get('effective')!.value))).toEqual([
+          firstOf(1), firstOf(2), firstOf(3),
+        ]);
+        expect(row(c, 3).get('effective')!.value).toBeNull();
       });
 
       it('an unchanged list closes with plain true and carries schedule + notice stamp through', () => {
@@ -394,6 +453,7 @@ describe('StudentDialog', () => {
         const c = build({ mode: 'edit', student: richStudent({ pending_changes: [stored] }) });
         studentService.updateStudent.mockReturnValue(of({} as Student));
         expect(c.hasPendingScheduleAt(0)).toBe(true);
+        expect(row(c, 0).get('effective')!.value).toEqual(new Date(2026, 8, 1));
         c.save();
         const payload = studentService.updateStudent.mock.calls[0][0] as Student;
         expect(payload.pending_changes).toEqual([stored]);
@@ -415,6 +475,21 @@ describe('StudentDialog', () => {
         expect(dialogRef.close).toHaveBeenCalledWith({
           openPendingScheduleFor: { studentId: 's-1', effective: '2026-09-01' },
         });
+      });
+
+      it('changing only the price keeps the carried schedule', () => {
+        const stored = {
+          package: 'Succeed', effective: '2026-09-01',
+          schedule: [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }],
+        };
+        const c = build({ mode: 'edit', student: richStudent({ pending_changes: [stored] }) });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
+        setRow(c, 0, { price_mode: 'custom', price_override: 300 });
+        expect(c.hasPendingScheduleAt(0)).toBe(true);
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.pending_changes).toEqual([{ ...stored, price_override: 300 }]);
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
       });
 
       it('removing every row clears the list ([]), while a never-scheduled student omits the key', () => {
@@ -446,35 +521,29 @@ describe('StudentDialog', () => {
         expect(priv(c).errorMessage).toBe('A scheduled Custom package needs all three custom values.');
         c.addPendingChange();
         setRow(c, 0, { package: 'Succeed', custom_monthly_cost: null });
-        setRow(c, 1, { package: 'Achieve', effective: months()[0].value });
+        setRow(c, 1, { package: 'Achieve', effective: firstOf(1) });
         c.save();
-        expect(priv(c).errorMessage).toContain('share the same month');
+        expect(priv(c).errorMessage).toContain('share the same date');
         expect(studentService.updateStudent).not.toHaveBeenCalled();
         expect(priv(c).hasError).toBe(true);
       });
 
-      it('a mid-month current-package change wins over a simultaneous new scheduled change', () => {
-        const c = build({ mode: 'edit', student: richStudent() });
-        studentService.updateStudent.mockReturnValue(of({} as Student));
-        form(c).get('package').setValue('Succeed'); // mid-month change
-        c.addPendingChange();
-        setRow(c, 0, { package: 'Achieve' });
-        c.save();
-        expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
-      });
-
-      it('shows per-row notes, keeps a stored out-of-window month selectable, and reads a legacy single change', () => {
+      it('shows per-row notes, keeps a stored past date saveable, and reads a legacy single change', () => {
         const c = build({
           mode: 'edit',
           student: richStudent({ pending_package: 'Achieve', pending_package_effective: '2020-01-01' }),
         });
+        studentService.updateStudent.mockReturnValue(of({} as Student));
         expect(rows(c)).toHaveLength(1);
         expect(c.pendingNoteAt(0)).toBe('→ Achieve from Jan 1');
         expect(c.hasPendingScheduleAt(0)).toBe(false);
-        expect(priv(c).pendingMonthOptions[0]).toEqual({ value: '2020-01-01', label: 'January 2020' });
         c.addPendingChange();
         expect(c.pendingNoteAt(1)).toBeNull(); // no package yet
         expect(c.pendingNoteAt(9)).toBeNull(); // no such row
+        c.removePendingChange(1);
+        c.save();
+        expect((studentService.updateStudent.mock.calls[0][0] as Student).pending_changes)
+          .toEqual([{ package: 'Achieve', effective: '2020-01-01' }]);
       });
 
       it('includes stored change packages in the package options and their slot tutors in planning rows', () => {
@@ -491,6 +560,190 @@ describe('StudentDialog', () => {
         });
         expect(priv(c).packageOptions).toContain('Achieve');
         expect(priv(c).planningOverrideRows.map((r: { tutor_id: string }) => r.tutor_id)).toEqual(['t-1', 't-2']);
+      });
+
+      describe('price after the change', () => {
+        const saved = (): Student => studentService.updateStudent.mock.calls.at(-1)![0];
+        beforeEach(() => studentService.updateStudent.mockReturnValue(of({} as Student)));
+
+        it('defaults to the standard price: a custom price resets', () => {
+          const c = build({ mode: 'edit', student: richStudent({ price_override: 410.4 }) });
+          expect(view(c).currentCustomPrice).toBe(410.4);
+          expect(view(c).formatMoney(410.4)).toBe('$410.40');
+          c.addPendingChange();
+          expect(row(c, 0).get('price_mode')!.value).toBe('standard');
+          setRow(c, 0, { package: 'Succeed', price_override: 999 });
+          c.save();
+          expect(saved().pending_changes).toEqual([{ package: 'Succeed', effective: firstOf(1) }]);
+        });
+
+        it('carries the custom price over when asked', () => {
+          const c = build({ mode: 'edit', student: richStudent({ price_override: 410.4 }) });
+          c.addPendingChange();
+          setRow(c, 0, { package: 'Succeed', price_mode: 'keep' });
+          c.save();
+          expect(saved().pending_changes![0].price_override).toBe(410.4);
+        });
+
+        it('carries the price being entered now, not only the stored one', () => {
+          const c = build({ mode: 'edit', student: richStudent() });
+          form(c).get('price_override')!.setValue('300');
+          expect(view(c).currentCustomPrice).toBe(300);
+          c.addPendingChange();
+          setRow(c, 0, { package: 'Succeed', price_mode: 'keep' });
+          c.save();
+          expect(saved().pending_changes![0].price_override).toBe(300);
+        });
+
+        it('keep falls back to the standard price when no custom price is in effect', () => {
+          const c = build({ mode: 'edit', student: richStudent() });
+          expect(view(c).currentCustomPrice).toBeNull();
+          for (const junk of ['', 'abc', -5]) {
+            form(c).get('price_override')!.setValue(junk);
+            expect(view(c).currentCustomPrice).toBeNull();
+          }
+          form(c).get('price_override')!.setValue(null);
+          c.addPendingChange();
+          setRow(c, 0, { package: 'Succeed', price_mode: 'keep' });
+          c.save();
+          expect('price_override' in saved().pending_changes![0]).toBe(false);
+        });
+
+        it('a Custom current package has no custom price to carry', () => {
+          const c = build({
+            mode: 'edit',
+            student: richStudent({ package: 'Custom', price_override: 300 }),
+          });
+          expect(view(c).currentCustomPrice).toBeNull();
+        });
+
+        it('saves a new custom price, including $0', () => {
+          const c = build({ mode: 'edit', student: richStudent() });
+          c.addPendingChange();
+          setRow(c, 0, { package: 'Succeed', price_mode: 'custom', price_override: '375.50' });
+          c.save();
+          expect(saved().pending_changes![0].price_override).toBe(375.5);
+
+          TestBed.resetTestingModule();
+          const c2 = build({ mode: 'edit', student: richStudent() });
+          c2.addPendingChange();
+          setRow(c2, 0, { package: 'Succeed', price_mode: 'custom', price_override: 0 });
+          c2.save();
+          expect(saved().pending_changes![0].price_override).toBe(0);
+        });
+
+        it('requires an amount for a new custom price', () => {
+          const c = build({ mode: 'edit', student: richStudent() });
+          c.addPendingChange();
+          for (const blank of [null, '', undefined, -1]) {
+            setRow(c, 0, { package: 'Succeed', price_mode: 'custom', price_override: blank });
+            c.save();
+            expect(priv(c).errorMessage).toBe('A custom price must be $0 or more.');
+          }
+          expect(studentService.updateStudent).not.toHaveBeenCalled();
+        });
+
+        it('a Custom new package never carries a separate custom price', () => {
+          const c = build({ mode: 'edit', student: richStudent({ price_override: 410.4 }) });
+          c.addPendingChange();
+          setRow(c, 0, {
+            package: 'Custom', custom_monthly_cost: 500, custom_sessions_per_week: 2,
+            custom_session_length_min: 45, price_mode: 'keep',
+          });
+          c.save();
+          expect('price_override' in saved().pending_changes![0]).toBe(false);
+        });
+
+        it('loads a stored price as keep when it matches the current one, else as custom', () => {
+          const c = build({
+            mode: 'edit',
+            student: richStudent({
+              price_override: 410.4,
+              pending_changes: [
+                { package: 'Succeed', effective: '2026-09-01', price_override: 410.4 },
+                { package: 'Achieve', effective: '2026-10-01', price_override: 300 },
+                { package: 'Excel', effective: '2026-11-01' },
+              ],
+            }),
+          });
+          expect([0, 1, 2].map(i => row(c, i).get('price_mode')!.value)).toEqual(['keep', 'custom', 'standard']);
+          expect(row(c, 1).get('price_override')!.value).toBe(300);
+          c.save();
+          expect(saved().pending_changes!.map(p => p.price_override)).toEqual([410.4, 300, undefined]);
+        });
+      });
+
+      describe('preview of the month a change lands in', () => {
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        it('shows the student\'s lines for that month once the row settles', () => {
+          billingService.previewStatement.mockReturnValue(of({
+            statement: statement({
+              lines: [
+                statementLine({ student_id: 's-1', student_name: 'Pat', package: 'Determination', to: '2026-07-13', sessions_billed: 1, net: 83.54 }),
+                statementLine({ student_id: 's-1', student_name: 'Pat', package: 'Succeed', from: '2026-07-14', sessions_billed: 3, net: 250.62 }),
+                statementLine({ student_id: 's-2', student_name: 'Sam', net: 273 }),
+              ],
+            }),
+          }));
+          const c = build({ mode: 'edit', student: richStudent() });
+          c.addPendingChange();
+          expect(c.previewAt(0)).toEqual([]);
+          setRow(c, 0, { package: 'Succeed', effective: soon });
+          jest.advanceTimersByTime(399);
+          expect(billingService.previewStatement).not.toHaveBeenCalled();
+          jest.advanceTimersByTime(1);
+          const [month, draft] = billingService.previewStatement.mock.calls.at(-1)!;
+          expect(month).toBe(monthKey(soon.getFullYear(), soon.getMonth()));
+          expect(draft.id).toBe('s-1');
+          expect(draft.pending_changes).toEqual([{ package: 'Succeed', effective: dateKeyOf(soon) }]);
+          expect(c.previewAt(0)).toEqual([
+            'Pat: Determination, through Jul 13, 1 of 4 sessions at $83.54: $83.54',
+            'Pat: Succeed, from Jul 14, 3 of 4 sessions at $83.54: $250.62',
+          ]);
+          expect(c.previewAt(7)).toEqual([]);
+        });
+
+        it('stays empty while the rows are invalid, the preview fails or nothing is owed', () => {
+          const c = build({ mode: 'edit', student: richStudent() });
+          c.addPendingChange();
+          setRow(c, 0, { package: '' });
+          jest.advanceTimersByTime(400);
+          expect(billingService.previewStatement).not.toHaveBeenCalled();
+
+          billingService.previewStatement.mockReturnValue(throwError(() => new Error('boom')));
+          setRow(c, 0, { package: 'Succeed' });
+          jest.advanceTimersByTime(400);
+          expect(c.previewAt(0)).toEqual([]);
+
+          billingService.previewStatement.mockReturnValue(of({ statement: null }));
+          setRow(c, 0, { package: 'Achieve' });
+          jest.advanceTimersByTime(400);
+          expect(c.previewAt(0)).toEqual([]);
+          expect(billingService.previewStatement).toHaveBeenCalledTimes(2);
+        });
+
+        it('forgets a removed row and never previews an unsaved student', () => {
+          billingService.previewStatement.mockReturnValue(of({
+            statement: statement({ lines: [statementLine({ student_id: 's-1' })] }),
+          }));
+          const c = build({ mode: 'edit', student: richStudent() });
+          c.addPendingChange();
+          setRow(c, 0, { package: 'Succeed' });
+          jest.advanceTimersByTime(400);
+          expect(c.previewAt(0)).toHaveLength(1);
+          c.removePendingChange(0);
+          expect(c.previewAt(0)).toEqual([]);
+
+          TestBed.resetTestingModule();
+          billingService.previewStatement.mockClear();
+          const c2 = build({ mode: 'edit', student: richStudent({ id: undefined }) });
+          c2.addPendingChange();
+          setRow(c2, 0, { package: 'Succeed' });
+          jest.advanceTimersByTime(400);
+          expect(billingService.previewStatement).not.toHaveBeenCalled();
+        });
       });
     });
 
@@ -614,7 +867,7 @@ describe('StudentDialog', () => {
     });
   });
 
-  describe('edit — mid-month package change', () => {
+  describe('edit — the current package once service has started', () => {
     const enrolled = (over: Partial<Student> = {}): Student => ({
       id: 's-1',
       contact_id: 'c-1',
@@ -627,50 +880,129 @@ describe('StudentDialog', () => {
       make_up_minutes: 0,
       ...over,
     });
+    const lock = (c: StudentDialog) =>
+      c as unknown as { serviceStarted: boolean; packageLocked: boolean; correctingPackage: boolean };
+    const d = new Date();
+    const todayKey = `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`;
+    const packageControls = ['package', 'custom_monthly_cost', 'custom_sessions_per_week', 'custom_session_length_min'];
 
-    it('stamps the student and routes to Manage Schedule when the package changes', () => {
-      const student = enrolled();
-      const c = build({ mode: 'edit', student });
-      form(c).get('package')?.setValue('Thrive');
-      studentService.updateStudent.mockReturnValue(of({} as Student));
-      c.save();
+    beforeEach(() => studentService.updateStudent.mockReturnValue(of({} as Student)));
 
-      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-      const now = new Date();
-      expect(payload.package).toBe('Thrive');
-      expect(payload.mid_month_change_period).toBe(monthKey(now.getFullYear(), now.getMonth()));
-      expect(payload.package_start_date).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00$/);
-      expect(typeof payload.mid_month_prior_charge).toBe('number');
-      expect(payload.mid_month_prior_charge).toBeGreaterThanOrEqual(0);
-      expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
+    it('locks the package and its custom values', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      expect(lock(c).serviceStarted).toBe(true);
+      expect(lock(c).packageLocked).toBe(true);
+      for (const name of packageControls) {
+        expect(form(c).get(name)!.disabled).toBe(true);
+      }
+      expect(form(c).get('name')!.disabled).toBe(false);
     });
 
-    it('closes normally when the package is unchanged', () => {
+    it('a locked save still sends the package, with no proration stamps', () => {
       const c = build({ mode: 'edit', student: enrolled() });
-      studentService.updateStudent.mockReturnValue(of({} as Student));
       c.save();
-      expect(studentService.updateStudent.mock.calls[0][0].mid_month_change_period).toBeUndefined();
+      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+      expect(payload.package).toBe('Succeed');
+      expect(payload.package_start_date).toBe('2026-05-01T00:00:00');
+      expect('mid_month_change_period' in payload).toBe(false);
+      expect('mid_month_prior_charge' in payload).toBe(false);
       expect(dialogRef.close).toHaveBeenCalledWith(true);
     });
 
-    it('does not treat setting a first package as a mid-month change', () => {
+    it('service starting today counts as started; a future start does not', () => {
+      expect(lock(build({ mode: 'edit', student: enrolled({ package_start_date: `${todayKey}T00:00:00` }) }))
+        .packageLocked).toBe(true);
+      TestBed.resetTestingModule();
+      const c = build({ mode: 'edit', student: enrolled({ package_start_date: '2999-01-01T00:00:00' }) });
+      expect(lock(c).serviceStarted).toBe(false);
+      expect(form(c).get('package')!.enabled).toBe(true);
+    });
+
+    it('stays open for a student without a package, a start date, or in create mode', () => {
+      expect(lock(build({ mode: 'edit', student: enrolled({ package: undefined }) })).serviceStarted).toBe(false);
+      TestBed.resetTestingModule();
+      expect(lock(build({ mode: 'edit', student: enrolled({ package_start_date: undefined }) })).serviceStarted)
+        .toBe(false);
+      TestBed.resetTestingModule();
+      const c = build({ mode: 'create' });
+      expect(lock(c).serviceStarted).toBe(false);
+      expect(form(c).get('package')!.enabled).toBe(true);
+    });
+
+    it('setting a first package saves and closes normally', () => {
       const c = build({ mode: 'edit', student: enrolled({ package: undefined }) });
       form(c).get('package')?.setValue('Succeed');
-      studentService.updateStudent.mockReturnValue(of({} as Student));
       c.save();
+      expect(studentService.updateStudent.mock.calls[0][0].package).toBe('Succeed');
       expect(dialogRef.close).toHaveBeenCalledWith(true);
     });
 
-    it('records a zero prior charge when the old package was unconfigured custom', () => {
-      // Old CUSTOM package with no custom values → not resolvable → $0 old portion.
-      const student = enrolled({ package: 'Custom' });
-      const c = build({ mode: 'edit', student });
-      form(c).get('package')?.setValue('Succeed');
-      studentService.updateStudent.mockReturnValue(of({} as Student));
-      c.save();
-      const payload = studentService.updateStudent.mock.calls[0][0] as Student;
-      expect(payload.mid_month_prior_charge).toBe(0);
-      expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
+    describe('fixing a data-entry mistake', () => {
+      it('unlocks the package; the correction is saved in place and routes to Manage Schedule', () => {
+        const c = build({ mode: 'edit', student: enrolled() });
+        c.toggleCorrection();
+        expect(lock(c).correctingPackage).toBe(true);
+        expect(lock(c).packageLocked).toBe(false);
+        for (const name of packageControls) {
+          expect(form(c).get(name)!.enabled).toBe(true);
+        }
+        form(c).get('package')?.setValue('Thrive');
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.package).toBe('Thrive');
+        // In place: the start date stands and nothing is stamped for proration.
+        expect(payload.package_start_date).toBe('2026-05-01T00:00:00');
+        expect('mid_month_change_period' in payload).toBe(false);
+        expect('mid_month_prior_charge' in payload).toBe(false);
+        expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
+      });
+
+      it('a corrected package wins over a simultaneous new scheduled change', () => {
+        const c = build({ mode: 'edit', student: enrolled() });
+        c.toggleCorrection();
+        form(c).get('package')?.setValue('Thrive');
+        c.addPendingChange();
+        c.pendingRows.at(0).patchValue({ package: 'Achieve' });
+        c.save();
+        expect(dialogRef.close).toHaveBeenCalledWith({ openScheduleForStudentId: 's-1' });
+      });
+
+      it('unlocking without changing the package closes normally', () => {
+        const c = build({ mode: 'edit', student: enrolled() });
+        c.toggleCorrection();
+        c.save();
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+
+      it('cancelling the correction restores the stored values and locks again', () => {
+        const c = build({
+          mode: 'edit',
+          student: enrolled({
+            package: 'Custom', custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 45,
+          }),
+        });
+        c.toggleCorrection();
+        form(c).patchValue({
+          package: 'Thrive', custom_monthly_cost: 1, custom_sessions_per_week: 9, custom_session_length_min: 9,
+        });
+        c.toggleCorrection();
+        expect(lock(c).packageLocked).toBe(true);
+        expect(form(c).getRawValue()).toEqual(expect.objectContaining({
+          package: 'Custom', custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 45,
+        }));
+        expect(form(c).get('package')!.disabled).toBe(true);
+      });
+
+      it('restores blanks for values the student never had', () => {
+        const c = build({ mode: 'edit', student: enrolled() });
+        c.toggleCorrection();
+        form(c).patchValue({ custom_monthly_cost: 5 });
+        c.toggleCorrection();
+        expect(form(c).getRawValue()).toEqual(expect.objectContaining({
+          package: 'Succeed', custom_monthly_cost: null, custom_sessions_per_week: null,
+          custom_session_length_min: null,
+        }));
+      });
     });
   });
 

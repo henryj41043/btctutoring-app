@@ -48,12 +48,6 @@ import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialo
 import {ManageScheduleDialog} from '../manage-schedule-dialog/manage-schedule-dialog';
 import {StudentDialog, StudentDialogMode, StudentDialogResult} from '../student-dialog/student-dialog';
 import {TrialSessionDialog, TrialSessionDialogResult} from '../trial-session-dialog/trial-session-dialog';
-import {BillingService} from '../services/billing.service';
-import {BillingRecord} from '../models/billing-record.model';
-import {currentPeriodAmounts, recomputedBillingRecords} from '../utils/billing-recompute';
-import {PackageService} from '../services/package.service';
-import {PackageCatalog, toCatalog} from '../utils/package-config';
-import {PackageRow} from '../models/package-row.model';
 import {minNoteOrder, noteDateIso, noteGroup, sortNotes} from '../utils/note-forms';
 import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-forms';
 import {availableMakeupMinutes} from '../utils/makeup';
@@ -108,7 +102,6 @@ export class Contact implements OnInit {
   private contactService: ContactService = inject(ContactService);
   private studentService: StudentService = inject(StudentService);
   private noteService: NoteService = inject(NoteService);
-  private packageService: PackageService = inject(PackageService);
   protected authService: AuthService = inject(AuthService);
   private formBuilder: FormBuilder = inject(FormBuilder);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
@@ -116,7 +109,6 @@ export class Contact implements OnInit {
   private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
   private scheduleService: ScheduleService = inject(ScheduleService);
-  private billingService: BillingService = inject(BillingService);
   private sessionsService: SessionsService = inject(SessionsService);
   /** Pending make-up minutes per student id; null until loaded (or when the read failed). */
   private scheduledMakeupById: Map<string, number> | null = null;
@@ -228,16 +220,8 @@ export class Contact implements OnInit {
   protected students: Student[] = [];
   protected rosterDataSource = new MatTableDataSource<Student>([]);
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
-  /** The admin-managed package catalog for mid-month billing recomputes. */
-  private catalog: PackageCatalog = {};
 
   ngOnInit() {
-    // Catalog for recomputeCurrentPeriodBilling; a failed load degrades the
-    // recompute preview to $0 — the Billing page is the loud source of truth.
-    this.packageService.getPackages().pipe(
-      catchError(() => of([] as PackageRow[])),
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe(rows => (this.catalog = toCatalog(rows)));
     this.loadContact();
     // Family students are an admin view — tutors only ever see their own
     // (Hiring) page, where the roster loads via loadContact instead. The
@@ -685,11 +669,7 @@ export class Contact implements OnInit {
   }
 
   /** Opens the Manage Schedule dialog for a student; reloads on a persisted change. */
-  openManageScheduleDialog(
-    student: Student,
-    recomputeBilling: boolean = false,
-    pendingEffective?: string,
-  ): void {
+  openManageScheduleDialog(student: Student, pendingEffective?: string): void {
     this.contactService.getContact(student.assigned_tutor_id!).pipe(
       catchError(error => {
         console.log(error);
@@ -702,47 +682,9 @@ export class Contact implements OnInit {
       });
       ref.afterClosed().subscribe((updated?: Student) => {
         if (updated) {
-          this.loadStudents(recomputeBilling ? () => this.recomputeCurrentPeriodBilling() : undefined);
+          this.loadStudents();
         }
       });
-    });
-  }
-
-  /**
-   * After a mid-month package change, adjusts any already-generated billing
-   * record for the current period to the recomputed (Option A) amount, keeping
-   * its paid state. New periods aren't created here — the Billing page derives
-   * those live.
-   */
-  private recomputeCurrentPeriodBilling(): void {
-    const contact = this.loadedContact;
-    if (!contact?.id) {
-      return;
-    }
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const enrolled = this.students.filter(s =>
-      s.status === StudentStatus.ACTIVE_STUDENT && (!!s.package || !!s.btc_and_me));
-    const computed = currentPeriodAmounts(contact, enrolled, year, month, this.catalog);
-    if (!computed) {
-      return;
-    }
-
-    this.billingService.getBillingRecordsByContact(contact.id).pipe(
-      catchError(error => {
-        console.log(error);
-        return of([] as BillingRecord[]);
-      })
-    ).subscribe(existing => {
-      for (const record of recomputedBillingRecords(existing, contact.id!, computed, year, month)) {
-        this.billingService.upsertBillingRecord(record).pipe(
-          catchError(error => {
-            console.log(error);
-            return EMPTY;
-          })
-        ).subscribe();
-      }
     });
   }
 
@@ -772,14 +714,10 @@ export class Contact implements OnInit {
   }
 
   /** Opens the Student dialog for create/edit/delete; reloads on a persisted change.
-   *  A mid-month package change closes with a student id — after reloading we open
-   *  Manage Schedule so the admin redefines the new package's slots, then recompute
-   *  this period's billing. */
+   *  A corrected current package closes with a student id — after reloading we open
+   *  Manage Schedule so the admin redefines the package's slots. Billing needs no
+   *  recompute: the Billing page reads the service's statements. */
   openStudentDialog(mode: StudentDialogMode, student?: Student): void {
-    // A BTC & Me enrollment change (edit or delete) reprices the current
-    // month's already-generated billing record — snapshot to detect it.
-    const groupFlagBefore = student?.btc_and_me ?? false;
-    const editedId = student?.id;
     const ref = this.dialog.open(StudentDialog, {
       data: {mode, contactId: this.id, student, tutors: this.tutors},
       width: '480px',
@@ -794,22 +732,15 @@ export class Contact implements OnInit {
         if (openScheduleFor) {
           const changed = this.students.find(s => s.id === openScheduleFor);
           if (changed) {
-            this.openManageScheduleDialog(changed, true);
+            this.openManageScheduleDialog(changed);
           }
         }
         if (openPendingFor) {
-          // Define the FUTURE package's slots for that change; affects only
-          // its entry, so no billing recompute (it bills a future month).
+          // Define the FUTURE package's slots for that change.
           const changed = this.students.find(s => s.id === openPendingFor.studentId);
           if (changed) {
-            this.openManageScheduleDialog(changed, false, openPendingFor.effective);
+            this.openManageScheduleDialog(changed, openPendingFor.effective);
           }
-        }
-        const groupFlagAfter = editedId
-          ? (this.students.find(s => s.id === editedId)?.btc_and_me ?? false)
-          : false;
-        if (groupFlagAfter !== groupFlagBefore) {
-          this.recomputeCurrentPeriodBilling();
         }
       });
     });
