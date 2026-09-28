@@ -125,3 +125,26 @@
   color: #7a4a00;
   font-size: 0.85rem;
 }
+
+.package-correction {
+  margin: -4px 0 10px;
+
+  .correction-button {
+    font-size: 0.8rem;
+  }
+}
+
+.custom-price-notice {
+  font-weight: 700;
+  opacity: 1;
+  color: var(--btc-teal-deep);
+}
+
+.change-preview {
+  margin: 0 0 8px;
+
+  .pricing-preview {
+    margin: 2px 0;
+    font-size: 0.82rem;
+  }
+}

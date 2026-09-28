@@ -13,7 +13,7 @@ export interface MakeupBatch {
  */
 export interface PendingChange {
   package: string;
-  /** 'YYYY-MM-DD', always the 1st of a month. */
+  /** 'YYYY-MM-DD', any future date. */
   effective: string;
   custom_monthly_cost?: number;
   custom_sessions_per_week?: number;
@@ -22,6 +22,8 @@ export interface PendingChange {
   schedule?: ScheduleSlot[];
   /** The effective date this change's advance notice was sent for (backend-owned, carried through). */
   notice_sent?: string;
+  /** Monthly price replacing the new package's price (absent = the standard price). */
+  price_override?: number;
 }
 
 export class Student {

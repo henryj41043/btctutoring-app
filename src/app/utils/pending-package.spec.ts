@@ -1,9 +1,10 @@
 import {
-  effectiveMonthLabel,
+  changeDateBounds,
+  dateKeyOf,
   findPendingChange,
+  HORIZON_MONTHS_AHEAD,
+  monthKey,
   newChangesWithoutSchedule,
-  nextMonthFirsts,
-  packageFieldsForMonth,
   pendingChangeNote,
   pendingChangesOf,
   sameChange,
@@ -61,55 +62,7 @@ describe('pendingChangesOf', () => {
   });
 });
 
-describe('packageFieldsForMonth', () => {
-  it('returns the current fields before the effective month', () => {
-    expect(packageFieldsForMonth(pendingStudent(), 2026, 7)).toEqual({
-      package: 'Succeed',
-      custom_monthly_cost: 111,
-      custom_sessions_per_week: undefined,
-      custom_session_length_min: undefined,
-    });
-  });
-
-  it('returns the pending fields from the effective month onward', () => {
-    expect(packageFieldsForMonth(pendingStudent(), 2026, 8).package).toBe('Achieve');
-    expect(packageFieldsForMonth(pendingStudent(), 2027, 0).package).toBe('Achieve');
-  });
-
-  it('resolves the LATEST reached change with several queued (unsorted input)', () => {
-    const s = pendingStudent({pending_changes: [
-      {package: 'Apex', effective: '2027-01-01'},
-      sep,
-      {package: 'Excel', effective: '2026-11-01'},
-    ]});
-    expect(packageFieldsForMonth(s, 2026, 7).package).toBe('Succeed');
-    expect(packageFieldsForMonth(s, 2026, 8).package).toBe('Achieve');
-    expect(packageFieldsForMonth(s, 2026, 9).package).toBe('Achieve');
-    expect(packageFieldsForMonth(s, 2026, 10).package).toBe('Excel');
-    expect(packageFieldsForMonth(s, 2027, 5).package).toBe('Apex');
-  });
-
-  it('carries the pending CUSTOM overrides', () => {
-    const fields = packageFieldsForMonth(pendingStudent({pending_changes: [{
-      package: 'Custom', effective: '2026-09-01',
-      custom_monthly_cost: 500, custom_sessions_per_week: 2, custom_session_length_min: 45,
-    }]}), 2026, 8);
-    expect(fields).toEqual({
-      package: 'Custom',
-      custom_monthly_cost: 500,
-      custom_sessions_per_week: 2,
-      custom_session_length_min: 45,
-    });
-  });
-
-  it('reads a legacy single change and handles a year-boundary effective date', () => {
-    const legacy = {package: 'Succeed', pending_package: 'Achieve', pending_package_effective: '2027-01-01'} as Student;
-    expect(packageFieldsForMonth(legacy, 2026, 11).package).toBe('Succeed');
-    expect(packageFieldsForMonth(legacy, 2027, 0).package).toBe('Achieve');
-  });
-});
-
-describe('pendingChangeNote / effectiveMonthLabel', () => {
+describe('pendingChangeNote', () => {
   it('formats the change with a component-parsed date (no UTC shift)', () => {
     expect(pendingChangeNote(sep)).toBe('→ Achieve from Sep 1');
     expect(pendingChangeNote(jan)).toBe('→ Excel from Jan 1');
@@ -123,25 +76,6 @@ describe('pendingChangeNote / effectiveMonthLabel', () => {
     expect(pendingChangeNote({package: 'Achieve', effective: '2026-13-01'})).toBeNull();
   });
 
-  it('labels an effective month, falling back to the raw value', () => {
-    expect(effectiveMonthLabel('2026-09-01')).toBe('September 2026');
-    expect(effectiveMonthLabel('garbage')).toBe('garbage');
-    expect(effectiveMonthLabel('2026-13-01')).toBe('2026-13-01');
-  });
-});
-
-describe('nextMonthFirsts', () => {
-  it('lists the next N month-1sts starting NEXT month', () => {
-    const options = nextMonthFirsts(NOW);
-    expect(options).toHaveLength(6);
-    expect(options[0]).toEqual({value: '2026-09-01', label: 'September 2026'});
-    expect(options[5]).toEqual({value: '2027-02-01', label: 'February 2027'});
-  });
-
-  it('crosses the year boundary from December', () => {
-    const options = nextMonthFirsts(new Date(2026, 11, 5), 2);
-    expect(options.map(o => o.value)).toEqual(['2027-01-01', '2027-02-01']);
-  });
 });
 
 describe('findPendingChange / withPendingSchedule / sameChange', () => {
@@ -186,46 +120,99 @@ describe('newChangesWithoutSchedule', () => {
   });
 });
 
+describe('date helpers', () => {
+  it('monthKey and dateKeyOf pad their parts', () => {
+    expect(monthKey(2026, 0)).toBe('2026-01');
+    expect(monthKey(2026, 11)).toBe('2026-12');
+    expect(dateKeyOf(new Date(2026, 8, 5))).toBe('2026-09-05');
+    expect(dateKeyOf(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31');
+  });
+
+  it('changeDateBounds runs from tomorrow to the end of the look-ahead', () => {
+    expect(HORIZON_MONTHS_AHEAD).toBe(3);
+    expect(changeDateBounds(new Date(2026, 8, 14, 15, 30))).toEqual({
+      min: new Date(2026, 8, 15),
+      max: new Date(2026, 11, 31),
+    });
+    // Month end rolls into the next month; the year boundary is crossed.
+    expect(changeDateBounds(new Date(2026, 10, 30))).toEqual({
+      min: new Date(2026, 11, 1),
+      max: new Date(2027, 1, 28),
+    });
+  });
+});
+
 describe('validatePendingChanges', () => {
+  // Sept 14 2026: tomorrow is Sept 15, the look-ahead ends Dec 31.
+  const TODAY = new Date(2026, 8, 14, 15, 0, 0);
+  const oct: PendingChange = {package: 'Achieve', effective: '2026-10-14'};
   const ok = (changes: PendingChange[], stored: string[] = []) =>
-    validatePendingChanges(changes, 'Succeed', stored, NOW);
+    validatePendingChanges(changes, 'Succeed', stored, TODAY);
 
-  it('accepts an empty list and a valid multi-step chain', () => {
+  it('accepts an empty list and a valid multi-step chain on any day', () => {
     expect(ok([])).toBeNull();
-    expect(ok([sep, {package: 'Succeed', effective: '2027-01-01'}])).toBeNull(); // back to the current package later is fine
+    expect(ok([oct, {package: 'Succeed', effective: '2026-12-31'}])).toBeNull();
+    expect(ok([{package: 'Achieve', effective: '2026-09-15'}])).toBeNull();
+    expect(ok([{package: 'Achieve', effective: '2026-10-01'}])).toBeNull();
   });
 
-  it('requires a package and an effective month on every row', () => {
-    expect(ok([{package: '', effective: '2026-09-01'}])).toBe('Pick a package for every scheduled change.');
-    expect(ok([{package: 'Achieve', effective: ''}])).toBe('Pick the month each scheduled package change takes effect.');
+  it('requires a package and a date on every row', () => {
+    expect(ok([{package: '', effective: '2026-10-14'}])).toBe('Pick a package for every scheduled change.');
+    expect(ok([{package: 'Achieve', effective: ''}])).toBe('Pick the date each scheduled package change takes effect.');
   });
 
-  it('requires the 1st of a future month, unless the date is already stored', () => {
-    expect(ok([{package: 'Achieve', effective: '2026-09-15'}])).toBe('A scheduled change must take effect on the 1st of a month.');
-    expect(ok([{package: 'Achieve', effective: '2026-08-01'}])).toBe('A scheduled change must take effect in a future month.');
+  it('requires a real date', () => {
+    for (const effective of ['2026-10', '10/14/2026', '2026-02-30', '2026-13-01', '2026-10-14T00:00:00']) {
+      expect(ok([{package: 'Achieve', effective}])).toBe('A scheduled change needs a valid date.');
+    }
+    expect(ok([{package: 'Achieve', effective: '2026-02-30'}], ['2026-02-30']))
+      .toBe('A scheduled change needs a valid date.');
+  });
+
+  it('requires a future date, unless the date is already stored', () => {
+    expect(ok([{package: 'Achieve', effective: '2026-09-14'}]))
+      .toBe('A scheduled change must take effect on a future date.');
+    expect(ok([{package: 'Achieve', effective: '2026-08-01'}]))
+      .toBe('A scheduled change must take effect on a future date.');
     expect(ok([{package: 'Achieve', effective: '2026-08-01'}], ['2026-08-01'])).toBeNull();
-    expect(ok([{package: 'Achieve', effective: '2026-09-01'}])).toBeNull(); // next month is future
   });
 
-  it('rejects two changes in the same month', () => {
-    expect(ok([sep, {package: 'Excel', effective: '2026-09-01'}]))
-      .toBe('Two scheduled changes share the same month — pick different months.');
+  it('stays inside the calendar look-ahead, unless the date is already stored', () => {
+    expect(ok([{package: 'Achieve', effective: '2027-01-01'}]))
+      .toBe('A scheduled change can be set no further ahead than the calendar (three months after this one).');
+    expect(ok([{package: 'Achieve', effective: '2027-01-01'}], ['2027-01-01'])).toBeNull();
+  });
+
+  it('accepts a custom price of $0 or more and rejects anything else', () => {
+    expect(ok([{...oct, price_override: 0}])).toBeNull();
+    expect(ok([{...oct, price_override: 410.4}])).toBeNull();
+    expect(ok([{...oct, price_override: undefined}])).toBeNull();
+    expect(ok([{...oct, price_override: null as never}])).toBeNull();
+    for (const bad of [-1, NaN, Infinity, '5' as never]) {
+      expect(ok([{...oct, price_override: bad}])).toBe('A custom price must be $0 or more.');
+    }
+  });
+
+  it('rejects two changes on the same date', () => {
+    expect(ok([oct, {package: 'Excel', effective: '2026-10-14'}]))
+      .toBe('Two scheduled changes share the same date — pick different dates.');
+    expect(ok([oct, {package: 'Excel', effective: '2026-10-15'}])).toBeNull();
   });
 
   it('rejects a step whose package equals the previous step (current package first)', () => {
-    expect(ok([{package: 'Succeed', effective: '2026-09-01'}]))
+    expect(ok([{package: 'Succeed', effective: '2026-10-14'}]))
       .toBe('The scheduled Succeed package matches the step before it — remove it or pick a different package.');
-    expect(ok([sep, {package: 'Achieve', effective: '2026-10-01'}]))
+    expect(ok([oct, {package: 'Achieve', effective: '2026-11-01'}]))
       .toBe('The scheduled Achieve package matches the step before it — remove it or pick a different package.');
   });
 
   it('allows Custom → Custom only when a custom value differs, and requires all three custom values', () => {
-    const c1: PendingChange = {package: 'Custom', effective: '2026-09-01', custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 30};
-    expect(ok([c1, {...c1, effective: '2026-10-01'}]))
+    const c1: PendingChange = {package: 'Custom', effective: '2026-10-14', custom_monthly_cost: 400, custom_sessions_per_week: 2, custom_session_length_min: 30};
+    expect(ok([c1, {...c1, effective: '2026-11-01'}]))
       .toBe('The scheduled Custom package matches the step before it — remove it or pick a different package.');
-    expect(ok([c1, {...c1, effective: '2026-10-01', custom_monthly_cost: 450}])).toBeNull();
-    expect(ok([{package: 'Custom', effective: '2026-09-01', custom_monthly_cost: 400}]))
+    expect(ok([c1, {...c1, effective: '2026-11-01', custom_monthly_cost: 450}])).toBeNull();
+    expect(ok([{package: 'Custom', effective: '2026-10-14', custom_monthly_cost: 400}]))
       .toBe('A scheduled Custom package needs all three custom values.');
-    expect(validatePendingChanges([{...c1, custom_monthly_cost: 450}], 'Custom', [], NOW)).toBeNull();
+    expect(validatePendingChanges([{...c1, custom_monthly_cost: 450}], 'Custom', [], TODAY)).toBeNull();
   });
 });
