@@ -15,6 +15,7 @@ import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {EmailService} from '../services/email.service';
 import {ContactService} from '../services/contact.service';
 import {EmailEntry} from '../models/email-entry.model';
+import {conversationLabel, isConversation, participantsLabel} from '../utils/email-view';
 import {Contact} from '../models/contact.model';
 import {AssignEmailDialog, AssignEmailDialogMode} from '../assign-email-dialog/assign-email-dialog';
 import {TableStateStore} from '../utils/table-state';
@@ -68,13 +69,20 @@ export class UnmatchedEmails implements OnInit {
   /** The entry whose stripped body is expanded. */
   protected expandedId: string | null = null;
 
+  protected readonly isConversation = isConversation;
+  protected readonly conversationLabel = conversationLabel;
+  protected readonly participantsLabel = participantsLabel;
+
   ngOnInit(): void {
     const savedFilter = this.viewState.load().filter;
     if (savedFilter) {
       this.dataSource.filter = savedFilter;
     }
     this.dataSource.filterPredicate = (entry, filter) => {
-      const haystack = [entry.from_email, entry.from_name, entry.subject, entry.forwarded_by, entry.body_text]
+      const haystack = [
+        entry.from_email, entry.from_name, entry.subject, entry.forwarded_by, entry.body_text,
+        participantsLabel(entry),
+      ]
         .join(' ')
         .toLowerCase();
       return haystack.includes(filter);

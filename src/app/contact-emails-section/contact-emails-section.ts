@@ -10,6 +10,7 @@ import {ContactService} from '../services/contact.service';
 import {AuthService} from '../services/auth.service';
 import {EmailEntry} from '../models/email-entry.model';
 import {AssignEmailDialog} from '../assign-email-dialog/assign-email-dialog';
+import {conversationLabel, isConversation, participantsLabel} from '../utils/email-view';
 
 /**
  * The contact page's Emails card: forwarded parent emails the pipeline filed
@@ -38,6 +39,10 @@ export class ContactEmailsSection implements OnInit {
   protected contactEmails: EmailEntry[] = [];
   /** The email entry whose full body is expanded. */
   protected expandedEmailId: string | null = null;
+
+  protected readonly isConversation = isConversation;
+  protected readonly conversationLabel = conversationLabel;
+  protected readonly participantsLabel = participantsLabel;
 
   ngOnInit(): void {
     if (!this.authService.isAdmin()) {

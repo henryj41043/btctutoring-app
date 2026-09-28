@@ -74,6 +74,10 @@ h2 {
     color: var(--mat-sys-on-surface-variant);
   }
 
+  .email-thread-chip {
+    flex: 0 0 auto;
+  }
+
   .email-chevron {
     flex: 0 0 auto;
     color: var(--mat-sys-on-surface-variant);
@@ -95,6 +99,11 @@ h2 {
     overflow-wrap: anywhere;
     max-height: 20em;
     overflow-y: auto;
+
+    /* A conversation holds several messages: give it room to be read. */
+    &.email-text--thread {
+      max-height: 40em;
+    }
   }
 
   .email-remove-button {

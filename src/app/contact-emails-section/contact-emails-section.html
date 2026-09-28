@@ -5,15 +5,20 @@
       <button type="button" class="email-row" (click)="toggleEmail(entry)">
         <span class="email-date">{{(entry.sent_at ?? entry.received_at) | date:'mediumDate'}}</span>
         <span class="email-subject">{{entry.subject || '(no subject)'}}</span>
+        @if (isConversation(entry)) {
+          <span class="btc-chip btc-chip--info email-thread-chip">{{conversationLabel(entry)}}</span>
+        }
         <span class="email-from">{{entry.from_name || entry.from_email || '—'}}</span>
         <mat-icon class="email-chevron">{{expandedEmailId === entry.id ? 'expand_less' : 'expand_more'}}</mat-icon>
       </button>
       @if (expandedEmailId === entry.id) {
         <div class="email-body">
-          @if (entry.from_email) {
+          @if (isConversation(entry) && participantsLabel(entry)) {
+            <p class="email-meta">Participants: {{participantsLabel(entry)}}</p>
+          } @else if (entry.from_email) {
             <p class="email-meta">From {{entry.from_name ? entry.from_name + ' <' + entry.from_email + '>' : entry.from_email}}</p>
           }
-          <p class="email-text">{{entry.body_text || '(no text captured — use View original)'}}</p>
+          <p class="email-text" [class.email-text--thread]="isConversation(entry)">{{entry.body_text || '(no text captured — use View original)'}}</p>
           <button matButton type="button" (click)="viewOriginalEmail(entry, $event)">
             <mat-icon>open_in_new</mat-icon>
             View original

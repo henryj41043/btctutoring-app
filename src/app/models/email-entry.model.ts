@@ -15,7 +15,10 @@ export interface EmailEntry {
   sent_at?: string;
   /** When the pipeline received the forward (ISO). */
   received_at?: string;
-  /** Quoted-history-stripped newest message only. */
+  /**
+   * A single email: the newest message with the quoted history stripped.
+   * A conversation: every message, oldest first, under sender/date lines.
+   */
   body_text?: string;
   s3_key?: string;
   /** The admin inbox that forwarded it into the pipeline. */
@@ -24,4 +27,14 @@ export interface EmailEntry {
   assigned_by?: string;
   assigned_at?: string;
   created_at?: string;
+  /** True when the forward held a conversation (more than one message). */
+  is_thread?: boolean;
+  message_count?: number;
+  /** Everyone found in the conversation's From/To/Cc lines. */
+  participants?: EmailParticipant[];
+}
+
+export interface EmailParticipant {
+  email: string;
+  name?: string;
 }
