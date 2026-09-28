@@ -124,4 +124,20 @@ describe('SessionsService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush({ message: 'ok' });
   });
+
+  it('fillHorizon POSTs the student; a rebuild adds the date', () => {
+    service.fillHorizon('s-1').subscribe();
+    const plain = httpMock.expectOne(`${base}/sessions/horizon/fill?student=s-1`);
+    expect(plain.request.method).toBe('POST');
+    expect(plain.request.params.has('from')).toBe(false);
+    plain.flush({});
+
+    service.fillHorizon('s-1', '2026-10-14').subscribe();
+    const rebuild = httpMock.expectOne(`${base}/sessions/horizon/fill?student=s-1&from=2026-10-14`);
+    expect(rebuild.request.method).toBe('POST');
+    rebuild.flush({});
+
+    service.fillHorizon('s-1', '').subscribe();
+    httpMock.expectOne(`${base}/sessions/horizon/fill?student=s-1`).flush({});
+  });
 });

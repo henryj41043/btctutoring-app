@@ -314,19 +314,32 @@
 
     @if (showDeactivateConfirm) {
       <div class="status-confirm-warning">
-        @if (confirmingEndDate) {
-          <p><strong>⚠ Service ends {{ endDateLabel }}.</strong></p>
+        @if (confirmingRebuild) {
+          <p><strong>⚠ Scheduled package change removed or moved.</strong></p>
+          <p>
+            @if (upcomingSessionCount !== null) {
+              {{ upcomingSessionCount }} pending tutoring session(s) from {{ rebuildLabel }} will be rebuilt
+            } @else {
+              This student's pending tutoring sessions from {{ rebuildLabel }} will be rebuilt
+            }
+            on the schedule that now applies. Sessions already held or cancelled are kept. Rebuilding
+            does not bank make-up minutes — cancel sessions first if the minutes should be kept.
+          </p>
         } @else {
-          <p><strong>⚠ Leaving Active status.</strong></p>
-        }
-        <p>
-          @if (upcomingSessionCount !== null) {
-            {{ upcomingSessionCount }} {{ confirmingEndDate ? 'pending tutoring session(s) after that date' : 'upcoming pending tutoring session(s)' }} will be deleted.
+          @if (confirmingEndDate) {
+            <p><strong>⚠ Service ends {{ endDateLabel }}.</strong></p>
           } @else {
-            This student's {{ confirmingEndDate ? 'pending tutoring sessions after that date' : 'upcoming pending tutoring sessions' }} will be deleted.
+            <p><strong>⚠ Leaving Active status.</strong></p>
           }
-          Deleting does not bank make-up minutes — cancel sessions first if the minutes should be kept.
-        </p>
+          <p>
+            @if (upcomingSessionCount !== null) {
+              {{ upcomingSessionCount }} {{ confirmingEndDate ? 'pending tutoring session(s) after that date' : 'upcoming pending tutoring session(s)' }} will be deleted.
+            } @else {
+              This student's {{ confirmingEndDate ? 'pending tutoring sessions after that date' : 'upcoming pending tutoring sessions' }} will be deleted.
+            }
+            Deleting does not bank make-up minutes — cancel sessions first if the minutes should be kept.
+          </p>
+        }
       </div>
     }
     @if (hasError) {
@@ -338,7 +351,9 @@
       <mat-spinner class="dialog-saving-spinner" [diameter]="24"></mat-spinner>
     } @else if (showDeactivateConfirm) {
       <button matButton (click)="cancelDeactivation()">Go Back</button>
-      <button mat-raised-button color="warn" (click)="confirmDeactivation()">Save &amp; Delete Sessions</button>
+      <button mat-raised-button color="warn" (click)="confirmDeactivation()">
+        {{ confirmingRebuild ? 'Save & Rebuild Sessions' : 'Save & Delete Sessions' }}
+      </button>
     } @else if (deleteSessionsFailed) {
       <button matButton (click)="closeAfterSaveWithoutCleanup()">Close</button>
       <button mat-raised-button color="primary" (click)="retryDeleteSessions()">Retry Cleanup</button>

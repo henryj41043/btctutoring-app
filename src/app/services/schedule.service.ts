@@ -283,6 +283,15 @@ export class ScheduleService {
     return this.sessionsService.fillHorizon(student.id).pipe(catchError(() => of(null)));
   }
 
+  /**
+   * Rebuilds a student's tutoring sessions from a date ('YYYY-MM-DD') on the
+   * schedule that now applies. Unlike fillAhead a failure is NOT swallowed:
+   * the old sessions were just removed, so the caller must offer a retry.
+   */
+  rebuildFrom(studentId: string, from: string): Observable<unknown> {
+    return this.sessionsService.fillHorizon(studentId, from);
+  }
+
   /** A student's future (after now) PENDING tutoring sessions that belong to a series. */
   private futurePendingSeries(sessions: Session[], now: Date): Session[] {
     return sessions.filter(

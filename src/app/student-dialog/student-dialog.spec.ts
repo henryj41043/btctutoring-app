@@ -31,6 +31,7 @@ describe('StudentDialog', () => {
     futurePendingTutoring: jest.fn((..._args: unknown[]) => of([])),
     deleteFuturePendingSessions: jest.fn((..._args: unknown[]) => of(0)),
     fillAhead: jest.fn((..._args: unknown[]) => of(null)),
+    rebuildFrom: jest.fn((..._args: unknown[]) => of(null)),
   };
 
   const build = (data: Partial<StudentDialogData>): StudentDialog => {
@@ -72,6 +73,10 @@ describe('StudentDialog', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    scheduleService.futurePendingTutoring.mockReturnValue(of([]));
+    scheduleService.deleteFuturePendingSessions.mockReturnValue(of(0));
+    scheduleService.fillAhead.mockReturnValue(of(null));
+    scheduleService.rebuildFrom.mockReturnValue(of(null));
   });
 
   describe('create', () => {
@@ -1688,6 +1693,203 @@ describe('StudentDialog', () => {
         c.save();
         expect('service_end_date' in saved()).toBe(false);
       });
+    });
+  });
+
+  describe('a scheduled change with a schedule is removed or re-dated', () => {
+    const monday = [{ weekday: Weekday.MONDAY, start_time: '10:00', end_time: '10:30' }];
+    const enrolled = (over: Partial<Student> = {}): Student => ({
+      id: 's-1',
+      contact_id: 'c-1',
+      name: 'Pat',
+      status: StudentStatus.ACTIVE_STUDENT,
+      onboarding_complete: true,
+      package: 'Determination',
+      package_start_date: '2026-05-01T00:00:00',
+      pending_changes: [
+        { package: 'Succeed', effective: '2026-10-14', schedule: monday },
+        { package: 'Achieve', effective: '2026-11-20', schedule: monday },
+      ],
+      ...over,
+    } as Student);
+    const view = (c: StudentDialog) =>
+      c as unknown as {
+        showDeactivateConfirm: boolean;
+        confirmingRebuild: boolean;
+        confirmingEndDate: boolean;
+        rebuildLabel: string;
+        upcomingSessionCount: number | null;
+        deleteSessionsFailed: boolean;
+      };
+    const pending = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ id: `x-${i}`, type: 'TUTORING', status: 'Pending' }));
+
+    beforeEach(() => {
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+    });
+
+    it('an untouched list never prompts or rebuilds', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.save();
+      expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+      expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+      expect(view(c).rebuildLabel).toBe('');
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('removing a change prompts with the sessions from its date, saves, removes and rebuilds', () => {
+      scheduleService.futurePendingTutoring.mockReturnValue(of(pending(5) as never));
+      scheduleService.deleteFuturePendingSessions.mockReturnValue(of(5));
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      c.save();
+      expect(scheduleService.futurePendingTutoring).toHaveBeenCalledWith(
+        's-1', expect.any(Date), { from: new Date(2026, 10, 20) },
+      );
+      expect(view(c).showDeactivateConfirm).toBe(true);
+      expect(view(c).confirmingRebuild).toBe(true);
+      expect(view(c).confirmingEndDate).toBe(false);
+      expect(view(c).rebuildLabel).toBe('Nov 20, 2026');
+      expect(view(c).upcomingSessionCount).toBe(5);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+
+      c.confirmDeactivation();
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+      expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith(
+        's-1', expect.any(Date), { from: new Date(2026, 10, 20) },
+      );
+      expect(scheduleService.rebuildFrom).toHaveBeenCalledWith('s-1', '2026-11-20');
+      expect(
+        scheduleService.deleteFuturePendingSessions.mock.invocationCallOrder[0],
+      ).toBeLessThan(scheduleService.rebuildFrom.mock.invocationCallOrder[0]);
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('rebuilds from the earliest affected change', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      c.removePendingChange(0);
+      c.save();
+      expect(scheduleService.rebuildFrom).toHaveBeenCalledWith('s-1', '2026-10-14');
+    });
+
+    it('moving a change later rebuilds from its old date; earlier, from its new date', () => {
+      const c1 = build({ mode: 'edit', student: enrolled() });
+      c1.pendingRows.at(0).patchValue({ effective: new Date(2026, 9, 28) });
+      c1.save();
+      expect(scheduleService.rebuildFrom).toHaveBeenLastCalledWith('s-1', '2026-10-14');
+
+      TestBed.resetTestingModule();
+      const c2 = build({ mode: 'edit', student: enrolled() });
+      c2.pendingRows.at(0).patchValue({ effective: new Date(2026, 9, 5) });
+      c2.save();
+      expect(scheduleService.rebuildFrom).toHaveBeenLastCalledWith('s-1', '2026-10-05');
+    });
+
+    it('a change that loses its schedule rebuilds, then opens the pending-schedule dialog', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.pendingRows.at(0).get('package')!.setValue('Excel');
+      c.save();
+      expect(scheduleService.rebuildFrom).toHaveBeenCalledWith('s-1', '2026-10-14');
+      expect(dialogRef.close).toHaveBeenCalledWith({
+        openPendingScheduleFor: { studentId: 's-1', effective: '2026-10-14' },
+      });
+    });
+
+    it('with nothing to remove it still rebuilds, without a prompt', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      c.save();
+      expect(view(c).showDeactivateConfirm).toBe(false);
+      expect(scheduleService.rebuildFrom).toHaveBeenCalledWith('s-1', '2026-11-20');
+    });
+
+    it('changes without a schedule generated nothing: no rebuild', () => {
+      const c = build({
+        mode: 'edit',
+        student: enrolled({
+          pending_changes: [
+            { package: 'Succeed', effective: '2026-10-14' },
+            { package: 'Achieve', effective: '2026-11-20', schedule: [] },
+          ],
+        }),
+      });
+      c.removePendingChange(1);
+      c.pendingRows.at(0).patchValue({ effective: new Date(2026, 9, 20), schedule: monday });
+      c.removePendingChange(0);
+      c.save();
+      expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+    });
+
+    it('a price-only edit keeps the sessions', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.pendingRows.at(0).patchValue({ price_mode: 'custom', price_override: 300 });
+      c.save();
+      expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+      expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+    });
+
+    it('a new end date earlier than the affected change wins the window and still rebuilds', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      form(c).get('service_end_date')!.setValue(new Date(2026, 9, 31));
+      c.save();
+      // The day after the end date, Nov 1, is earlier than Nov 20.
+      expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith(
+        's-1', expect.any(Date), { from: new Date(2026, 10, 1) },
+      );
+      expect(scheduleService.rebuildFrom).toHaveBeenCalledWith('s-1', '2026-11-01');
+    });
+
+    it('an end date later than the affected change leaves the change date in charge', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      form(c).get('service_end_date')!.setValue(new Date(2026, 11, 15));
+      c.save();
+      expect(scheduleService.rebuildFrom).toHaveBeenCalledWith('s-1', '2026-11-20');
+    });
+
+    it('leaving Active deletes everything upcoming and rebuilds nothing', () => {
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      form(c).get('status')!.setValue(StudentStatus.PAST_STUDENT);
+      c.save();
+      expect(view(c).confirmingRebuild).toBe(false);
+      expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith('s-1');
+      expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+    });
+
+    it('a student who is not Active is left alone', () => {
+      const c = build({ mode: 'edit', student: enrolled({ status: StudentStatus.PAST_STUDENT }) });
+      c.removePendingChange(1);
+      c.save();
+      expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+      expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+    });
+
+    it('a failed rebuild keeps the dialog open with a retry that rebuilds again', () => {
+      scheduleService.rebuildFrom.mockReturnValueOnce(throwError(() => new Error('boom')) as never);
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      c.save();
+      expect(view(c).deleteSessionsFailed).toBe(true);
+      expect(priv(c).errorMessage).toBe('Student saved, but rebuilding the upcoming sessions failed.');
+      expect(priv(c).submitting).toBe(false);
+      expect(dialogRef.close).not.toHaveBeenCalled();
+
+      c.retryDeleteSessions();
+      expect(scheduleService.rebuildFrom).toHaveBeenCalledTimes(2);
+      expect(studentService.updateStudent).toHaveBeenCalledTimes(1);
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it('a failed removal never rebuilds', () => {
+      scheduleService.deleteFuturePendingSessions.mockReturnValueOnce(throwError(() => new Error('x')) as never);
+      const c = build({ mode: 'edit', student: enrolled() });
+      c.removePendingChange(1);
+      c.save();
+      expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+      expect(view(c).deleteSessionsFailed).toBe(true);
     });
   });
 });
