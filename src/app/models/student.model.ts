@@ -11,6 +11,15 @@ export interface MakeupBatch {
  * One scheduled package change. `effective` ('YYYY-MM-01') is the key —
  * unique per student — so no synthetic id is needed.
  */
+/** A one-off tutoring session in the start week (counts toward first-month proration). */
+export interface FirstWeekSession {
+  date: string; // 'YYYY-MM-DD'
+  start_time: string; // 'HH:mm'
+  end_time: string; // 'HH:mm'
+  /** Absent = the student's primary tutor. */
+  tutor_id?: string;
+}
+
 export interface PendingChange {
   package: string;
   /** 'YYYY-MM-DD', any future date. */
@@ -81,6 +90,8 @@ export class Student {
   /** @deprecated See pending_changes (notice_sent per entry). */
   pending_change_notice_sent?: string;
   /** Old package's prorated portion for a mid-month package-change month. */
+  /** One-off sessions in the current package's start week ([] on save = clear). */
+  first_week_sessions?: FirstWeekSession[];
   /** 'YYYY-MM-DD' last day of service, inclusive (null on save = clear). */
   service_end_date?: string | null;
   /** The status applied once the end date has passed (default Past Student). */

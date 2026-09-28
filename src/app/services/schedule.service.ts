@@ -2,7 +2,7 @@ import {inject, Injectable} from '@angular/core';
 import {catchError, forkJoin, map, Observable, of, switchMap} from 'rxjs';
 import {SessionsService} from './sessions.service';
 import {StudentService} from './student.service';
-import {Student} from '../models/student.model';
+import {FirstWeekSession, Student} from '../models/student.model';
 import {Session} from '../models/session.model';
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
@@ -189,6 +189,36 @@ export class ScheduleService {
     });
   }
 
+  /**
+   * The start week's one-off sessions as PENDING tutoring sessions. They
+   * belong to NO series, so a later "this and future" edit of the weekly
+   * schedule never touches them.
+   */
+  buildFirstWeekSessions(
+    student: Student,
+    tutor: Contact,
+    firstWeek: FirstWeekSession[],
+    tutorsById: Map<string, Contact> = new Map(),
+  ): Session[] {
+    return firstWeek.map(oneOff => {
+      const [year, month, day] = oneOff.date.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      const tutorId = oneOff.tutor_id ?? tutor.id;
+      const effTutor = tutorId === tutor.id ? tutor : tutorsById.get(tutorId!);
+      const s = new Session();
+      s.type = SessionType.TUTORING;
+      s.tutor_id = tutorId;
+      s.tutor_name = effTutor?.first_name ?? '';
+      s.student_id = student.id;
+      s.student_name = studentDisplayName(student);
+      s.start_datetime = this.atTime(date, oneOff.start_time).toISOString();
+      s.end_datetime = this.atTime(date, oneOff.end_time).toISOString();
+      s.status = SessionStatus.PENDING;
+      s.notes = '';
+      return s;
+    });
+  }
+
   /** A time window over session start instants: `from` inclusive, `to` exclusive. */
   private inWindow(session: Session, window?: {from: Date; to?: Date}): boolean {
     if (!window) return true;
@@ -314,17 +344,24 @@ export class ScheduleService {
     startDate: Date,
     autoRenew: boolean,
     tutorsById: Map<string, Contact> = new Map(),
+    firstWeek: FirstWeekSession[] = [],
   ): Observable<Student> {
     const withPrimary: Student = {...student, assigned_tutor_id: tutor.id};
     const seriesIds = this.seriesIdsFor(slots, withPrimary);
     const occurrences = this.buildOccurrences(slots, startDate);
-    const sessions = this.buildSessions(student, tutor, occurrences, seriesIds, tutorsById);
+    const sessions = [
+      ...this.buildSessions(student, tutor, occurrences, seriesIds, tutorsById),
+      ...this.buildFirstWeekSessions(student, tutor, firstWeek, tutorsById),
+    ];
     const updated: Student = {
       ...student,
       assigned_tutor_id: tutor.id,
       schedule: slots,
       package_start_date: this.dateOnlyIso(startDate),
       auto_renew: autoRenew,
+      // A new schedule starts a new start week: stored one-offs are replaced
+      // ([] clears them on the service).
+      first_week_sessions: firstWeek,
     };
     const create$: Observable<unknown> = sessions.length
       ? this.sessionsService.createSessions(sessions)

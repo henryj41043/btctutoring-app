@@ -669,4 +669,164 @@ describe('ManageScheduleDialog', () => {
       expect(payload.pending_changes![0].schedule![1].end_time).toBe('09:30');
     });
   });
+
+  describe('first-week sessions', () => {
+    const start = new Date(2026, 8, 11); // Fri Sept 11 2026
+    const view = (c: ManageScheduleDialog) =>
+      c as unknown as {
+        showFirstWeek: boolean;
+        storedFirstWeek: string[];
+        firstWeekMin: Date | null;
+        firstWeekMax: Date | null;
+      };
+    const primed = (): ManageScheduleDialog => {
+      const c = primedCreate();
+      c.startDate = start;
+      scheduleService.createSchedule.mockReturnValue(of({id: 's-1'} as Student));
+      // The real helper: end time = start + minutes.
+      scheduleService.addMinutesToTime.mockImplementation((time: string, minutes: number) => {
+        const [h, m] = time.split(':').map(Number);
+        const total = h * 60 + m + minutes;
+        return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+      });
+      return c;
+    };
+    const sent = (): unknown[] => scheduleService.createSchedule.mock.calls.at(-1)![6];
+
+    it('are offered only when a schedule is first set up', () => {
+      expect(view(primedCreate()).showFirstWeek).toBe(true);
+      expect(view(build({
+        student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor,
+      })).showFirstWeek).toBe(false);
+      expect(view(build({
+        student: {
+          id: 's-1', name: 'Pat', package: 'Determination',
+          pending_changes: [{package: 'Succeed', effective: '2026-10-01'}],
+        } as Student,
+        tutor, pendingEffective: '2026-10-01',
+      })).showFirstWeek).toBe(false);
+    });
+
+    it('are limited to the start date and the six days after it', () => {
+      const c = primed();
+      expect(view(c).firstWeekMin).toEqual(new Date(2026, 8, 11));
+      expect(view(c).firstWeekMax).toEqual(new Date(2026, 8, 17));
+      c.startDate = new Date(2026, 8, 28, 15, 30);
+      expect(view(c).firstWeekMin).toEqual(new Date(2026, 8, 28));
+      expect(view(c).firstWeekMax).toEqual(new Date(2026, 9, 4));
+      c.startDate = undefined;
+      expect(view(c).firstWeekMin).toBeNull();
+      expect(view(c).firstWeekMax).toBeNull();
+    });
+
+    it('rows are added blank and removed by position', () => {
+      const c = primed();
+      c.addFirstWeekSession();
+      c.addFirstWeekSession();
+      expect(c.firstWeek).toEqual([
+        {date: null, start_time: '', length_min: null, tutor_id: null},
+        {date: null, start_time: '', length_min: null, tutor_id: null},
+      ]);
+      c.firstWeek[1].start_time = '11:00';
+      c.removeFirstWeekSession(0);
+      expect(c.firstWeek).toEqual([{date: null, start_time: '11:00', length_min: null, tutor_id: null}]);
+    });
+
+    it('a schedule without one-offs sends an empty list', () => {
+      const c = primed();
+      c.save();
+      expect(sent()).toEqual([]);
+    });
+
+    it('sends each one-off with its end time, and a tutor only when chosen', () => {
+      const c = primed();
+      c.firstWeek = [
+        {date: new Date(2026, 8, 12, 9, 30), start_time: '11:00', length_min: null, tutor_id: null},
+        {date: new Date(2026, 8, 17), start_time: '09:15', length_min: 30, tutor_id: 't-2'},
+        {date: new Date(2026, 8, 11), start_time: '16:00', length_min: null, tutor_id: ''},
+      ];
+      c.save();
+      // The package default is 60 minutes.
+      expect(sent()).toEqual([
+        {date: '2026-09-12', start_time: '11:00', end_time: '12:00'},
+        {date: '2026-09-17', start_time: '09:15', end_time: '09:45', tutor_id: 't-2'},
+        {date: '2026-09-11', start_time: '16:00', end_time: '17:00'},
+      ]);
+      expect(dialogRef.close).toHaveBeenCalledWith({id: 's-1'});
+    });
+
+    it('pads single-digit months and days', () => {
+      const c = primed();
+      c.startDate = new Date(2027, 0, 4);
+      c.firstWeek = [{date: new Date(2027, 0, 5), start_time: '11:00', length_min: null, tutor_id: null}];
+      c.save();
+      expect((sent()[0] as {date: string}).date).toBe('2027-01-05');
+    });
+
+    it('blocks an incomplete row', () => {
+      const c = primed();
+      c.firstWeek = [{date: null, start_time: '11:00', length_min: null, tutor_id: null}];
+      c.save();
+      expect(c.errorMessage).toBe('Please choose a date and start time for every first-week session.');
+      c.firstWeek = [{date: new Date(2026, 8, 12), start_time: '', length_min: null, tutor_id: null}];
+      c.save();
+      expect(c.errorMessage).toBe('Please choose a date and start time for every first-week session.');
+      expect(scheduleService.createSchedule).not.toHaveBeenCalled();
+    });
+
+    it('blocks a date outside the start week', () => {
+      const c = primed();
+      for (const date of [new Date(2026, 8, 10), new Date(2026, 8, 18)]) {
+        c.firstWeek = [{date, start_time: '11:00', length_min: null, tutor_id: null}];
+        c.save();
+        expect(c.errorMessage).toBe('A first-week session must fall within seven days of the start date.');
+      }
+      expect(scheduleService.createSchedule).not.toHaveBeenCalled();
+    });
+
+    it('the regular schedule is validated first', () => {
+      const c = primed();
+      c.scheduleSlots = [{weekday: Weekday.MONDAY, start_time: '10:00'}] as never;
+      c.firstWeek = [{date: null, start_time: '', length_min: null, tutor_id: null}];
+      c.save();
+      expect(c.errorMessage).toContain('requires 2');
+    });
+
+    it('editing never sends or re-enters them; stored ones are listed read-only', () => {
+      const updated = {id: 's-1'} as Student;
+      scheduleService.updateSchedule.mockReturnValue(of(updated));
+      const c = build({
+        student: {
+          id: 's-1', name: 'Pat', package: 'Determination', schedule: slots,
+          first_week_sessions: [
+            {date: '2026-09-12', start_time: '11:00', end_time: '12:00'},
+            {date: 'soon', start_time: '23:30', end_time: '23:59'},
+          ],
+        } as Student,
+        tutor,
+      });
+      expect(view(c).storedFirstWeek).toEqual(['Sat, Sep 12, 11:00 AM', 'soon, 23:30']);
+      c.firstWeek = [{date: null, start_time: '', length_min: null, tutor_id: null}];
+      c.save();
+      expect(scheduleService.updateSchedule).toHaveBeenCalled();
+      expect(scheduleService.updateSchedule.mock.calls.at(-1)).toHaveLength(5);
+    });
+
+    it('lists nothing when none are stored, in create mode, or in pending mode', () => {
+      expect(view(build({
+        student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor,
+      })).storedFirstWeek).toEqual([]);
+      const stored = [{date: '2026-09-12', start_time: '11:00', end_time: '12:00'}];
+      expect(view(build({
+        student: {id: 's-1', name: 'Pat', package: 'Determination', first_week_sessions: stored} as Student, tutor,
+      })).storedFirstWeek).toEqual([]);
+      expect(view(build({
+        student: {
+          id: 's-1', name: 'Pat', package: 'Determination', schedule: slots, first_week_sessions: stored,
+          pending_changes: [{package: 'Succeed', effective: '2026-10-01'}],
+        } as Student,
+        tutor, pendingEffective: '2026-10-01',
+      })).storedFirstWeek).toEqual([]);
+    });
+  });
 });
