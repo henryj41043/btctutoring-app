@@ -11,6 +11,7 @@ import {EmailEntry} from '../models/email-entry.model';
 import {Contact} from '../models/contact.model';
 import {contactDisplayName} from '../utils/contact-name';
 import {FilterSelect, FilterSelectOption} from '../filter-select/filter-select';
+import {isConversation, participantsLabel} from '../utils/email-view';
 
 export type AssignEmailDialogMode = 'assign' | 'discard';
 
@@ -54,6 +55,11 @@ export class AssignEmailDialog {
   protected failed: boolean = false;
 
   /** Contacts sorted by display name for the select. */
+  /** Who a conversation is between; '' for a single email. */
+  protected get participants(): string {
+    return isConversation(this.data.entry) ? participantsLabel(this.data.entry) : '';
+  }
+
   protected get sortedContacts(): Contact[] {
     return [...this.data.contacts].sort((a, b) =>
       this.contactName(a).localeCompare(this.contactName(b)));

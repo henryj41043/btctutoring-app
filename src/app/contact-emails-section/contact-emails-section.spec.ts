@@ -77,6 +77,38 @@ describe('ContactEmailsSection', () => {
     expect(emails(c)).toEqual([]);
   });
 
+  it('shows a conversation with its chip and participants, a single email with its sender', () => {
+    const thread: EmailEntry = {
+      ...emailEntry,
+      id: 'thread',
+      is_thread: true,
+      message_count: 2,
+      participants: [{ email: 'jane@example.com', name: 'Jane Parent' }, { email: 'admin@btc.test' }],
+    };
+    emailService.getEmailsForContact.mockReturnValue(of([thread, emailEntry]));
+    build();
+    const fixture = TestBed.createComponent(ContactEmailsSection);
+    fixture.componentRef.setInput('contactId', 'c-1');
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const chips = Array.from(el.querySelectorAll('.email-thread-chip')).map(n => n.textContent?.trim());
+    expect(chips).toEqual(['Conversation · 2 messages']);
+
+    const open = (entry: EmailEntry) => {
+      fixture.componentInstance['toggleEmail'](entry);
+      fixture.componentRef.changeDetectorRef.markForCheck();
+      fixture.detectChanges();
+    };
+    open(thread);
+    expect(el.querySelector('.email-meta')?.textContent)
+      .toBe('Participants: Jane Parent <jane@example.com>, admin@btc.test');
+    expect(el.querySelector('.email-text')?.classList.contains('email-text--thread')).toBe(true);
+
+    open(emailEntry);
+    expect(el.querySelector('.email-meta')?.textContent).toBe('From jane@example.com');
+    expect(el.querySelector('.email-text')?.classList.contains('email-text--thread')).toBe(false);
+  });
+
   it('toggles a row open and closed', () => {
     const c = build();
     c.toggleEmail(emailEntry);

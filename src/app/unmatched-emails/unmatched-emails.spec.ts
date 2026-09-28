@@ -96,6 +96,64 @@ describe('UnmatchedEmails', () => {
     expect((c as unknown as { searchText: string }).searchText).toBe('trial');
   });
 
+  it('finds a conversation by one of its participants', () => {
+    emailService.getUnmatched.mockReturnValue(of([
+      entry({ id: 'single' }),
+      entry({
+        id: 'thread',
+        is_thread: true,
+        message_count: 3,
+        participants: [{ email: 'joe@example.com', name: 'Joe Parent' }],
+      }),
+    ]));
+    const c = build();
+    c.ngOnInit();
+    c.applyFilter(' Joe Parent ');
+    const source = (c as unknown as { dataSource: { filteredData: EmailEntry[] } }).dataSource;
+    expect(source.filteredData.map(e => e.id)).toEqual(['thread']);
+    c.applyFilter('joe@example.com');
+    expect(source.filteredData.map(e => e.id)).toEqual(['thread']);
+  });
+
+  it('shows the conversation chip and participants in the table', () => {
+    emailService.getUnmatched.mockReturnValue(of([
+      entry({ id: 'single' }),
+      entry({
+        id: 'thread',
+        is_thread: true,
+        message_count: 3,
+        participants: [{ email: 'joe@example.com', name: 'Joe Parent' }],
+        body_text: 'first\n\nsecond',
+      }),
+    ]));
+    const fixture = TestBed.configureTestingModule({
+      imports: [UnmatchedEmails],
+      providers: [
+        { provide: EmailService, useValue: emailService },
+        { provide: ContactService, useValue: contactService },
+        { provide: MatDialog, useValue: dialog },
+      ],
+    }).createComponent(UnmatchedEmails);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const chips = Array.from(el.querySelectorAll('.thread-chip')).map(n => n.textContent?.trim());
+    expect(chips).toEqual(['Conversation · 3 messages']);
+
+    const open = (id: string) => {
+      fixture.componentInstance.toggleExpanded({ id });
+      fixture.componentInstance['cdr'].markForCheck();
+      fixture.detectChanges();
+    };
+    open('thread');
+    expect(el.querySelector('.email-participants')?.textContent)
+      .toBe('Participants: Joe Parent <joe@example.com>');
+    expect(el.querySelector('.email-text')?.classList.contains('email-text--thread')).toBe(true);
+
+    open('single');
+    expect(el.querySelector('.email-participants')).toBeNull();
+    expect(el.querySelector('.email-text')?.classList.contains('email-text--thread')).toBe(false);
+  });
+
   it('expands and collapses a row; an id-less row collapses to null', () => {
     const c = build();
     const row = entry();

@@ -35,6 +35,14 @@ describe('AssignEmailDialog', () => {
     emailService.discard.mockReturnValue(of({}));
   });
 
+  it('names the participants of a conversation, and nothing for a single email', () => {
+    const people = [{ email: 'jane@example.com', name: 'Jane' }, { email: 'admin@btc.test' }];
+    expect(build({ entry: { ...entry, is_thread: true, participants: people } })['participants'])
+      .toBe('Jane <jane@example.com>, admin@btc.test');
+    TestBed.resetTestingModule();
+    expect(build({ entry: { ...entry, participants: people } })['participants']).toBe('');
+  });
+
   it('sorts contacts by display name, falling back to email for nameless ones', () => {
     const c = build();
     const sorted = (c as unknown as { sortedContacts: Contact[] }).sortedContacts;

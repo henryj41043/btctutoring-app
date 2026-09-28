@@ -8,7 +8,9 @@
 <mat-dialog-content>
   <p class="entry-summary">
     <strong>{{data.entry.subject || '(no subject)'}}</strong>
-    @if (data.entry.from_email) {
+    @if (participants) {
+      <span class="entry-from">between {{participants}}</span>
+    } @else if (data.entry.from_email) {
       <span class="entry-from">from {{data.entry.from_email}}</span>
     }
   </p>
