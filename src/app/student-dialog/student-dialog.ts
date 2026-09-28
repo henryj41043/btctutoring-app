@@ -39,6 +39,7 @@ import {
 import {availableMakeupMinutes} from '../utils/makeup';
 import {
   changeDateBounds,
+  earliestAffectedChange,
   monthKey,
   newChangesWithoutSchedule,
   pendingChangeNote,
@@ -210,6 +211,10 @@ export class StudentDialog implements OnInit {
   protected confirmingEndDate: boolean = false;
   /** Sessions from this instant on are removed once the save succeeds (undefined = all upcoming). */
   private cleanupFrom: Date | undefined;
+  /** The pending confirmation is about sessions rebuilt after a scheduled change was removed or re-dated. */
+  protected confirmingRebuild: boolean = false;
+  /** 'YYYY-MM-DD': sessions are rebuilt from this date once the old ones are removed. */
+  private rebuildFromKey: string | undefined;
   /** The end date was cleared: the calendar is refilled after the save. */
   private endDateCleared: boolean = false;
 
@@ -295,16 +300,34 @@ export class StudentDialog implements OnInit {
    * What the save must clean up: every upcoming pending tutoring session
    * when leaving Active, or only those after a newly set end date.
    */
-  private cleanupPlan(student: Student): {from?: Date} | null {
+  private cleanupPlan(student: Student, changes: PendingChange[]): {from?: Date; rebuildFrom?: string} | null {
     if (this.leavingActive(student)) {
       return {};
     }
-    const end = student.service_end_date;
-    if (student.status === StudentStatus.ACTIVE_STUDENT && end && end !== this.storedEndKey) {
-      const last = this.toDate(end)!;
-      return {from: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1)};
+    if (student.status !== StudentStatus.ACTIVE_STUDENT) {
+      return null;
     }
-    return null;
+    const end = student.service_end_date;
+    const afterEnd = end && end !== this.storedEndKey
+      ? new Date(this.toDate(end)!.getFullYear(), this.toDate(end)!.getMonth(), this.toDate(end)!.getDate() + 1)
+      : undefined;
+    // A scheduled change that was removed or re-dated leaves the sessions
+    // generated on its schedule behind: they are removed and rebuilt.
+    const rebuildFrom = earliestAffectedChange(pendingChangesOf(this.data.student), changes) ?? undefined;
+    const rebuildDate = this.toDate(rebuildFrom) ?? undefined;
+    if (!afterEnd && !rebuildDate) {
+      return null;
+    }
+    const from = afterEnd && rebuildDate
+      ? (afterEnd.getTime() < rebuildDate.getTime() ? afterEnd : rebuildDate)
+      : (afterEnd ?? rebuildDate);
+    return rebuildFrom ? {from, rebuildFrom: this.toDateString(from)} : {from};
+  }
+
+  /** e.g. 'Oct 14, 2026': the date sessions are rebuilt from. */
+  protected get rebuildLabel(): string {
+    const date = this.toDate(this.rebuildFromKey);
+    return date ? date.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'}) : '';
   }
 
   // ── Custom pricing: live preview of this month's bill ──
@@ -758,10 +781,12 @@ export class StudentDialog implements OnInit {
     } else {
       student.pending_changes = changes; // [] = clear them all
     }
-    const cleanup = this.cleanupPlan(student);
+    const cleanup = this.cleanupPlan(student, changes);
     if (cleanup && !this.deactivationConfirmed) {
       this.cleanupFrom = cleanup.from;
-      this.confirmingEndDate = !!cleanup.from;
+      this.rebuildFromKey = cleanup.rebuildFrom;
+      this.confirmingRebuild = !!cleanup.rebuildFrom;
+      this.confirmingEndDate = !!cleanup.from && !cleanup.rebuildFrom;
       this.promptDeactivation(student.id!);
       return;
     }
@@ -862,10 +887,16 @@ export class StudentDialog implements OnInit {
       : this.scheduleService.deleteFuturePendingSessions(this.savedStudentId!);
     removal
       .pipe(
+        // Rebuild on the schedule that now applies once the old sessions are gone.
+        switchMap(() => this.rebuildFromKey
+          ? this.scheduleService.rebuildFrom(this.savedStudentId!, this.rebuildFromKey)
+          : of(null)),
         catchError(error => {
           console.log(error);
           this.deleteSessionsFailed = true;
-          this.fail('Student saved, but removing the upcoming sessions failed.');
+          this.fail(this.rebuildFromKey
+            ? 'Student saved, but rebuilding the upcoming sessions failed.'
+            : 'Student saved, but removing the upcoming sessions failed.');
           return EMPTY;
         }),
       )

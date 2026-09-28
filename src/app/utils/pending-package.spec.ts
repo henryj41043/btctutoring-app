@@ -1,6 +1,7 @@
 import {
   changeDateBounds,
   dateKeyOf,
+  earliestAffectedChange,
   findPendingChange,
   HORIZON_MONTHS_AHEAD,
   monthKey,
@@ -214,5 +215,57 @@ describe('validatePendingChanges', () => {
     expect(ok([{package: 'Custom', effective: '2026-10-14', custom_monthly_cost: 400}]))
       .toBe('A scheduled Custom package needs all three custom values.');
     expect(validatePendingChanges([{...c1, custom_monthly_cost: 450}], 'Custom', [], TODAY)).toBeNull();
+  });
+});
+
+describe('earliestAffectedChange', () => {
+  const withSlots = (effective: string, pkg = 'Achieve'): PendingChange => ({package: pkg, effective, schedule: [slot]});
+  const bare = (effective: string, pkg = 'Achieve'): PendingChange => ({package: pkg, effective});
+
+  it('is null when nothing generated is affected', () => {
+    expect(earliestAffectedChange([], [])).toBeNull();
+    expect(earliestAffectedChange([withSlots('2026-10-14')], [withSlots('2026-10-14')])).toBeNull();
+    // A change without a schedule generated nothing, whatever happens to it.
+    expect(earliestAffectedChange([bare('2026-10-14')], [])).toBeNull();
+    expect(earliestAffectedChange([{...bare('2026-10-14'), schedule: []}], [])).toBeNull();
+    expect(earliestAffectedChange([], [bare('2026-10-14')])).toBeNull();
+    expect(earliestAffectedChange([bare('2026-10-14')], [bare('2026-10-20')])).toBeNull();
+  });
+
+  it('flags a removed change', () => {
+    expect(earliestAffectedChange([withSlots('2026-10-14'), withSlots('2026-11-20', 'Excel')], [withSlots('2026-10-14')]))
+      .toBe('2026-11-20');
+  });
+
+  it('flags a change that lost its schedule', () => {
+    expect(earliestAffectedChange([withSlots('2026-10-14')], [bare('2026-10-14', 'Excel')])).toBe('2026-10-14');
+    expect(earliestAffectedChange([withSlots('2026-10-14')], [{...bare('2026-10-14'), schedule: []}])).toBe('2026-10-14');
+  });
+
+  it('flags the earlier of the old and new dates of a re-dated change', () => {
+    expect(earliestAffectedChange([withSlots('2026-10-14')], [withSlots('2026-10-28')])).toBe('2026-10-14');
+    expect(earliestAffectedChange([withSlots('2026-10-14')], [withSlots('2026-10-05')])).toBe('2026-10-05');
+  });
+
+  it('flags a new change that already carries a schedule', () => {
+    expect(earliestAffectedChange([], [withSlots('2026-10-14')])).toBe('2026-10-14');
+  });
+
+  it('returns the earliest of several', () => {
+    expect(earliestAffectedChange(
+      [withSlots('2026-12-01'), withSlots('2026-10-14', 'Excel'), withSlots('2026-11-20', 'Thrive')],
+      [withSlots('2026-10-14', 'Excel')],
+    )).toBe('2026-11-20');
+    expect(earliestAffectedChange(
+      [withSlots('2026-12-01'), withSlots('2026-10-14', 'Excel')],
+      [],
+    )).toBe('2026-10-14');
+  });
+
+  it('ignores a price or package-name difference while the schedule stays', () => {
+    expect(earliestAffectedChange(
+      [withSlots('2026-10-14')],
+      [{...withSlots('2026-10-14'), price_override: 300}],
+    )).toBeNull();
   });
 });

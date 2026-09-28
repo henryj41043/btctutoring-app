@@ -97,8 +97,13 @@ export class SessionsService {
    * next three months (idempotent per month; the nightly job does the same for
    * everyone). Called right after a schedule save so the calendar fills now.
    */
-  fillHorizon(studentId: string): Observable<HorizonFillResult> {
-    const params = new HttpParams().set('student', studentId);
+  fillHorizon(studentId: string, rebuildFrom?: string): Observable<HorizonFillResult> {
+    let params = new HttpParams().set('student', studentId);
+    if (rebuildFrom) {
+      // Rebuild mode ('YYYY-MM-DD'): every stretch from that date, the rest
+      // of this month's running schedule included.
+      params = params.set('from', rebuildFrom);
+    }
     return this.httpClient.post<HorizonFillResult>(`${this.baseUrl}/sessions/horizon/fill`, {}, { params });
   }
 }

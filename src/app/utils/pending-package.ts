@@ -132,6 +132,36 @@ export function newChangesWithoutSchedule(prior: Student | undefined, next: Pend
     .filter(c => !stored.some(p => sameChange(p, c)));
 }
 
+const hasSchedule = (change: PendingChange | undefined): boolean =>
+  !!change?.schedule && change.schedule.length > 0;
+
+/**
+ * The earliest date from which already-generated sessions no longer match
+ * the scheduled changes, or null when nothing generated is affected. Only a
+ * change WITH a schedule generates sessions of its own, so the date is the
+ * earliest of: a stored change with a schedule that was removed, re-dated,
+ * or lost its schedule; and a change with a schedule on a date that was not
+ * stored (the new home of a re-dated one).
+ */
+export function earliestAffectedChange(stored: PendingChange[], next: PendingChange[]): string | null {
+  const affected: string[] = [];
+  for (const before of stored) {
+    if (!hasSchedule(before)) {
+      continue;
+    }
+    const after = next.find(c => c.effective === before.effective);
+    if (!after || !hasSchedule(after)) {
+      affected.push(before.effective);
+    }
+  }
+  for (const after of next) {
+    if (hasSchedule(after) && !stored.some(c => c.effective === after.effective)) {
+      affected.push(after.effective);
+    }
+  }
+  return affected.length > 0 ? affected.sort()[0] : null;
+}
+
 const EFFECTIVE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** True for a real calendar date written 'YYYY-MM-DD'. */

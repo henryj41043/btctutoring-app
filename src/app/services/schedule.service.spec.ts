@@ -556,4 +556,20 @@ describe('ScheduleService', () => {
       expect(sessionsService.fillHorizon).not.toHaveBeenCalled();
     });
   });
+
+  describe('rebuildFrom', () => {
+    it('asks the service to rebuild from the date', () => {
+      let result: unknown;
+      service.rebuildFrom('s-1', '2026-10-14').subscribe(r => (result = r));
+      expect(sessionsService.fillHorizon).toHaveBeenCalledWith('s-1', '2026-10-14');
+      expect(result).toEqual({sessionsCreated: 0});
+    });
+
+    it('surfaces a failure: the old sessions are already gone', () => {
+      sessionsService.fillHorizon.mockReturnValue(throwError(() => new Error('boom')));
+      let error: Error | undefined;
+      service.rebuildFrom('s-1', '2026-10-14').subscribe({error: e => (error = e)});
+      expect(error?.message).toBe('boom');
+    });
+  });
 });
