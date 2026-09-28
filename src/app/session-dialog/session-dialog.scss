@@ -85,3 +85,27 @@
   font-size: 13px;
   line-height: 1.4;
 }
+
+.correct-button {
+  margin-left: 4px;
+  font-size: 0.8rem;
+}
+
+.correction-history {
+  font-style: italic;
+}
+
+.correction-panel {
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.correction-summary {
+  margin: 4px 0;
+  font-weight: 700;
+}
+
+.correction-shortfall {
+  margin: 4px 0;
+}

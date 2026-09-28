@@ -2,7 +2,7 @@ import {inject, Injectable} from '@angular/core';
 import {environment} from '../../environments/environment';
 import {HttpClient, HttpParams} from '@angular/common/http';
 import {Observable} from 'rxjs';
-import {Session} from '../models/session.model';
+import {AttendanceRequest, AttendanceResult, Session} from '../models/session.model';
 import {Response} from '../models/response.model';
 
 /** Optional start_datetime range (ISO strings) applied server-side. */
@@ -90,6 +90,16 @@ export class SessionsService {
 
   deleteSession(id: string): Observable<Response> {
     return this.httpClient.delete<Response>(`${this.baseUrl}/sessions/${id}`);
+  }
+
+  /**
+   * Takes or corrects attendance. The service checks the role, corrects the
+   * student's make-up minutes and records the change. With `dryRun` nothing
+   * is written: the result is the preview shown before confirming.
+   */
+  setAttendance(id: string, request: AttendanceRequest, dryRun: boolean = false): Observable<AttendanceResult> {
+    const options = dryRun ? {params: new HttpParams().set('dry_run', 'true')} : {};
+    return this.httpClient.put<AttendanceResult>(`${this.baseUrl}/sessions/${id}/attendance`, request, options);
   }
 
   /**

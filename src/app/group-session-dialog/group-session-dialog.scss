@@ -45,3 +45,20 @@
 .dialog-saving-spinner {
   margin: 8px;
 }
+
+.attendance-final {
+  margin: -8px 0 12px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.correction-panel {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px 4px;
+  margin-bottom: 12px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}

@@ -140,4 +140,20 @@ describe('SessionsService', () => {
     service.fillHorizon('s-1', '').subscribe();
     httpMock.expectOne(`${base}/sessions/horizon/fill?student=s-1`).flush({});
   });
+
+  it('setAttendance PUTs the request; a dry run adds the flag', () => {
+    let result: unknown;
+    service.setAttendance('s-1', {status: 'Completed', notes: 'n'}).subscribe(r => (result = r));
+    const real = httpMock.expectOne(`${base}/sessions/s-1/attendance`);
+    expect(real.request.method).toBe('PUT');
+    expect(real.request.body).toEqual({status: 'Completed', notes: 'n'});
+    expect(real.request.params.has('dry_run')).toBe(false);
+    real.flush({dry_run: false});
+    expect(result).toEqual({dry_run: false});
+
+    service.setAttendance('s-1', {status: 'Cancelled', reason: 'r'}, true).subscribe();
+    const preview = httpMock.expectOne(`${base}/sessions/s-1/attendance?dry_run=true`);
+    expect(preview.request.method).toBe('PUT');
+    preview.flush({dry_run: true});
+  });
 });

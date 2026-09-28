@@ -43,6 +43,7 @@ describe('GroupSessionDialog', () => {
   const sessionsService = {
     createSessions: jest.fn(),
     updateSession: jest.fn(),
+    setAttendance: jest.fn(),
     deleteSession: jest.fn(),
     getSessionsBySeries: jest.fn(),
   };
@@ -91,6 +92,8 @@ describe('GroupSessionDialog', () => {
     studentService.getStudents.mockReturnValue(of(students));
     sessionsService.createSessions.mockReturnValue(of({count: 9}));
     sessionsService.updateSession.mockReturnValue(of({id: 'g-1'}));
+    sessionsService.setAttendance.mockImplementation((id: string, request: {status: string}) =>
+      of({session: {id, status: request.status}, makeup: {before: 0, after: 0, delta: 0, unrecovered: 0}, dry_run: false}));
     sessionsService.deleteSession.mockReturnValue(of({id: 'g-1'}));
   });
 
@@ -186,10 +189,16 @@ describe('GroupSessionDialog', () => {
       const updated: Session = sessionsService.updateSession.mock.calls[0][0];
       expect(updated.start_datetime).toBe('2026-08-05T21:00:00.000Z');
       expect(updated.end_datetime).toBe('2026-08-05T21:45:00.000Z');
-      expect(updated.status).toBe(SessionStatus.COMPLETED);
+      // The fields are saved with the status as stored; attendance follows.
+      expect(updated.status).toBe(SessionStatus.PENDING);
       expect(updated.notes).toBe('great session');
       expect(updated.participants).toEqual([{id: 's-a', name: 'Ava'}]);
-      expect(dialogRef.close).toHaveBeenCalled();
+      expect(sessionsService.setAttendance).toHaveBeenCalledWith(
+        'g-1', {status: SessionStatus.COMPLETED, notes: 'great session'},
+      );
+      expect(sessionsService.updateSession.mock.invocationCallOrder[0])
+        .toBeLessThan(sessionsService.setAttendance.mock.invocationCallOrder[0]);
+      expect(dialogRef.close).toHaveBeenCalledWith({id: 'g-1', status: SessionStatus.COMPLETED});
     });
 
     it('a roster change on a series occurrence prompts for scope', () => {
@@ -276,7 +285,8 @@ describe('GroupSessionDialog', () => {
       p.selectedAttendance = SessionStatus.COMPLETED;
       c.save();
       const updated: Session = sessionsService.updateSession.mock.calls[0][0];
-      expect(updated.status).toBe(SessionStatus.COMPLETED);
+      expect(updated.status).toBe(SessionStatus.PENDING);
+      expect(sessionsService.setAttendance.mock.calls[0][1].status).toBe(SessionStatus.COMPLETED);
       // Stored schedule/roster echoed untouched.
       expect(updated.start_datetime).toBe('2026-08-05T21:00:00.000Z');
       expect(updated.tutor_id).toBe('t-1');
@@ -466,5 +476,132 @@ describe('GroupSessionDialog', () => {
     c.cancel();
     expect(dialogRef.close).toHaveBeenCalledWith();
     expect(sessionsService.createSessions).not.toHaveBeenCalled();
+  });
+
+  describe('attendance lock', () => {
+    const lock = (c: GroupSessionDialog) => c as unknown as {
+      isFinalized: boolean;
+      canCorrectAttendance: boolean;
+      correcting: boolean;
+      correctionStatus: SessionStatus | null;
+      correctionReason: string;
+      correctionOptions: SessionStatus[];
+      errorMessage: string;
+    };
+    const finalized = () => storedSession({status: SessionStatus.COMPLETED});
+
+    it('a pending session is open; a finalized one is final for the tutor', () => {
+      expect(lock(build({mode: 'edit', session: storedSession()})).isFinalized).toBe(false);
+      expect(lock(build({mode: 'create'})).isFinalized).toBe(false);
+      expect(lock(build({mode: 'delete', session: finalized()})).isFinalized).toBe(false);
+      authService.isAdmin.mockReturnValue(false);
+      const c = build({mode: 'edit', session: finalized()});
+      expect(lock(c).isFinalized).toBe(true);
+      expect(lock(c).canCorrectAttendance).toBe(false);
+    });
+
+    it('a session with no stored status counts as pending', () => {
+      const c = build({mode: 'edit', session: storedSession({status: undefined})});
+      expect(lock(c).isFinalized).toBe(false);
+    });
+
+    it('a notes edit on a finalized session is an ordinary save', () => {
+      authService.isAdmin.mockReturnValue(false);
+      const c = build({mode: 'edit', session: finalized()});
+      priv(c).notes = 'fixed a typo';
+      c.save();
+      expect(sessionsService.updateSession.mock.calls[0][0]).toEqual(
+        expect.objectContaining({status: SessionStatus.COMPLETED, notes: 'fixed a typo'}),
+      );
+      expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalledWith({id: 'g-1'});
+    });
+
+    it('an admin corrects attendance with a reason', () => {
+      const c = build({mode: 'edit', session: finalized()});
+      expect(lock(c).canCorrectAttendance).toBe(true);
+      expect(lock(c).correctionOptions).toEqual([
+        SessionStatus.PENDING, SessionStatus.CANCELLED, SessionStatus.NO_CALL_NO_SHOW,
+      ]);
+      lock(c).correctionStatus = SessionStatus.CANCELLED;
+      lock(c).correctionReason = 'old';
+      priv(c).hasError = true;
+      c.startCorrection();
+      expect(lock(c).correcting).toBe(true);
+      expect(lock(c).correctionStatus).toBeNull();
+      expect(lock(c).correctionReason).toBe('');
+      expect(priv(c).hasError).toBe(false);
+
+      c.confirmCorrection();
+      expect(lock(c).errorMessage).toBe('Choose the corrected attendance.');
+      lock(c).correctionStatus = SessionStatus.CANCELLED;
+      lock(c).correctionReason = '   ';
+      c.confirmCorrection();
+      expect(lock(c).errorMessage).toBe('A reason is required to change attendance.');
+      expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+
+      lock(c).correctionReason = '  Class was called off  ';
+      c.confirmCorrection();
+      expect(sessionsService.setAttendance).toHaveBeenCalledWith(
+        'g-1', {status: SessionStatus.CANCELLED, reason: 'Class was called off'},
+      );
+      expect(sessionsService.updateSession).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalledWith({id: 'g-1', status: SessionStatus.CANCELLED});
+    });
+
+    it('Go Back closes the panel without saving', () => {
+      const c = build({mode: 'edit', session: finalized()});
+      c.startCorrection();
+      priv(c).hasError = true;
+      c.cancelCorrection();
+      expect(lock(c).correcting).toBe(false);
+      expect(priv(c).hasError).toBe(false);
+      expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+    });
+
+    it('needs a stored id and never saves twice', () => {
+      const unsaved = build({mode: 'edit', session: storedSession({id: undefined, status: SessionStatus.COMPLETED})});
+      lock(unsaved).correctionStatus = SessionStatus.CANCELLED;
+      lock(unsaved).correctionReason = 'x';
+      unsaved.confirmCorrection();
+      expect(lock(unsaved).errorMessage).toBe('Choose the corrected attendance.');
+      const c = build({mode: 'edit', session: finalized()});
+      lock(c).correctionStatus = SessionStatus.CANCELLED;
+      lock(c).correctionReason = 'x';
+      priv(c).submitting = true;
+      c.confirmCorrection();
+      expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+    });
+
+    it('shows the service message when a correction or attendance is refused', () => {
+      sessionsService.setAttendance.mockReturnValue(throwError(() => ({
+        error: {message: 'Attendance is final. Ask an admin to correct it.'},
+      })));
+      const c = build({mode: 'edit', session: finalized()});
+      lock(c).correctionStatus = SessionStatus.CANCELLED;
+      lock(c).correctionReason = 'x';
+      c.confirmCorrection();
+      expect(lock(c).errorMessage).toBe('Attendance is final. Ask an admin to correct it.');
+      expect(priv(c).submitting).toBe(false);
+
+      const first = build({mode: 'edit', session: storedSession()});
+      priv(first).selectedAttendance = SessionStatus.COMPLETED;
+      first.save();
+      expect(lock(first).errorMessage).toBe('Attendance is final. Ask an admin to correct it.');
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it('falls back to plain messages when the service sent none', () => {
+      sessionsService.setAttendance.mockReturnValue(throwError(() => new Error('x')));
+      const c = build({mode: 'edit', session: finalized()});
+      lock(c).correctionStatus = SessionStatus.CANCELLED;
+      lock(c).correctionReason = 'x';
+      c.confirmCorrection();
+      expect(lock(c).errorMessage).toBe('Changing attendance failed. Please try again.');
+      const first = build({mode: 'edit', session: storedSession()});
+      priv(first).selectedAttendance = SessionStatus.COMPLETED;
+      first.save();
+      expect(lock(first).errorMessage).toBe('Failed to save the session. Please try again.');
+    });
   });
 });

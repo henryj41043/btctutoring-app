@@ -21,7 +21,7 @@
     <mat-form-field>
       <mat-label>Session Type</mat-label>
       <mat-select [ngModel]="selectedType" (ngModelChange)="onTypeChange($event)"
-                  [disabled]="isReadOnly">
+                  [disabled]="fieldsLocked">
         @for (type of sessionTypeOptions; track type) {
           <mat-option [value]="type">{{typeLabels[type]}}</mat-option>
         }
@@ -31,9 +31,9 @@
   }
   <mat-form-field>
     <mat-label>Enter date</mat-label>
-    <input matInput [matDatepicker]="datepicker" [(ngModel)]="date" [disabled]="isReadOnly">
+    <input matInput [matDatepicker]="datepicker" [(ngModel)]="date" [disabled]="fieldsLocked">
     <mat-datepicker #datepicker/>
-    <mat-datepicker-toggle [for]="datepicker" matSuffix [disabled]="isReadOnly"/>
+    <mat-datepicker-toggle [for]="datepicker" matSuffix [disabled]="fieldsLocked"/>
   </mat-form-field>
   @if (isReadOnly) {
     <!-- View mode: the staff/student lists aren't loaded (leads may not fetch
@@ -51,7 +51,8 @@
     <mat-form-field>
       <!-- Admin time is loggable by any staff member; tutoring/make-up only by tutors. -->
       <mat-label>{{selectedType === SessionType.ADMIN ? 'Select Staff' : 'Select Tutor'}}</mat-label>
-      <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)">
+      <mat-select [ngModel]="selectedTutor" (ngModelChange)="onTutorChange($event)"
+                  [disabled]="fieldsLocked">
         @for (tutor of tutors; track tutor) {
           <mat-option [value]="tutor.id">{{contactDisplayName(tutor)}}</mat-option>
         }
@@ -65,9 +66,9 @@
            [matTimepicker]="starttimepicker"
            [(ngModel)]="startTime"
            [ngModelOptions]="{updateOn: 'blur'}"
-           [disabled]="isReadOnly">
+           [disabled]="fieldsLocked">
     <mat-timepicker interval="15min" #starttimepicker/>
-    <mat-timepicker-toggle [for]="starttimepicker" matSuffix [disabled]="isReadOnly"/>
+    <mat-timepicker-toggle [for]="starttimepicker" matSuffix [disabled]="fieldsLocked"/>
   </mat-form-field>
   @if (hasStudent) {
     @if (isReadOnly) {
@@ -78,7 +79,8 @@
     } @else {
       <mat-form-field>
         <mat-label>Select Student</mat-label>
-        <mat-select [ngModel]="selectedStudent" (ngModelChange)="onStudentChange($event)">
+        <mat-select [ngModel]="selectedStudent" (ngModelChange)="onStudentChange($event)"
+                  [disabled]="fieldsLocked">
           @for (student of filteredStudents; track student) {
             <mat-option [value]="student.id">{{studentDisplayName(student)}}</mat-option>
           }
@@ -100,9 +102,9 @@
            [matTimepicker]="endtimepicker"
            [(ngModel)]="endTime"
            [ngModelOptions]="{updateOn: 'blur'}"
-           [disabled]="isReadOnly">
+           [disabled]="fieldsLocked">
     <mat-timepicker interval="15min" #endtimepicker/>
-    <mat-timepicker-toggle [for]="endtimepicker" matSuffix [disabled]="isReadOnly"/>
+    <mat-timepicker-toggle [for]="endtimepicker" matSuffix [disabled]="fieldsLocked"/>
   </mat-form-field>
   @if (dialogData.type !== 'create') {
     <mat-form-field>
@@ -114,8 +116,49 @@
       </mat-select>
     </mat-form-field>
     @if (isStatusLocked) {
-      <p class="status-locked-hint">Status has been finalized and cannot be changed.</p>
+      @if (canCorrectAttendance) {
+        <p class="status-locked-hint">
+          Attendance was taken.
+          @if (!correcting) {
+            <button matButton type="button" class="correct-button" (click)="startCorrection()">
+              <mat-icon>edit</mat-icon>
+              Change attendance
+            </button>
+          }
+        </p>
+      } @else {
+        <p class="status-locked-hint">Attendance is final. Ask an admin to correct it.</p>
+      }
+      @if (lastCorrection) {
+        <p class="status-locked-hint correction-history">{{lastCorrection}}</p>
+      }
     }
+  }
+  @if (correcting) {
+    <div class="status-confirm-warning correction-panel">
+      <p><strong>Change attendance</strong></p>
+      <mat-form-field>
+        <mat-label>Corrected attendance</mat-label>
+        <mat-select [ngModel]="correctionStatus" (ngModelChange)="onCorrectionStatusChange($event)">
+          @for (option of correctionOptions; track option) {
+            <mat-option [value]="option">{{option}}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field class="notes-field" subscriptSizing="dynamic">
+        <mat-label>Reason</mat-label>
+        <input matInput [(ngModel)]="correctionReason" maxlength="200" required>
+        <mat-hint>Saved on the session with your name and the date.</mat-hint>
+      </mat-form-field>
+      @if (correctionSummary) {
+        <p class="correction-summary">{{correctionSummary}}</p>
+      }
+      @if (correctionPreview && correctionPreview.unrecovered > 0) {
+        <p class="correction-shortfall">
+          ⚠ {{correctionPreview.unrecovered}} minute(s) were already used or have expired and cannot be taken back.
+        </p>
+      }
+    </div>
   }
   <br/>
 
@@ -144,8 +187,8 @@
   <br/>
   @if (showStatusConfirm) {
     <div class="status-confirm-warning">
-      <p><strong>⚠ This action is irreversible.</strong></p>
-      <p>Finalizing attendance locks this session. Cancelled tutoring sessions bank their minutes to the make-up balance; completed or no-show make-up sessions deduct from it; cancelled make-up sessions neither bank nor deduct. Are you sure you want to continue?</p>
+      <p><strong>⚠ Attendance is final once saved.</strong></p>
+      <p>Only an admin can change it afterwards. Cancelled tutoring sessions bank their minutes to the make-up balance; completed or no-show make-up sessions deduct from it; cancelled make-up sessions neither bank nor deduct. Are you sure you want to continue?</p>
     </div>
   }
   @if (showAvailabilityConfirm) {
@@ -204,6 +247,9 @@
   } @else if (showStatusConfirm) {
     <button matButton (click)="cancelStatusChange()">Go Back</button>
     <button matButton color="warn" (click)="confirmStatusChange()">Confirm Update</button>
+  } @else if (correcting) {
+    <button matButton (click)="cancelCorrection()">Go Back</button>
+    <button matButton color="warn" (click)="confirmCorrection()">Change Attendance</button>
   } @else {
     <button matButton (click)="cancel()">{{isReadOnly ? 'Close' : 'Cancel'}}</button>
     @if (dialogData.type === 'create') {

@@ -54,6 +54,7 @@ describe('SessionDialog', () => {
     createSession: jest.fn(),
     createSessions: jest.fn(),
     updateSession: jest.fn(),
+    setAttendance: jest.fn(),
     deleteSession: jest.fn(),
     emailSessionNotes: jest.fn(),
     getSessionsBySeries: jest.fn(),
@@ -115,6 +116,14 @@ describe('SessionDialog', () => {
     ownContactId = 'c-self';
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    // The service echoes the session with the status it was given.
+    sessionsService.setAttendance.mockImplementation(
+      (id: string, request: { status: string }, dryRun?: boolean) => of({
+        session: { id, status: request.status },
+        makeup: { before: 120, after: 120, delta: 0, unrecovered: 0 },
+        dry_run: !!dryRun,
+      }),
+    );
   });
 
   describe('getters', () => {
@@ -796,16 +805,17 @@ describe('SessionDialog', () => {
       expect(sessionsService.updateSession).toHaveBeenCalled();
     });
 
-    it('cancelling a tutoring session banks its minutes to make-up', () => {
+    it('cancelling a tutoring session leaves the banking to the service', () => {
       const c = primedEdit(editData());
       c.selectedAttendance = SessionStatus.CANCELLED;
       c.updateSession();
       expect(c.showStatusConfirm).toBe(true);
-      studentService.updateStudent.mockReturnValue(of({} as Student));
-      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.confirmStatusChange();
-      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
-      expect(saved.make_up_minutes).toBe(180); // 120 + 60-min session
+      expect(sessionsService.setAttendance).toHaveBeenCalledWith(
+        'sess-1', { status: SessionStatus.CANCELLED, notes: c.notes },
+      );
+      // The browser never writes the student's minutes.
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
     });
 
     it('blocks completing a make-up session beyond the make-up bank', () => {
@@ -830,8 +840,7 @@ describe('SessionDialog', () => {
       c.confirmStatusChange();
       // … but no student write: nothing banked, nothing deducted.
       expect(studentService.updateStudent).not.toHaveBeenCalled();
-      const savedSession = sessionsService.updateSession.mock.calls.at(-1)![0] as Session;
-      expect(savedSession.status).toBe(SessionStatus.CANCELLED);
+      expect(sessionsService.setAttendance.mock.calls.at(-1)![1].status).toBe(SessionStatus.CANCELLED);
     });
 
     it('cancelling a make-up ignores the balance check (a 10-minute bank still cancels a 60-minute session)', () => {
@@ -844,16 +853,15 @@ describe('SessionDialog', () => {
       expect(c.showStatusConfirm).toBe(true);
     });
 
-    it('deducts make-up minutes when completing a make-up session', () => {
+    it('completing a make-up session leaves the deduction to the service', () => {
       const c = primedEdit(editData());
       c.selectedType = SessionType.MAKE_UP;
       c.selectedAttendance = SessionStatus.COMPLETED;
       c.updateSession();
-      studentService.updateStudent.mockReturnValue(of({} as Student));
       sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.confirmStatusChange();
-      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
-      expect(saved.make_up_minutes).toBe(60); // 120 - 60
+      expect(sessionsService.setAttendance.mock.calls.at(-1)![1].status).toBe(SessionStatus.COMPLETED);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
     });
 
     it('rejects an invalid time range', () => {
@@ -980,23 +988,59 @@ describe('SessionDialog', () => {
       return c;
     };
 
-    it('updates the student minutes and the session on confirm', () => {
+    it('saves the changed fields first (still Pending), then takes attendance', () => {
+      // primedConfirm turns a stored session into a make-up: the type changed.
       const c = primedConfirm();
       c.updateSession();
-      studentService.updateStudent.mockReturnValue(of({} as Student));
       sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.confirmStatusChange();
-      expect(studentService.updateStudent).toHaveBeenCalled();
-      expect(sessionsService.updateSession).toHaveBeenCalled();
-      expect(dialogRef.close).toHaveBeenCalled();
+      const saved = sessionsService.updateSession.mock.calls.at(-1)![0] as Session;
+      expect(saved.status).toBe(SessionStatus.PENDING);
+      expect(saved.type).toBe(SessionType.MAKE_UP);
+      expect(sessionsService.setAttendance).toHaveBeenCalledWith(
+        'sess-1', { status: SessionStatus.COMPLETED, notes: 'Make-up session note.' },
+      );
+      expect(sessionsService.updateSession.mock.invocationCallOrder[0])
+        .toBeLessThan(sessionsService.setAttendance.mock.invocationCallOrder[0]);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ status: SessionStatus.COMPLETED }));
     });
 
-    it('reports a student-minute update failure', () => {
+    it('a failed field save never takes attendance', () => {
       const c = primedConfirm();
       c.updateSession();
-      studentService.updateStudent.mockReturnValue(throwError(() => new Error('x')));
+      sessionsService.updateSession.mockReturnValue(throwError(() => new Error('x')));
       c.confirmStatusChange();
       expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toBe('Update session failed');
+      expect(c.submitting).toBe(false);
+      expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it('shows the service\'s own message when attendance is refused', () => {
+      const c = primedConfirm();
+      c.updateSession();
+      sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+      sessionsService.setAttendance.mockReturnValue(throwError(() => ({
+        error: { message: 'Not enough make-up minutes. Pat has 20 min but this session requires 60 min.' },
+      })));
+      c.confirmStatusChange();
+      expect(c.errorMessage).toBe('Not enough make-up minutes. Pat has 20 min but this session requires 60 min.');
+      expect(c.hasError).toBe(true);
+      expect(c.submitting).toBe(false);
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a plain message when the service sent none', () => {
+      for (const err of [new Error('x'), null, { error: {} }, { error: { message: 5 } }, { error: { message: '' } }]) {
+        const c = primedConfirm();
+        c.updateSession();
+        sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+        sessionsService.setAttendance.mockReturnValue(throwError(() => err));
+        c.confirmStatusChange();
+        expect(c.errorMessage).toBe('Taking attendance failed');
+      }
     });
 
     it('cancelStatusChange clears the pending state', () => {
@@ -1585,11 +1629,10 @@ describe('SessionDialog', () => {
         selectedAttendance: SessionStatus.NO_CALL_NO_SHOW,
       });
       c.updateSession();
-      studentService.updateStudent.mockReturnValue(of({} as Student));
       sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.confirmStatusChange();
-      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
-      expect(saved.make_up_minutes).toBe(60); // 120 - 60
+      expect(sessionsService.setAttendance.mock.calls.at(-1)![1].status).toBe(SessionStatus.NO_CALL_NO_SHOW);
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
     });
 
     it('no-shows a tutoring session without changing student minutes', () => {
@@ -2018,6 +2061,370 @@ describe('SessionDialog', () => {
       expect(sessionsService.updateSession).toHaveBeenCalledWith(
         expect.objectContaining({ tutor_name: 'Tess', student_name: 'Pat' }),
       );
+    });
+  });
+
+  describe('attendance lock', () => {
+    const stored = (over: Partial<Session> = {}): SessionDialogData =>
+      ({
+        type: 'edit',
+        session: {
+          id: 'sess-1',
+          type: SessionType.TUTORING,
+          status: SessionStatus.CANCELLED,
+          start_datetime: '2026-06-01T10:00:00Z',
+          end_datetime: '2026-06-01T11:00:00Z',
+          ...over,
+        } as Session,
+        existingSessions: [],
+      }) as SessionDialogData;
+
+    describe('who is locked', () => {
+      it('a tutor on a finalized session: every field but the notes', () => {
+        isAdmin = false;
+        const c = build(stored());
+        expect(c.isFinalized).toBe(true);
+        expect(c.fieldsLocked).toBe(true);
+        expect(c.canCorrectAttendance).toBe(false);
+        expect(c.isReadOnly).toBe(false);
+      });
+
+      it('an admin on a finalized session: fields open, attendance through a correction', () => {
+        const c = build(stored());
+        expect(c.isFinalized).toBe(true);
+        expect(c.fieldsLocked).toBe(false);
+        expect(c.canCorrectAttendance).toBe(true);
+        expect(c.isStatusLocked).toBe(true);
+      });
+
+      it('a pending session is open to both', () => {
+        for (const admin of [true, false]) {
+          isAdmin = admin;
+          const c = build(stored({ status: SessionStatus.PENDING }));
+          expect(c.isFinalized).toBe(false);
+          expect(c.fieldsLocked).toBe(false);
+          expect(c.canCorrectAttendance).toBe(false);
+        }
+      });
+
+      it('view mode is locked and never correctable, even for an admin', () => {
+        const c = build({ ...stored(), type: 'view' } as SessionDialogData);
+        expect(c.fieldsLocked).toBe(true);
+        expect(c.canCorrectAttendance).toBe(false);
+      });
+
+      it('a new session is never locked', () => {
+        isAdmin = false;
+        const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+        expect(c.fieldsLocked).toBe(false);
+        expect(c.isFinalized).toBe(false);
+      });
+    });
+
+    describe('admin correction', () => {
+      it('offers every status but the current one', () => {
+        const c = build(stored());
+        expect(c.correctionOptions).toEqual([
+          SessionStatus.PENDING, SessionStatus.COMPLETED, SessionStatus.NO_CALL_NO_SHOW,
+        ]);
+      });
+
+      it('opens blank and closes without saving', () => {
+        const c = build(stored());
+        c.correctionStatus = SessionStatus.COMPLETED;
+        c.correctionReason = 'old';
+        c.correctionPreview = { before: 1, after: 2, delta: 1, unrecovered: 0 };
+        c.hasError = true;
+        c.startCorrection();
+        expect(c.correcting).toBe(true);
+        expect(c.correctionStatus).toBeNull();
+        expect(c.correctionReason).toBe('');
+        expect(c.correctionPreview).toBeNull();
+        expect(c.hasError).toBe(false);
+
+        c.correctionPreview = { before: 1, after: 2, delta: 1, unrecovered: 0 };
+        c.hasError = true;
+        c.cancelCorrection();
+        expect(c.correcting).toBe(false);
+        expect(c.correctionPreview).toBeNull();
+        expect(c.hasError).toBe(false);
+        expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+      });
+
+      it('picking a status asks the service for a preview and writes nothing', () => {
+        sessionsService.setAttendance.mockReturnValue(of({
+          session: {}, makeup: { before: 180, after: 120, delta: -60, unrecovered: 0 }, dry_run: true,
+        }));
+        const c = build(stored());
+        c.startCorrection();
+        c.onCorrectionStatusChange(SessionStatus.COMPLETED);
+        expect(sessionsService.setAttendance).toHaveBeenCalledWith(
+          'sess-1', { status: SessionStatus.COMPLETED, reason: 'preview' }, true,
+        );
+        expect(c.correctionStatus).toBe(SessionStatus.COMPLETED);
+        expect(c.correctionPreview).toEqual({ before: 180, after: 120, delta: -60, unrecovered: 0 });
+        expect(c.correctionSummary).toBe('Make-up minutes: 180 → 120');
+      });
+
+      it('the preview carries the reason once one is typed', () => {
+        const c = build(stored());
+        c.startCorrection();
+        c.correctionReason = '  Wrong session  ';
+        c.onCorrectionStatusChange(SessionStatus.COMPLETED);
+        expect(sessionsService.setAttendance.mock.calls.at(-1)![1].reason).toBe('Wrong session');
+      });
+
+      it('a change that moves no minutes has no summary; a shortfall always has one', () => {
+        const c = build(stored());
+        expect(c.correctionSummary).toBe('');
+        c.correctionPreview = { before: 120, after: 120, delta: 0, unrecovered: 0 };
+        expect(c.correctionSummary).toBe('');
+        c.correctionPreview = { before: 0, after: 0, delta: 0, unrecovered: 60 };
+        expect(c.correctionSummary).toBe('Make-up minutes: 0 → 0');
+      });
+
+      it('a failed preview leaves the panel usable', () => {
+        sessionsService.setAttendance.mockReturnValue(throwError(() => new Error('x')));
+        const c = build(stored());
+        c.startCorrection();
+        c.onCorrectionStatusChange(SessionStatus.COMPLETED);
+        expect(c.correctionPreview).toBeNull();
+        expect(c.correctionStatus).toBe(SessionStatus.COMPLETED);
+      });
+
+      it('a preview for a status that was changed meanwhile is dropped', () => {
+        const first = new Subject<unknown>();
+        sessionsService.setAttendance.mockReturnValueOnce(first);
+        const c = build(stored());
+        c.startCorrection();
+        c.onCorrectionStatusChange(SessionStatus.COMPLETED);
+        c.onCorrectionStatusChange(SessionStatus.PENDING);
+        const second = c.correctionPreview;
+        first.next({ makeup: { before: 9, after: 9, delta: 0, unrecovered: 9 } });
+        expect(c.correctionPreview).toBe(second);
+      });
+
+      it('no preview without a status or a stored id', () => {
+        const c = build(stored());
+        c.onCorrectionStatusChange(null as never);
+        const unsaved = build(stored({ id: undefined }));
+        unsaved.onCorrectionStatusChange(SessionStatus.COMPLETED);
+        expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+      });
+
+      it('needs a status and a reason', () => {
+        const c = build(stored());
+        c.startCorrection();
+        c.confirmCorrection();
+        expect(c.errorMessage).toBe('Choose the corrected attendance.');
+        c.correctionStatus = SessionStatus.COMPLETED;
+        c.correctionReason = '   ';
+        c.confirmCorrection();
+        expect(c.errorMessage).toBe('A reason is required to change attendance.');
+        expect(c.hasError).toBe(true);
+        expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+        const unsaved = build(stored({ id: undefined }));
+        unsaved.correctionStatus = SessionStatus.COMPLETED;
+        unsaved.correctionReason = 'x';
+        unsaved.confirmCorrection();
+        expect(unsaved.errorMessage).toBe('Choose the corrected attendance.');
+      });
+
+      it('saves the correction with its trimmed reason and closes with the session', () => {
+        const c = build(stored());
+        c.startCorrection();
+        c.correctionStatus = SessionStatus.COMPLETED;
+        c.correctionReason = '  Marked the wrong session  ';
+        c.confirmCorrection();
+        expect(sessionsService.setAttendance).toHaveBeenCalledWith(
+          'sess-1', { status: SessionStatus.COMPLETED, reason: 'Marked the wrong session' },
+        );
+        expect(dialogRef.close).toHaveBeenCalledWith({ id: 'sess-1', status: SessionStatus.COMPLETED });
+        expect(sessionsService.updateSession).not.toHaveBeenCalled();
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+      });
+
+      it('never saves twice while a save is in flight', () => {
+        const c = build(stored());
+        c.correctionStatus = SessionStatus.COMPLETED;
+        c.correctionReason = 'x';
+        c.submitting = true;
+        c.confirmCorrection();
+        expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+      });
+
+      it('a refused correction shows the service message and stays open', () => {
+        sessionsService.setAttendance.mockReturnValue(throwError(() => ({
+          error: { message: 'The session is already Completed.' },
+        })));
+        const c = build(stored());
+        c.correctionStatus = SessionStatus.COMPLETED;
+        c.correctionReason = 'x';
+        c.confirmCorrection();
+        expect(c.errorMessage).toBe('The session is already Completed.');
+        expect(c.submitting).toBe(false);
+        expect(dialogRef.close).not.toHaveBeenCalled();
+        sessionsService.setAttendance.mockReturnValue(throwError(() => new Error('x')));
+        c.confirmCorrection();
+        expect(c.errorMessage).toBe('Changing attendance failed');
+      });
+    });
+
+    describe('history line', () => {
+      it('shows the latest correction with who, when and why', () => {
+        const c = build(stored({
+          attendance_history: [
+            { from: 'Pending', to: 'Cancelled', by: 't-1', at: '2026-06-01T15:00:00.000Z' },
+            { from: 'Cancelled', to: 'Completed', by: 'a-1', by_name: 'Abby', at: '2026-06-03T15:00:00.000Z', reason: 'Wrong session' },
+            { from: 'Completed', to: 'NCNS', by: 'a-1', by_name: 'Abby', at: '2026-06-04T15:00:00.000Z', reason: 'No show after all' },
+          ],
+        }));
+        expect(c.lastCorrection).toBe(
+          'Changed from Completed to NCNS by Abby on Jun 4, 2026. Reason: No show after all',
+        );
+      });
+
+      it('is blank when attendance was only ever taken, never corrected', () => {
+        expect(build(stored()).lastCorrection).toBe('');
+        expect(build(stored({
+          attendance_history: [{ from: 'Pending', to: 'Cancelled', by: 't-1', at: '2026-06-01T15:00:00.000Z' }],
+        })).lastCorrection).toBe('');
+      });
+
+      it('tolerates a missing name, a bad date and junk entries', () => {
+        expect(build(stored({
+          attendance_history: [
+            null as never,
+            { from: 'Cancelled', to: 'Completed', by: 'a-1', at: 'soon', reason: 'Fix' },
+          ],
+        })).lastCorrection).toBe('Changed from Cancelled to Completed. Reason: Fix');
+      });
+    });
+
+    describe('opened from a calendar drag', () => {
+      it('the form opens on the dropped times while the stored ones are kept for comparison', () => {
+        contactService.getStaff.mockReturnValue(of([tutor()]));
+        contactService.getContacts.mockReturnValue(of([tutor()]));
+        studentService.getStudents.mockReturnValue(of([student()]));
+        const c = build({
+          ...stored({ status: SessionStatus.PENDING }),
+          movedTo: { start: '2026-06-02T16:00:00.000Z', end: '2026-06-02T17:30:00.000Z' },
+        } as SessionDialogData);
+        c.ngOnInit();
+        expect(c.date).toEqual(new Date('2026-06-02T16:00:00.000Z'));
+        expect(c.startTime).toEqual(new Date('2026-06-02T16:00:00.000Z'));
+        expect(c.endTime).toEqual(new Date('2026-06-02T17:30:00.000Z'));
+        expect(c.dialogData.session.start_datetime).toBe('2026-06-01T10:00:00Z');
+      });
+
+      it('a drop without an end keeps the stored end; no drop keeps both', () => {
+        contactService.getStaff.mockReturnValue(of([tutor()]));
+        contactService.getContacts.mockReturnValue(of([tutor()]));
+        studentService.getStudents.mockReturnValue(of([student()]));
+        const moved = build({
+          ...stored({ status: SessionStatus.PENDING }),
+          movedTo: { start: '2026-06-01T09:00:00.000Z' },
+        } as SessionDialogData);
+        moved.ngOnInit();
+        expect(moved.startTime).toEqual(new Date('2026-06-01T09:00:00.000Z'));
+        expect(moved.endTime).toEqual(new Date('2026-06-01T11:00:00Z'));
+        const plain = build(stored({ status: SessionStatus.PENDING }));
+        plain.ngOnInit();
+        expect(plain.startTime).toEqual(new Date('2026-06-01T10:00:00Z'));
+        expect(plain.endTime).toEqual(new Date('2026-06-01T11:00:00Z'));
+      });
+    });
+
+    describe('first attendance', () => {
+      it('emails the notes to the parent once attendance is saved', () => {
+        sessionsService.emailSessionNotes.mockReturnValue(of({}));
+        const c = build(stored({ status: SessionStatus.PENDING }));
+        (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
+        c.students = [student()];
+        c.selectedTutor = 't-1';
+        c.selectedStudent = 's-1';
+        c.selectedType = SessionType.TUTORING;
+        c.date = new Date(2026, 5, 1);
+        c.startTime = new Date(2026, 5, 1, 10, 0);
+        c.endTime = new Date(2026, 5, 1, 11, 0);
+        c.selectedAttendance = SessionStatus.COMPLETED;
+        c.notes = 'Worked on fractions.';
+        c.emailNotesToParent = true;
+        sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+        c.updateSession();
+        expect(c.showStatusConfirm).toBe(true);
+        c.confirmStatusChange();
+        expect(sessionsService.setAttendance).toHaveBeenCalled();
+        expect(sessionsService.emailSessionNotes).toHaveBeenCalledWith('sess-1');
+        expect(
+          sessionsService.setAttendance.mock.invocationCallOrder[0],
+        ).toBeLessThan(sessionsService.emailSessionNotes.mock.invocationCallOrder[0]);
+        expect(dialogRef.close).toHaveBeenCalled();
+      });
+    });
+
+    describe('template', () => {
+      const render = async (data: SessionDialogData) => {
+        contactService.getStaff.mockReturnValue(of([tutor()]));
+        contactService.getContacts.mockReturnValue(of([tutor()]));
+        studentService.getStudents.mockReturnValue(of([student()]));
+        studentService.getStudentsByTutor.mockReturnValue(of([student()]));
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+          imports: [SessionDialog],
+          providers: [
+            provideNoopAnimations(),
+            { provide: MAT_DIALOG_DATA, useValue: data },
+            { provide: MatDialogRef, useValue: dialogRef },
+            { provide: SessionsService, useValue: sessionsService },
+            { provide: ContactService, useValue: contactService },
+            { provide: StudentService, useValue: studentService },
+            { provide: AuthService, useValue: authService },
+            { provide: PackageService, useValue: packageServiceStub },
+          ],
+        });
+        const fixture = TestBed.createComponent(SessionDialog);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        return fixture;
+      };
+      const text = (fixture: { nativeElement: HTMLElement }): string =>
+        (fixture.nativeElement.textContent ?? '').replace(/\s+/g, ' ');
+
+      it('a tutor sees the lock message and no correction button', async () => {
+        isAdmin = false;
+        const fixture = await render(stored({ tutor_id: 'c-self', student_id: 's-1' }));
+        expect(text(fixture)).toContain('Attendance is final. Ask an admin to correct it.');
+        expect(fixture.nativeElement.querySelector('.correct-button')).toBeNull();
+        expect(text(fixture)).not.toContain('Change attendance');
+      });
+
+      it('an admin opens the correction panel and sees the preview', async () => {
+        sessionsService.setAttendance.mockReturnValue(of({
+          session: {}, makeup: { before: 180, after: 120, delta: -60, unrecovered: 15 }, dry_run: true,
+        }));
+        const fixture = await render(stored({
+          student_id: 's-1',
+          attendance_history: [
+            { from: 'Completed', to: 'Cancelled', by: 'a-1', by_name: 'Abby', at: '2026-06-03T15:00:00.000Z', reason: 'Family called' },
+          ],
+        }));
+        expect(text(fixture)).toContain('Attendance was taken.');
+        expect(text(fixture)).toContain('Changed from Completed to Cancelled by Abby');
+        expect(fixture.nativeElement.querySelector('.correction-panel')).toBeNull();
+
+        (fixture.nativeElement.querySelector('.correct-button') as HTMLButtonElement).click();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.correction-panel')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('.correct-button')).toBeNull();
+
+        fixture.componentInstance.onCorrectionStatusChange(SessionStatus.COMPLETED);
+        fixture.detectChanges();
+        expect(text(fixture)).toContain('Make-up minutes: 180 → 120');
+        expect(text(fixture)).toContain('15 minute(s) were already used or have expired');
+        expect(text(fixture)).toContain('Change Attendance');
+      });
     });
   });
 });

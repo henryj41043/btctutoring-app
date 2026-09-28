@@ -64,12 +64,43 @@
     @if (mode === 'edit') {
       <mat-form-field>
         <mat-label>Attendance</mat-label>
-        <mat-select [(ngModel)]="selectedAttendance">
+        <mat-select [(ngModel)]="selectedAttendance" [disabled]="isFinalized">
           @for (option of attendanceOptions; track option) {
             <mat-option [value]="option">{{ option }}</mat-option>
           }
         </mat-select>
       </mat-form-field>
+      @if (isFinalized) {
+        @if (canCorrectAttendance) {
+          <p class="attendance-final">
+            Attendance was taken.
+            @if (!correcting) {
+              <button matButton type="button" class="correct-button" (click)="startCorrection()">
+                Change attendance
+              </button>
+            }
+          </p>
+        } @else {
+          <p class="attendance-final">Attendance is final. Ask an admin to correct it.</p>
+        }
+      }
+      @if (correcting) {
+        <div class="correction-panel">
+          <mat-form-field>
+            <mat-label>Corrected attendance</mat-label>
+            <mat-select [(ngModel)]="correctionStatus">
+              @for (option of correctionOptions; track option) {
+                <mat-option [value]="option">{{ option }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Reason</mat-label>
+            <input matInput [(ngModel)]="correctionReason" maxlength="200" required>
+            <mat-hint>Saved on the session with your name and the date.</mat-hint>
+          </mat-form-field>
+        </div>
+      }
     }
 
     <mat-form-field class="group-notes">
@@ -97,6 +128,9 @@
     <button matButton (click)="cancelSeriesScope()">Cancel</button>
     <button matButton (click)="chooseSeriesScope('single')">This occurrence</button>
     <button matButton color="warn" (click)="chooseSeriesScope('future')">This &amp; future</button>
+  } @else if (correcting) {
+    <button matButton (click)="cancelCorrection()">Go Back</button>
+    <button mat-raised-button color="warn" (click)="confirmCorrection()">Change Attendance</button>
   } @else {
     <button matButton (click)="cancel()">Cancel</button>
     @if (mode === 'delete') {
