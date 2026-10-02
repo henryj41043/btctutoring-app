@@ -9,6 +9,7 @@ import { Billing } from './billing';
 import { AuthService } from '../services/auth.service';
 import { BillingService } from '../services/billing.service';
 import { NoteService } from '../services/note.service';
+import { ScholarshipService } from '../services/scholarship.service';
 import { BillingRecord } from '../models/billing-record.model';
 import { BillingEntry } from '../models/billing-entry.model';
 import { BillingCycle } from '../enums/billing-cycle.enum';
@@ -38,6 +39,7 @@ describe('Billing', () => {
   let dialogResult: unknown;
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(dialogResult) })) };
   const noteService = { createNote: jest.fn() };
+  const scholarshipService = { getScholarshipRecordsByMonth: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
     contact: () => ({ id: 'c-admin', first_name: 'Ann' }),
@@ -48,6 +50,7 @@ describe('Billing', () => {
     { provide: AuthService, useValue: authService },
     { provide: BillingService, useValue: billingService },
     { provide: NoteService, useValue: noteService },
+    { provide: ScholarshipService, useValue: scholarshipService },
     { provide: Router, useValue: router },
   ];
 
@@ -74,6 +77,7 @@ describe('Billing', () => {
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     billingService.getStatements.mockReturnValue(of([statement()]));
+    scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(of([]));
     billingService.setAmountOverride.mockReturnValue(of({ id: 'c-1#2026-07-01' }));
     billingService.upsertBillingRecord.mockReturnValue(of({ id: 'x' }));
     noteService.createNote.mockReturnValue(of({ id: 'n-1' }));
@@ -175,6 +179,42 @@ describe('Billing', () => {
       expect((c as any).dataSource.data).toEqual([]);
       expect((c as any).loading).toBe(false);
       expect(billingService.getStatements).not.toHaveBeenCalled();
+      expect(scholarshipService.getScholarshipRecordsByMonth).not.toHaveBeenCalled();
+    });
+
+    it("marks a family that has a scholarship record for the month", () => {
+      billingService.getStatements.mockReturnValue(of([
+        statement(),
+        semiStatement({ contact_id: 'c-2', contact_name: 'Sam Roe' }),
+      ]));
+      const record = { contact_id: 'c-2', month: '2026-07', scholarship_state: 'PA' };
+      scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(of([
+        record,
+        { month: '2026-07', scholarship_state: 'no contact' },
+        { contact_id: 'c-gone', month: '2026-07' },
+      ]));
+      const { c } = loaded();
+      const month = billingService.getStatements.mock.calls.at(-1)![0];
+      expect(scholarshipService.getScholarshipRecordsByMonth).toHaveBeenCalledWith(month);
+      const rows = (c as any).dataSource.data as BillingEntry[];
+      expect(rows.map(r => r.scholarship)).toEqual([undefined, record]);
+      expect(rows[0]).not.toHaveProperty('scholarship');
+      expect(rows[1].total).toBe(semiStatement().total);
+    });
+
+    it('still shows Billing when the scholarship records cannot be read', () => {
+      jest.spyOn(console, 'log').mockImplementation(() => undefined);
+      scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(throwError(() => new Error('boom')));
+      const { c } = loaded();
+      expect((c as any).hasError).toBe(false);
+      expect((c as any).dataSource.data).toHaveLength(1);
+      expect((c as any).dataSource.data[0].scholarship).toBeUndefined();
+    });
+
+    it('tolerates an empty scholarship response', () => {
+      scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(of(null));
+      const { c } = loaded();
+      expect((c as any).dataSource.data).toHaveLength(1);
     });
 
     it('shows an error loudly when the statements fail to load', () => {
@@ -540,6 +580,26 @@ describe('Billing', () => {
     const lastTable = () => (autoTable as unknown as jest.Mock).mock.calls.at(-1)![1];
     const lastDoc = () => (jsPDF as unknown as jest.Mock).mock.results.at(-1)!.value;
 
+    it('adds one muted line under a family with a scholarship record', () => {
+      const { c } = loaded();
+      (c as any).dataSource.data = [
+        {
+          name: 'Casey Lee', total: 362,
+          scholarship: { scholarship_state: 'PA', invoice_number: 'INV-7' },
+        } as BillingEntry,
+        { name: 'Sam Roe', total: 10 } as BillingEntry,
+      ];
+      c.exportPDF();
+      const body = lastTable().body as unknown[][];
+      expect(body).toHaveLength(3);
+      expect(body[1]).toEqual([{
+        content: '    Scholarship: PA · Invoice INV-7',
+        colSpan: 7,
+        styles: { fontSize: 8, textColor: 90, fontStyle: 'italic' },
+      }]);
+      expect((body[2] as string[])[0]).toBe('Sam Roe');
+    });
+
     it('covers monthly and semi-monthly rows', () => {
       const { c } = loaded();
       (c as any).dataSource.data = [
@@ -781,6 +841,43 @@ describe('Billing', () => {
       expect(detail.textContent).toContain('$349.13');
       expect(fixture.nativeElement.querySelector('.billing-detail-open')).not.toBeNull();
       expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('shows the Scholarship chip and the record in the opened row', () => {
+      scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(of([{
+        contact_id: 'c-1',
+        month: '2026-07',
+        scholarship_state: 'PA',
+        invoice_number: 'INV-7',
+        date_funds_requested_by_btc: new Date(2026, 6, 2),
+        invoice_paid_date: new Date(2026, 6, 20),
+      }]));
+      const fixture = render();
+      const chip = fixture.nativeElement.querySelector('.scholarship-chip') as HTMLElement;
+      expect(chip.textContent?.trim()).toBe('Scholarship');
+      expect(fixture.nativeElement.querySelector('.detail-scholarship')).toBeNull();
+
+      (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const detail = fixture.nativeElement.querySelector('.detail-scholarship') as HTMLElement;
+      const rows = Array.from(detail.querySelectorAll('div')).map(div =>
+        [div.querySelector('dt')?.textContent?.trim(), div.querySelector('dd')?.textContent?.trim()]);
+      expect(rows).toEqual([
+        ['Scholarship', 'PA'],
+        ['Funds requested by BTC', '7/2/2026'],
+        ['Funds requested by family', '—'],
+        ['Invoice number', 'INV-7'],
+        ['Invoice paid', '7/20/2026'],
+      ]);
+    });
+
+    it('shows no chip and no scholarship block for a family without a record', () => {
+      const fixture = render();
+      expect(fixture.nativeElement.querySelector('.scholarship-chip')).toBeNull();
+      (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.billing-detail')).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('.detail-scholarship')).toBeNull();
     });
 
     it('renders a group-only family without a line table', () => {

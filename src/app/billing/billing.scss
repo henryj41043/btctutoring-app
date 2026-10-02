@@ -132,6 +132,36 @@
     }
   }
 
+  /* The month's scholarship record: information only, never an amount. */
+  .detail-scholarship {
+    margin: 12px 0 0 auto;
+    max-width: 360px;
+    font-size: .85rem;
+    border-top: 1px dashed rgba(0, 0, 0, 0.15);
+    padding-top: 8px;
+
+    div {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 3px 10px;
+    }
+
+    dt, dd {
+      margin: 0;
+    }
+
+    .detail-scholarship-title {
+      font-weight: 700;
+      color: var(--btc-teal-deep);
+    }
+  }
+
+  .scholarship-chip {
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
   .total-cell {
     font-weight: 800;
     color: var(--btc-teal-deep);

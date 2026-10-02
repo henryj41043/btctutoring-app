@@ -1,4 +1,5 @@
 import {Statement} from './statement.model';
+import {ScholarshipRecord} from './scholarship-record.model';
 
 /** A derived row on the Billing page: one contact's charges for the selected month. */
 export class BillingEntry {
@@ -29,4 +30,9 @@ export class BillingEntry {
   paid_fifteenth?: boolean;
   /** True when a student can't be priced confidently (unconfigured/missing schedule). */
   needs_attention?: boolean;
+  /**
+   * The family's scholarship record for this month, when there is one. Shown
+   * as a marker only: it never changes an amount and is not part of the statement.
+   */
+  scholarship?: ScholarshipRecord;
 }

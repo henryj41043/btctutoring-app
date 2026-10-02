@@ -22,16 +22,20 @@ import {FormsModule} from '@angular/forms';
 import {AuthService} from '../services/auth.service';
 import {BillingService} from '../services/billing.service';
 import {NoteService} from '../services/note.service';
+import {ScholarshipService} from '../services/scholarship.service';
+import {ScholarshipRecord} from '../models/scholarship-record.model';
 import {Note} from '../models/note.model';
 import {BillingRecord} from '../models/billing-record.model';
 import {BillingEntry} from '../models/billing-entry.model';
 import {CurrencyPipe, DatePipe} from '@angular/common';
-import {catchError, EMPTY} from 'rxjs';
+import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {BillingCycle} from '../enums/billing-cycle.enum';
 import {round2} from '../utils/package-config';
 import {TableStateStore} from '../utils/table-state';
 import {StatementLine} from '../models/statement.model';
 import {flagLabels, formatMoney, linePeriod, lineSessions, lineSummary, toBillingEntry} from '../utils/statement-view';
+import {monthKeyOf} from '../utils/month-key';
+import {scholarshipSummary} from '../utils/scholarship-view';
 
 /** The month picker shows and announces a month, never a day. */
 const MONTH_FORMATS = {
@@ -72,6 +76,7 @@ export class Billing implements OnInit {
   protected authService: AuthService = inject(AuthService);
   private billingService: BillingService = inject(BillingService);
   private noteService: NoteService = inject(NoteService);
+  private scholarshipService: ScholarshipService = inject(ScholarshipService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
   private router: Router = inject(Router);
   private dialog: MatDialog = inject(MatDialog);
@@ -135,11 +140,6 @@ export class Billing implements OnInit {
     this.onDateChange(new Date(this.monthStart.getFullYear(), this.monthStart.getMonth() + delta, 1));
   }
 
-  /** 'YYYY-MM' month key for the selected billing month. */
-  private monthKeyOf(date: Date): string {
-    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-  }
-
   /** 'YYYY-MM-DD' period key for the selected month and day-of-month. */
   private periodKey(date: Date, day: number): string {
     const y = date.getFullYear();
@@ -166,15 +166,28 @@ export class Billing implements OnInit {
 
     // The service calculates every amount; a failure is shown loudly rather
     // than as an empty (and misleading) month.
-    this.billingService.getStatements(this.monthKeyOf(date)).pipe(
+    const month = monthKeyOf(date);
+    forkJoin({
+      statements: this.billingService.getStatements(month),
+      // Only a marker on the row: a failed read must never take Billing down.
+      scholarships: this.scholarshipService.getScholarshipRecordsByMonth(month).pipe(
+        catchError(error => { console.log(error); return of([] as ScholarshipRecord[]); }),
+      ),
+    }).pipe(
       catchError(() => {
         this.hasError = true;
         this.finishLoading([]);
         return EMPTY;
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(statements => {
-      this.finishLoading((statements ?? []).map(toBillingEntry));
+    ).subscribe(({statements, scholarships}) => {
+      const byContact = new Map(
+        (scholarships ?? []).filter(record => !!record.contact_id).map(record => [record.contact_id!, record]));
+      this.finishLoading((statements ?? []).map(statement => {
+        const entry = toBillingEntry(statement);
+        const scholarship = byContact.get(entry.contact_id ?? '');
+        return scholarship ? {...entry, scholarship} : entry;
+      }));
     });
   }
 
@@ -388,6 +401,13 @@ export class Billing implements OnInit {
     return rows;
   }
 
+  /** One muted line under a family that has a scholarship record this month. */
+  private pdfScholarshipRow(entry: BillingEntry): RowInput[] {
+    if (!entry.scholarship) return [];
+    const styles: Partial<Styles> = {fontSize: 8, textColor: 90, fontStyle: 'italic'};
+    return [[{content: `    ${scholarshipSummary(entry.scholarship)}`, colSpan: 7, styles}]];
+  }
+
   exportPDF(): void {
     const monthStr = this.monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const doc = new jsPDF();
@@ -418,6 +438,7 @@ export class Billing implements OnInit {
           this.formatMoney(e.total),
         ],
         ...this.pdfDetailRows(e),
+        ...this.pdfScholarshipRow(e),
       ]),
       foot: [[
         'Grand Total', '', '', this.formatMoney(this.grandDueFirst),
