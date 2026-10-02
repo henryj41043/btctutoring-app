@@ -234,10 +234,13 @@ export class Contact implements OnInit {
       // Scheduled make-up tallies (admin-only sessions read) for both the
       // family cards and a tutor's roster.
       this.loadScheduledMakeup();
+      // Notes are an admin view too (client 2026-10-02): a tutor's own page
+      // neither shows nor fetches what was written about them.
+      this.loadNotes();
     } else {
       this.studentsLoading = false;
+      this.notesLoading = false;
     }
-    this.loadNotes();
     this.getTutors();
   }
 
