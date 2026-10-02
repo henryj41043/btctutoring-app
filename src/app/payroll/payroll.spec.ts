@@ -207,6 +207,78 @@ describe('Payroll', () => {
     expect(entry.tutoring_compensation).toBe(160);
   });
 
+  it('pays a held custom trial exactly like a tutoring session: real time, planning and extra planning', () => {
+    studentService.getStudentsByTutor.mockReturnValue(
+      of([{ id: 's-1', name: 'Pat', extra_planning_minutes: 30 }]),
+    );
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          // Completed 90-minute custom trial -> 1.5 tutoring hours.
+          type: SessionType.CUSTOM_TRIAL,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-06-05T10:00:00',
+          end_datetime: '2026-06-05T11:30:00',
+        },
+        {
+          // NCNS 30-minute custom trial -> 0.5 tutoring hours (the slot was held).
+          type: SessionType.CUSTOM_TRIAL,
+          status: SessionStatus.NO_CALL_NO_SHOW,
+          student_id: 's-1',
+          start_datetime: '2026-06-06T10:00:00',
+          end_datetime: '2026-06-06T10:30:00',
+        },
+        {
+          // Cancelled: nothing.
+          type: SessionType.CUSTOM_TRIAL,
+          status: SessionStatus.CANCELLED,
+          student_id: 's-1',
+          start_datetime: '2026-06-07T10:00:00',
+          end_datetime: '2026-06-07T11:00:00',
+        },
+        {
+          // Still pending: nothing.
+          type: SessionType.CUSTOM_TRIAL,
+          status: SessionStatus.PENDING,
+          student_id: 's-1',
+          start_datetime: '2026-06-08T10:00:00',
+          end_datetime: '2026-06-08T11:00:00',
+        },
+        {
+          // Outside the pay period: nothing.
+          type: SessionType.CUSTOM_TRIAL,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-05-01T10:00:00',
+          end_datetime: '2026-05-01T11:00:00',
+        },
+        {
+          // A regular tutoring hour beside it, paid by the same rule.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          student_id: 's-1',
+          start_datetime: '2026-06-09T10:00:00',
+          end_datetime: '2026-06-09T11:00:00',
+        },
+      ] as Session[]),
+    );
+
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+
+    const entry = data(p)[0];
+    expect(entry.tutoring_hours).toBe(3); // 1.5 + 0.5 custom trial + 1 tutoring
+    expect(entry.trial_hours).toBe(0); // never the flat onboarding-trial hour
+    expect(entry.group_hours).toBe(0);
+    expect(entry.planning_time).toBe(0.5); // 3h / 6
+    expect(entry.extra_planning_time).toBe(1.5); // 3 counted sessions x 30 min
+    expect(entry.hours_subtotal).toBe(3);
+    expect(entry.tutoring_compensation).toBe(120); // 3h x $40
+    expect(entry.planning_compensation).toBe(30); // (0.5 + 1.5) x $15
+    expect(entry.total_compensation).toBe(150);
+  });
+
   it('pays a flat hour per held BTC & Me group session, per session not per student', () => {
     sessionsService.getSessionsByTutor.mockReturnValue(
       of([

@@ -86,6 +86,10 @@ const colors: Record<string, EventColor> = {
     primary: '#d81b60',
     secondary: '#f8bbd0',
   },
+  indigo: {
+    primary: '#3949ab',
+    secondary: '#c5cae9',
+  },
 };
 
 @Component({
@@ -407,6 +411,7 @@ export class EventCalendar implements OnInit {
       const isMakeUp = session.type === SessionType.MAKE_UP;
       const isTrial = session.type === SessionType.TRIAL;
       const isGroup = session.type === SessionType.GROUP;
+      const isCustomTrial = session.type === SessionType.CUSTOM_TRIAL;
       const editable = this.isSessionEditable(session);
       // Group sessions are fixed 45-minute weekly occurrences — dragging or
       // resizing would bypass the length rule and the roster-aware dialog.
@@ -418,7 +423,7 @@ export class EventCalendar implements OnInit {
       return {
         title: isAdmin
           ? `${session.tutor_name} - Admin Time - ${timeRange}`
-          : `${isMakeUp ? '[Make-up] ' : ''}${isTrial ? '[Trial] ' : ''}${isGroup ? '[BTC & Me] ' : ''}${session.tutor_name} with ${session.student_name} - ${timeRange}`,
+          : `${isMakeUp ? '[Make-up] ' : ''}${isTrial ? '[Trial] ' : ''}${isCustomTrial ? '[Custom Trial] ' : ''}${isGroup ? '[BTC & Me] ' : ''}${session.tutor_name} with ${session.student_name} - ${timeRange}`,
         start: new Date(session.start_datetime as string),
         end: new Date(session.end_datetime as string),
         meta: session,
@@ -454,6 +459,16 @@ export class EventCalendar implements OnInit {
         return colors['red'];
       }
       return colors['pink'];
+    }
+    // Indigo marks a SCHEDULED custom trial; finalized takes the outcome color.
+    if (type === SessionType.CUSTOM_TRIAL) {
+      if (status === SessionStatus.COMPLETED) {
+        return colors['green'];
+      }
+      if (status === SessionStatus.NO_CALL_NO_SHOW || status === SessionStatus.CANCELLED) {
+        return colors['red'];
+      }
+      return colors['indigo'];
     }
     if (type === SessionType.MAKE_UP) {
       // Orange marks a SCHEDULED make-up; once finalized it takes the outcome

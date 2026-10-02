@@ -30,6 +30,15 @@ const pendingMakeup = (id: string, minutes: number, over: Partial<Session> = {})
 
 describe('session-rules', () => {
   describe('validateSessionLength', () => {
+    it('allows a custom trial of any length, whatever the package allows', () => {
+      const capped = {package: 'Succeed', session_length: 30} as never;
+      for (const minutes of [15, 30, 45, 60, 90, 120]) {
+        expect(validateSessionLength(SessionType.CUSTOM_TRIAL, minutes, null, undefined)).toBeNull();
+        expect(validateSessionLength(
+          SessionType.CUSTOM_TRIAL, minutes, {sessionLengthMin: 30} as never, capped)).toBeNull();
+      }
+    });
+
     it('allows trials of 45 or 30 minutes only', () => {
       expect(validateSessionLength(SessionType.TRIAL, 45, null, undefined)).toBeNull();
       expect(validateSessionLength(SessionType.TRIAL, 30, null, undefined)).toBeNull();
@@ -185,6 +194,12 @@ describe('session-rules', () => {
   });
 
   describe('mutatesStudent', () => {
+    it('custom trials never mutate: nothing was billed, so nothing is banked', () => {
+      expect(mutatesStudent(SessionType.CUSTOM_TRIAL, SessionStatus.CANCELLED)).toBe(false);
+      expect(mutatesStudent(SessionType.CUSTOM_TRIAL, SessionStatus.COMPLETED)).toBe(false);
+      expect(mutatesStudent(SessionType.CUSTOM_TRIAL, SessionStatus.NO_CALL_NO_SHOW)).toBe(false);
+    });
+
     it('trials never mutate', () => {
       expect(mutatesStudent(SessionType.TRIAL, SessionStatus.CANCELLED)).toBe(false);
       expect(mutatesStudent(SessionType.TRIAL, SessionStatus.COMPLETED)).toBe(false);

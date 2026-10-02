@@ -646,6 +646,33 @@ describe('EventCalendar', () => {
       expect(colorFor({ type: SessionType.TRIAL, status })).toBe(primary);
     });
 
+    it.each([
+      [SessionStatus.PENDING, '#3949ab'],
+      [undefined, '#3949ab'],
+      [SessionStatus.COMPLETED, '#18c100'],
+      [SessionStatus.CANCELLED, '#ad2121'],
+      [SessionStatus.NO_CALL_NO_SHOW, '#ad2121'],
+    ])('colors CUSTOM_TRIAL %s sessions (indigo while scheduled)', (status, primary) => {
+      expect(colorFor({ type: SessionType.CUSTOM_TRIAL, status })).toBe(primary);
+    });
+
+    it('prefixes custom trial titles with [Custom Trial], never [Trial]', () => {
+      sessionsService.getAllSessions.mockReturnValue(of([
+        {
+          type: SessionType.CUSTOM_TRIAL,
+          status: SessionStatus.PENDING,
+          tutor_name: 'T',
+          student_name: 'S',
+          start_datetime: '2026-06-01T09:00:00',
+          end_datetime: '2026-06-01T10:00:00',
+        },
+      ] as Session[]));
+      const c = build();
+      c.ngOnInit();
+      expect(c.events[0].title.startsWith('[Custom Trial] T with S - ')).toBe(true);
+      expect(c.events[0].title).not.toContain('[Trial]');
+    });
+
     it('prefixes trial titles with [Trial]', () => {
       sessionsService.getAllSessions.mockReturnValue(of([
         {
@@ -660,6 +687,7 @@ describe('EventCalendar', () => {
       const c = build();
       c.ngOnInit();
       expect(c.events[0].title).toContain('[Trial] ');
+      expect(c.events[0].title).not.toContain('[Custom Trial]');
     });
 
     it('defaults unknown statuses to yellow', () => {
