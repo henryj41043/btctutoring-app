@@ -373,6 +373,8 @@ describe('StudentRoster', () => {
         completed({ start_datetime: '2026-07-08T14:00:00.000Z', end_datetime: '2026-07-08T15:30:00.000Z', tutor_name: 'Tutor B' }), // 1.5h
         completed({ type: SessionType.MAKE_UP, start_datetime: '2026-07-10T14:00:00.000Z', end_datetime: '2026-07-10T14:30:00.000Z' }), // 0.5h
         completed({ type: SessionType.TRIAL, start_datetime: '2026-07-01T14:00:00.000Z', end_datetime: '2026-07-01T14:45:00.000Z' }),   // 0.75h
+        completed({ type: SessionType.CUSTOM_TRIAL, start_datetime: '2026-07-02T14:00:00.000Z', end_datetime: '2026-07-02T15:00:00.000Z' }), // 1h, a trial too
+        completed({ type: SessionType.GROUP }),                                         // BTC & Me is not counted here
         completed({ status: SessionStatus.PENDING }),                                   // not completed
         completed({ status: SessionStatus.CANCELLED }),                                 // not completed
         completed({ type: SessionType.ADMIN, student_id: undefined, student_name: undefined }), // staff time
@@ -384,8 +386,8 @@ describe('StudentRoster', () => {
         tutors: 'Tutor A, Tutor B',
         sessions: 2,
         makeups: 1,
-        trials: 1,
-        hours: 3.75,
+        trials: 2,
+        hours: 4.75,
       }]);
     });
 

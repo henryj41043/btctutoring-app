@@ -288,7 +288,10 @@ export class StudentRoster implements OnInit {
       if (session.status !== SessionStatus.COMPLETED) {
         continue;
       }
-      if (session.type !== SessionType.TUTORING && session.type !== SessionType.MAKE_UP && session.type !== SessionType.TRIAL) {
+      if (
+        session.type !== SessionType.TUTORING && session.type !== SessionType.MAKE_UP &&
+        session.type !== SessionType.TRIAL && session.type !== SessionType.CUSTOM_TRIAL
+      ) {
         continue; // ADMIN time is staff work, not student attendance
       }
       if (!session.student_id && !session.student_name) {

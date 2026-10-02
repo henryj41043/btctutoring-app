@@ -12,8 +12,8 @@ export const TRIAL_LENGTHS_MIN: readonly number[] = [45, 30];
 /**
  * Returns an error if a session's duration violates its type's length rules:
  * trials are 45 minutes (or 30) by policy, and tutoring sessions may not
- * exceed the length the student's package allows per session. ADMIN/MAKE_UP
- * and unconfigured packages aren't constrained (make-up is already bounded by
+ * exceed the length the student's package allows per session. ADMIN/MAKE_UP,
+ * custom trials and unconfigured packages aren't constrained (make-up is already bounded by
  * the make-up minutes bank).
  */
 export function validateSessionLength(
@@ -150,9 +150,10 @@ export function makeupAfterServiceEndError(student: Student, sessionDate: Date |
 }
 
 export function mutatesStudent(type: SessionType, status: SessionStatus): boolean {
-  // Trials and BTC & Me group sessions never touch the make-up bank — a
-  // cancelled one banks nothing (group billing is a flat monthly fee).
-  if (type === SessionType.TRIAL || type === SessionType.GROUP) {
+  // Trials, custom trials and BTC & Me group sessions never touch the make-up
+  // bank — a cancelled one banks nothing (a trial is not billed, and group
+  // billing is a flat monthly fee).
+  if (type === SessionType.TRIAL || type === SessionType.CUSTOM_TRIAL || type === SessionType.GROUP) {
     return false;
   }
   if (type === SessionType.MAKE_UP) {

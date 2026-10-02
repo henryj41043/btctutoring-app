@@ -90,7 +90,9 @@ export class SessionDialog implements OnInit {
   selectedAttendance: any;
   // Trials are created from the contact page and BTC & Me groups from their
   // own dialog; the generic dialog offers TRIAL only when the session being
-  // edited already is one (GROUP always routes to the group dialog).
+  // edited already is one (GROUP always routes to the group dialog). Custom
+  // trials are an admin's to schedule: ngOnInit drops the option for anyone
+  // else, unless the session on screen already is one.
   sessionTypeOptions: SessionType[] =
     Object.values(SessionType).filter(t => t !== SessionType.TRIAL && t !== SessionType.GROUP);
   readonly SessionType = SessionType;
@@ -101,6 +103,7 @@ export class SessionDialog implements OnInit {
     [SessionType.ADMIN]: 'Admin',
     [SessionType.TRIAL]: 'Trial',
     [SessionType.GROUP]: 'BTC & Me',
+    [SessionType.CUSTOM_TRIAL]: 'Custom Trial',
   };
   // All active staff (Hiring + Active Staff); the `tutors` getter narrows by
   // session type — Admin time is loggable by any staff member, tutoring only
@@ -120,8 +123,9 @@ export class SessionDialog implements OnInit {
       return this.allStaff;
     }
     // Trials keep the accepting-students filter off: the assigned tutor may
-    // be at capacity and must still be selectable.
-    if (this.selectedType === SessionType.TRIAL) {
+    // be at capacity and must still be selectable. A custom trial is a
+    // one-off, so capacity does not matter for it either.
+    if (this.selectedType === SessionType.TRIAL || this.selectedType === SessionType.CUSTOM_TRIAL) {
       return this.allStaff.filter(c => c.is_tutor !== false);
     }
     return this.allStaff.filter(
@@ -328,6 +332,11 @@ export class SessionDialog implements OnInit {
         this.sessionTypeOptions =
           Object.values(SessionType).filter(t => t !== SessionType.GROUP);
       }
+    }
+    if (!this.authService.isAdmin() && this.selectedType !== SessionType.CUSTOM_TRIAL) {
+      this.sessionTypeOptions = this.sessionTypeOptions.filter(t => t !== SessionType.CUSTOM_TRIAL);
+    }
+    if(this.dialogData.type !== 'create') {
       this.selectedStudent = this.dialogData.session.student_id;
       this.selectedTutor = this.dialogData.session.tutor_id;
       // A calendar drag or resize opens the form on the dropped times.
@@ -362,7 +371,8 @@ export class SessionDialog implements OnInit {
    * already overridden.
    */
   private passesAvailabilityGate(proceed: () => void): boolean {
-    if (this.selectedType !== SessionType.TUTORING || this.availabilityOverridden) {
+    const checked = this.selectedType === SessionType.TUTORING || this.selectedType === SessionType.CUSTOM_TRIAL;
+    if (!checked || this.availabilityOverridden) {
       return true;
     }
     if (this.isWithinAvailability()) {

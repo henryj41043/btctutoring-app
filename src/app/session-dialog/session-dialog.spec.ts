@@ -1752,6 +1752,130 @@ describe('SessionDialog', () => {
     return c;
   };
 
+  describe('CUSTOM_TRIAL', () => {
+    const create = (): SessionDialog => {
+      const c = build({ type: 'create', session: new Session(), existingSessions: [] } as SessionDialogData);
+      c.ngOnInit();
+      return c;
+    };
+
+    it('is offered to an admin on create, labelled Custom Trial, and never the onboarding Trial', () => {
+      const c = create();
+      expect(c.sessionTypeOptions).toEqual([
+        SessionType.TUTORING, SessionType.MAKE_UP, SessionType.ADMIN, SessionType.CUSTOM_TRIAL,
+      ]);
+      expect(c.typeLabels[SessionType.CUSTOM_TRIAL]).toBe('Custom Trial');
+      expect(c.typeLabels[SessionType.TRIAL]).toBe('Trial');
+    });
+
+    it('is never offered to a tutor, on create or when editing their own session', () => {
+      isAdmin = false;
+      // The calendar opens the dialog locked to the tutor's own make-ups…
+      const locked = build({
+        type: 'create', session: new Session(), existingSessions: [], lockToMakeup: true,
+      } as SessionDialogData);
+      locked.ngOnInit();
+      expect(locked.sessionTypeOptions).toEqual([SessionType.MAKE_UP]);
+      // …and even an unlocked dialog would not offer it.
+      expect(create().sessionTypeOptions).toEqual([SessionType.TUTORING, SessionType.MAKE_UP, SessionType.ADMIN]);
+
+      const edit = build({
+        type: 'edit',
+        session: {
+          id: 'sess-1', type: SessionType.TUTORING, status: SessionStatus.PENDING,
+          start_datetime: '2026-06-01T10:00:00Z', end_datetime: '2026-06-01T11:00:00Z',
+        },
+      } as never);
+      edit.ngOnInit();
+      expect(edit.sessionTypeOptions).toEqual([SessionType.TUTORING, SessionType.MAKE_UP, SessionType.ADMIN]);
+    });
+
+    it('keeps the option for a tutor looking at a session that already is one', () => {
+      isAdmin = false;
+      const edit = build({
+        type: 'edit',
+        session: {
+          id: 'sess-1', type: SessionType.CUSTOM_TRIAL, status: SessionStatus.PENDING,
+          start_datetime: '2026-06-01T10:00:00Z', end_datetime: '2026-06-01T11:00:00Z',
+        },
+      } as never);
+      edit.ngOnInit();
+      expect(edit.selectedType).toBe(SessionType.CUSTOM_TRIAL);
+      expect(edit.sessionTypeOptions).toContain(SessionType.CUSTOM_TRIAL);
+    });
+
+    it('offers active students only', () => {
+      studentService.getStudents.mockReturnValue(of([
+        student(),
+        student({ id: 's-onb', name: 'Rebekah', status: StudentStatus.ONBOARDING }),
+        student({ id: 's-past', name: 'Quinn', status: StudentStatus.PAST_STUDENT }),
+      ]));
+      const c = create();
+      c.onTutorChange('t-1');
+      c.onTypeChange(SessionType.CUSTOM_TRIAL);
+      expect(c.filteredStudents.map(s => s.id)).toEqual(['s-1']);
+    });
+
+    it('lets any current tutor be picked, accepting students or not, but never a non-tutor', () => {
+      const c = build({ type: 'create', session: new Session() } as SessionDialogData);
+      (c as unknown as { allStaff: Contact[] }).allStaff = [
+        tutor({ id: 't-1', currently_accepting_students: false }),
+        tutor({ id: 't-2', is_tutor: false }),
+        tutor({ id: 't-3' }),
+      ];
+      c.selectedType = SessionType.CUSTOM_TRIAL;
+      expect(c.tutors.map(t => t.id)).toEqual(['t-1', 't-3']);
+    });
+
+    it('creates one of any length with the type on the session', () => {
+      const c = primedCreate();
+      c.selectedType = SessionType.CUSTOM_TRIAL;
+      c.endTime = new Date(2026, 5, 1, 11, 30);
+      sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
+      c.createSession();
+      expect(c.hasError).toBe(false);
+      expect(sessionsService.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ type: SessionType.CUSTOM_TRIAL, student_id: 's-1', tutor_id: 't-1' }),
+      );
+      // Never an onboarding trial: the student's trial date is left alone.
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+
+    it('asks an admin to confirm one outside the tutor\'s availability, then creates it', () => {
+      const c = primedCreate();
+      c.selectedType = SessionType.CUSTOM_TRIAL;
+      c.startTime = new Date(2026, 5, 1, 18, 0);
+      c.endTime = new Date(2026, 5, 1, 19, 0);
+      c.createSession();
+      expect(c.showAvailabilityConfirm).toBe(true);
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+
+      sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
+      c.confirmAvailabilityOverride();
+      expect(sessionsService.createSession).toHaveBeenCalled();
+    });
+
+    it('does not check availability for a make-up, as before', () => {
+      const c = primedCreate();
+      c.selectedType = SessionType.MAKE_UP;
+      c.students = [student({ make_up_minutes: 600, make_up_batches: [{ minutes: 600, earned_date: new Date().toISOString() }] } as never)];
+      c.startTime = new Date(2026, 5, 1, 18, 0);
+      c.endTime = new Date(2026, 5, 1, 19, 0);
+      sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
+      c.createSession();
+      expect(c.showAvailabilityConfirm).toBe(false);
+    });
+
+    it('never syncs a trial date when one is rescheduled', () => {
+      (build({ type: 'create', session: new Session() } as SessionDialogData) as unknown as {
+        syncTrialDateAfterReschedule: (s: unknown) => void;
+      }).syncTrialDateAfterReschedule({
+        type: SessionType.CUSTOM_TRIAL, student_id: 's-1', start_datetime: '2026-06-04T10:00:00Z',
+      });
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+    });
+  });
+
   describe('TRIAL guards', () => {
     it('offers TRIAL in the type dropdown only when editing a trial', () => {
       const createDialog = build();
