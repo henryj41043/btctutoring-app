@@ -1787,7 +1787,7 @@ describe('SessionDialog', () => {
         },
       } as never);
       edit.ngOnInit();
-      expect(edit.sessionTypeOptions).toEqual([SessionType.TUTORING, SessionType.MAKE_UP, SessionType.ADMIN]);
+      expect(edit.sessionTypeOptions).toEqual([SessionType.TUTORING]);
     });
 
     it('keeps the option for a tutor looking at a session that already is one', () => {
@@ -1801,7 +1801,48 @@ describe('SessionDialog', () => {
       } as never);
       edit.ngOnInit();
       expect(edit.selectedType).toBe(SessionType.CUSTOM_TRIAL);
-      expect(edit.sessionTypeOptions).toContain(SessionType.CUSTOM_TRIAL);
+      expect(edit.sessionTypeOptions).toEqual([SessionType.CUSTOM_TRIAL]);
+    });
+
+    it.each([
+      SessionType.TUTORING, SessionType.MAKE_UP, SessionType.ADMIN, SessionType.TRIAL,
+    ])('a tutor cannot change the type of an existing %s session', type => {
+      isAdmin = false;
+      for (const mode of ['edit', 'view', 'delete']) {
+        const c = build({
+          type: mode,
+          session: {
+            id: 'sess-1', type, status: SessionStatus.PENDING,
+            start_datetime: '2026-06-01T10:00:00Z', end_datetime: '2026-06-01T10:45:00Z',
+          },
+        } as never);
+        c.ngOnInit();
+        expect(c.sessionTypeOptions).toEqual([type]);
+      }
+    });
+
+    it('a tutor editing a session stored without a type sees it as tutoring', () => {
+      isAdmin = false;
+      const c = build({
+        type: 'edit',
+        session: { id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' },
+      } as never);
+      c.ngOnInit();
+      expect(c.sessionTypeOptions).toEqual([SessionType.TUTORING]);
+    });
+
+    it('an admin editing a session keeps every option, custom trial included', () => {
+      const c = build({
+        type: 'edit',
+        session: {
+          id: 'sess-1', type: SessionType.TUTORING, status: SessionStatus.PENDING,
+          start_datetime: '2026-06-01T10:00:00Z', end_datetime: '2026-06-01T11:00:00Z',
+        },
+      } as never);
+      c.ngOnInit();
+      expect(c.sessionTypeOptions).toEqual([
+        SessionType.TUTORING, SessionType.MAKE_UP, SessionType.ADMIN, SessionType.CUSTOM_TRIAL,
+      ]);
     });
 
     it('offers active students only', () => {

@@ -333,8 +333,14 @@ export class SessionDialog implements OnInit {
           Object.values(SessionType).filter(t => t !== SessionType.GROUP);
       }
     }
-    if (!this.authService.isAdmin() && this.selectedType !== SessionType.CUSTOM_TRIAL) {
-      this.sessionTypeOptions = this.sessionTypeOptions.filter(t => t !== SessionType.CUSTOM_TRIAL);
+    if (!this.authService.isAdmin()) {
+      // Only an admin may change what kind of session this is (the type
+      // decides pay and make-up minutes; the service enforces it too): an
+      // existing session shows its own type and nothing else, and a new one
+      // is never a custom trial.
+      this.sessionTypeOptions = this.dialogData.type !== 'create'
+        ? [this.selectedType]
+        : this.sessionTypeOptions.filter(t => t !== SessionType.CUSTOM_TRIAL);
     }
     if(this.dialogData.type !== 'create') {
       this.selectedStudent = this.dialogData.session.student_id;
