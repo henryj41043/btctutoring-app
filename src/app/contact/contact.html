@@ -143,6 +143,9 @@
       }
     </div>
   </div>
+  <!-- Notes are for admins only: a tutor never sees what was written on
+       their own record (client 2026-10-02). -->
+  @if (authService.isAdmin()) {
   <div class="contact-notes contact-section" [formGroup]="notesForm">
     <h2>Notes</h2>
     <button matIconButton type="button" (click)="addNote()" aria-label="Add note">
@@ -214,6 +217,7 @@
       }
     </div>
   </div>
+  }
   <div class="contact-tutoring contact-section"
        [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER || contactForm.controls['service'].value === Service.EMPLOYMENT_INQUIRY">
     @if (contactForm.controls['service'].value === Service.HIRING) {

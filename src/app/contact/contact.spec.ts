@@ -289,6 +289,35 @@ describe('Contact', () => {
     );
   });
 
+  it('neither fetches nor shows notes for a non-admin', () => {
+    isAdmin = false;
+    noteService.getNotesByRecipient.mockClear();
+    const c = build();
+    c.ngOnInit();
+    expect(noteService.getNotesByRecipient).not.toHaveBeenCalled();
+    expect((c as unknown as { notesLoading: boolean }).notesLoading).toBe(false);
+  });
+
+  it.each([
+    [true, true],
+    [false, false],
+  ])('renders the Notes section only for an admin (admin: %s)', (admin, shown) => {
+    isAdmin = admin;
+    build();
+    const fixture = TestBed.createComponent(Contact);
+    fixture.componentInstance.id = 'c-1';
+    fixture.detectChanges();
+    const section = (fixture.nativeElement as HTMLElement).querySelector('.contact-notes');
+    expect(section !== null).toBe(shown);
+  });
+
+  it('fetches the notes of the contact for an admin', () => {
+    noteService.getNotesByRecipient.mockClear();
+    const c = build();
+    c.ngOnInit();
+    expect(noteService.getNotesByRecipient).toHaveBeenCalledTimes(1);
+  });
+
   it('swallows a contact load error', () => {
     contactService.getContact.mockReturnValue(throwError(() => new Error('x')));
     const c = build();
