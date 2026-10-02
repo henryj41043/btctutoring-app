@@ -67,6 +67,12 @@
           <th mat-header-cell *matHeaderCellDef mat-sort-header> Contact </th>
           <td mat-cell *matCellDef="let item">
             {{item.name}}
+            @if (item.scholarship) {
+              <span class="btc-chip btc-chip--info scholarship-chip"
+                    matTooltip="This family has a scholarship record for this month. Open the row for the details.">
+                Scholarship
+              </span>
+            }
             @if (item.needs_attention) {
               <mat-icon class="attention-icon"
                         matTooltip="A student is missing a configured package, schedule, or start date — amount may be inaccurate.">
@@ -244,6 +250,30 @@
                     <dd>{{statement.total | currency:'USD':'symbol':'1.2-2'}}</dd>
                   </div>
                 </dl>
+                @if (item.scholarship; as scholarship) {
+                  <dl class="detail-scholarship">
+                    <div class="detail-scholarship-title">
+                      <dt>Scholarship</dt>
+                      <dd>{{scholarship.scholarship_state || '—'}}</dd>
+                    </div>
+                    <div>
+                      <dt>Funds requested by BTC</dt>
+                      <dd>{{(scholarship.date_funds_requested_by_btc | date:'M/d/yyyy') || '—'}}</dd>
+                    </div>
+                    <div>
+                      <dt>Funds requested by family</dt>
+                      <dd>{{(scholarship.date_funds_requested_by_family | date:'M/d/yyyy') || '—'}}</dd>
+                    </div>
+                    <div>
+                      <dt>Invoice number</dt>
+                      <dd>{{scholarship.invoice_number || '—'}}</dd>
+                    </div>
+                    <div>
+                      <dt>Invoice paid</dt>
+                      <dd>{{(scholarship.invoice_paid_date | date:'M/d/yyyy') || '—'}}</dd>
+                    </div>
+                  </dl>
+                }
               </div>
             }
           </td>

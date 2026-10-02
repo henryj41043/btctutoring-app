@@ -1,6 +1,6 @@
 import {TestBed} from '@angular/core/testing';
 import {of, throwError} from 'rxjs';
-import {ContactScholarshipSection} from './contact-scholarship-section';
+import {ContactScholarshipSection, SCHOLARSHIP_MONTHS_AHEAD} from './contact-scholarship-section';
 import {ScholarshipService} from '../services/scholarship.service';
 import {AuthService} from '../services/auth.service';
 import {ScholarshipRecord} from '../models/scholarship-record.model';
@@ -39,6 +39,7 @@ describe('ContactScholarshipSection', () => {
 
   const priv = (c: ContactScholarshipSection) => c as unknown as {
     monthOptions: string[];
+    upcomingMonths: string[];
     selectedMonth: string;
     scholarshipForm: {value: Record<string, unknown>; get(name: string): {value: unknown} | null};
     saving: boolean;
@@ -72,6 +73,77 @@ describe('ContactScholarshipSection', () => {
     const c = build();
     expect(priv(c).monthOptions).toEqual(['2026-08', '2026-07', '2026-06']);
     expect(priv(c).selectedMonth).toBe('2026-08');
+    expect(priv(c).upcomingMonths).toHaveLength(12);
+  });
+
+  const NEXT_TWELVE = [
+    '2026-09', '2026-10', '2026-11', '2026-12', '2027-01', '2027-02',
+    '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08',
+  ];
+
+  it('offers the next twelve months, soonest first', () => {
+    expect(SCHOLARSHIP_MONTHS_AHEAD).toBe(12);
+    const c = build();
+    expect(priv(c).upcomingMonths).toEqual(NEXT_TWELVE);
+    expect(priv(c).monthOptions).toEqual(['2026-08', '2026-07']);
+  });
+
+  it('keeps a recorded month beyond the twelve, and never lists a future month as earlier', () => {
+    scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([
+      record({month: '2027-11'}),
+      record({month: '2026-10'}),
+      record({month: '2026-08'}),
+      record({month: undefined}),
+    ]));
+    const c = build();
+    expect(priv(c).upcomingMonths).toEqual([...NEXT_TWELVE, '2027-11']);
+    expect(priv(c).monthOptions).toEqual(['2026-08']);
+    expect(c.hasRecord('2026-10')).toBe(true);
+    expect(c.hasRecord('2026-09')).toBe(false);
+  });
+
+  it('saves a record for a month picked in advance and marks it saved', () => {
+    scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([]));
+    const c = build();
+    c.onMonthChange('2026-11');
+    expect(priv(c).scholarshipForm.value['scholarship_state']).toBe('');
+    (c as never as {scholarshipForm: {patchValue(v: Record<string, unknown>): void}})
+      .scholarshipForm.patchValue({scholarship_state: 'PA'});
+    c.save();
+    expect(scholarshipService.upsertScholarshipRecord).toHaveBeenCalledWith(
+      expect.objectContaining({contact_id: 'c-1', month: '2026-11', scholarship_state: 'PA'}),
+    );
+    expect(c.hasRecord('2026-11')).toBe(true);
+    expect(priv(c).upcomingMonths).toEqual(NEXT_TWELVE);
+    expect(priv(c).monthOptions).toEqual(['2026-08']);
+  });
+
+  it('lists the months in two groups, with saved upcoming months marked', () => {
+    scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([
+      record({month: '2026-10'}),
+      record({month: '2026-07'}),
+    ]));
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [ContactScholarshipSection],
+      providers: [
+        {provide: ScholarshipService, useValue: scholarshipService},
+        {provide: AuthService, useValue: authService},
+      ],
+    });
+    const fixture = TestBed.createComponent(ContactScholarshipSection);
+    fixture.componentRef.setInput('contactId', 'c-1');
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('mat-select') as HTMLElement).click();
+    fixture.detectChanges();
+    const groups = Array.from(document.querySelectorAll('mat-optgroup'));
+    const labels = (group: Element) =>
+      Array.from(group.querySelectorAll('mat-option')).map(o => o.textContent?.replace(/\s+/g, ' ').trim());
+    expect(groups.map(g => g.querySelector('.mat-mdc-optgroup-label')?.textContent?.trim()))
+      .toEqual(['Upcoming', 'Current and earlier']);
+    expect(labels(groups[0]).slice(0, 3)).toEqual(['September 2026', 'October 2026 · saved', 'November 2026']);
+    expect(labels(groups[0])).toHaveLength(12);
+    expect(labels(groups[1])).toEqual(['August 2026', 'July 2026']);
   });
 
   it('defaults to the current month as a blank form when it has no record', () => {

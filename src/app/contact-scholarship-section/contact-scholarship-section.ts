@@ -12,13 +12,18 @@ import {catchError, EMPTY} from 'rxjs';
 import {ScholarshipService} from '../services/scholarship.service';
 import {AuthService} from '../services/auth.service';
 import {ScholarshipRecord} from '../models/scholarship-record.model';
+import {monthKeyOf, upcomingMonthKeys} from '../utils/month-key';
+
+/** Parents ask for scholarships ahead of time: a year of months can be picked. */
+export const SCHOLARSHIP_MONTHS_AHEAD = 12;
 
 /**
  * The contact page's month-scoped Scholarship checklist (admin-only — the
  * scholarships endpoints are admin-gated). Each calendar month has its own
  * record ('YYYY-MM'-keyed), so month-end no longer means wiping the fields:
  * pick a prior month from the dropdown to read (or correct) its history, and
- * a month with no record yet is a blank form whose Save creates one.
+ * a month with no record yet is a blank form whose Save creates one. The next
+ * twelve months can be picked too, for requests made in advance.
  */
 @Component({
   selector: 'app-contact-scholarship-section',
@@ -47,8 +52,11 @@ export class ContactScholarshipSection implements OnInit {
   private destroyRef: DestroyRef = inject(DestroyRef);
 
   private recordsByMonth = new Map<string, ScholarshipRecord>();
+  /** The current month and earlier months that have a record, newest first. */
   protected monthOptions: string[] = [];
-  protected selectedMonth: string = currentMonthKey();
+  /** Months after the current one, soonest first. */
+  protected upcomingMonths: string[] = [];
+  protected selectedMonth: string = monthKeyOf(new Date());
   protected saving: boolean = false;
   protected savedSuccessfully: boolean = false;
   protected hasError: boolean = false;
@@ -81,11 +89,27 @@ export class ContactScholarshipSection implements OnInit {
     });
   }
 
-  /** Every month with a record, plus the current month, newest first. */
+  /**
+   * Splits the months into "upcoming" (the next twelve, plus any later month
+   * that already has a record) and "current and earlier" (the current month
+   * plus every earlier month with a record).
+   */
   private refreshMonthOptions(): void {
-    const months = new Set(this.recordsByMonth.keys());
-    months.add(currentMonthKey());
-    this.monthOptions = [...months].sort((a, b) => b.localeCompare(a));
+    const now = new Date();
+    const current = monthKeyOf(now);
+    const recorded = [...this.recordsByMonth.keys()];
+    const upcoming = new Set([
+      ...upcomingMonthKeys(now, SCHOLARSHIP_MONTHS_AHEAD),
+      ...recorded.filter(month => month > current),
+    ]);
+    const earlier = new Set([current, ...recorded.filter(month => month <= current)]);
+    this.upcomingMonths = [...upcoming].sort((a, b) => a.localeCompare(b));
+    this.monthOptions = [...earlier].sort((a, b) => b.localeCompare(a));
+  }
+
+  /** True when the month already has a saved record. */
+  hasRecord(month: string): boolean {
+    return this.recordsByMonth.has(month);
   }
 
   /** 'September 2026' for a 'YYYY-MM' key (component-parsed — no UTC shift). */
@@ -152,12 +176,6 @@ export class ContactScholarshipSection implements OnInit {
       }, 3000);
     });
   }
-}
-
-/** Today's 'YYYY-MM' key. */
-function currentMonthKey(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
 }
 
 /** API dates arrive as epoch numbers/ISO strings; datepickers want Date. */
