@@ -366,4 +366,136 @@ describe('ContactDocumentsSection', () => {
       expect(documentService.deleteDocument).not.toHaveBeenCalled();
     });
   });
+
+  describe('malware scan', () => {
+    const scanning: ContactDocument = { ...pdf, id: 'd-3', scan_status: 'scanning' };
+    const clean: ContactDocument = { ...scanning, scan_status: 'clean' };
+
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('keeps a document closed while it is checked, then opens it up by itself', () => {
+      documentService.getDocumentsForContact
+        .mockReturnValueOnce(of([scanning, word]))
+        .mockReturnValueOnce(of([scanning, word]))
+        .mockReturnValue(of([clean, word]));
+      const c = build();
+      let row = render().querySelector('.document-row') as HTMLElement;
+      expect(row.querySelector('.document-scan')?.textContent).toBe('Checking for malware…');
+      expect((row.querySelector('.document-open') as HTMLButtonElement).disabled).toBe(true);
+      expect(row.querySelector('mat-spinner')).not.toBeNull();
+      expect(row.querySelector('[aria-label="Download document"]')).toBeNull();
+      expect(row.querySelector('[aria-label="Delete document"]')).not.toBeNull();
+      expect(row.classList).not.toContain('document-row--blocked');
+      component.open(scanning);
+      component.download(scanning, click);
+      expect(documentService.getUrl).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(3999);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(1);
+      jest.advanceTimersByTime(1);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(2);
+      expect(documentService.getDocumentsForContact).toHaveBeenLastCalledWith('c-1');
+      jest.advanceTimersByTime(4000);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(3);
+      expect(c.documents).toEqual([clean, word]);
+
+      row = render().querySelector('.document-row') as HTMLElement;
+      expect(row.querySelector('.document-scan')).toBeNull();
+      expect((row.querySelector('.document-open') as HTMLButtonElement).disabled).toBe(false);
+      expect(row.querySelector('[aria-label="Download document"]')).not.toBeNull();
+      // Nothing left to wait for: the re-reads stop.
+      jest.advanceTimersByTime(60000);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not re-read when nothing is being checked', () => {
+      build();
+      jest.advanceTimersByTime(60000);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['infected', 'Blocked: the malware scan found a threat'],
+      ['unscanned', 'Could not be checked for malware. Delete it and upload it again.'],
+    ] as const)('shows a document that is %s as blocked, with delete only', (scan_status, note) => {
+      documentService.getDocumentsForContact.mockReturnValue(of([{ ...pdf, scan_status }]));
+      build();
+      const row = render().querySelector('.document-row') as HTMLElement;
+      expect(row.classList).toContain('document-row--blocked');
+      expect(row.querySelector('.document-scan')?.textContent).toBe(note);
+      expect((row.querySelector('.document-open') as HTMLButtonElement).disabled).toBe(true);
+      expect(row.querySelector('mat-spinner')).toBeNull();
+      expect(row.querySelector('[aria-label="Download document"]')).toBeNull();
+      expect(row.querySelector('[aria-label="Delete document"]')).not.toBeNull();
+      jest.advanceTimersByTime(60000);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps trying after a failed re-read, and keeps the list', () => {
+      documentService.getDocumentsForContact
+        .mockReturnValueOnce(of([scanning]))
+        .mockReturnValueOnce(throwError(() => new Error('boom')))
+        .mockReturnValue(of([clean]));
+      const c = build();
+      jest.advanceTimersByTime(4000);
+      expect(c.documents).toEqual([scanning]);
+      expect(c.loadFailed).toBe(false);
+      jest.advanceTimersByTime(4000);
+      expect(c.documents).toEqual([clean]);
+    });
+
+    it('stops after three minutes of waiting', () => {
+      documentService.getDocumentsForContact.mockReturnValue(of([scanning]));
+      build();
+      jest.advanceTimersByTime(4000 * 60);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(46);
+    });
+
+    it('starts watching again after an upload, with a fresh three minutes', () => {
+      documentService.getDocumentsForContact.mockReturnValue(of([scanning]));
+      const progress = new Subject<UploadProgress>();
+      documentService.upload.mockReturnValue(progress);
+      const c = build();
+      jest.advanceTimersByTime(4000 * 60);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(46);
+      pick(fileOf('new.pdf'));
+      progress.next({ percent: 100, document: { ...scanning, id: 'd-4' } });
+      expect(c.documents.map(document => document.id)).toEqual(['d-4', 'd-3']);
+      jest.advanceTimersByTime(4000);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(47);
+      jest.advanceTimersByTime(4000 * 60);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(91);
+    });
+
+    it('runs one re-read at a time when uploads finish close together', () => {
+      documentService.getDocumentsForContact.mockReturnValueOnce(of([]))
+        .mockReturnValue(of([clean]));
+      const progress = new Subject<UploadProgress>();
+      documentService.upload.mockReturnValue(progress);
+      build();
+      pick(fileOf('a.pdf'), fileOf('b.pdf'));
+      progress.next({ percent: 100, document: scanning });
+      jest.advanceTimersByTime(4000);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows the reason the service gives when a document is refused', () => {
+      documentService.getUrl.mockReturnValue(throwError(() => new HttpErrorResponse({
+        status: 400,
+        error: { message: 'This file is still being checked for malware. Try again in a moment.' },
+      })));
+      const c = build();
+      component.open(pdf);
+      expect(c.actionError).toBe('This file is still being checked for malware. Try again in a moment.');
+    });
+
+    it('stops re-reading when the page is left', () => {
+      documentService.getDocumentsForContact.mockReturnValue(of([scanning]));
+      build();
+      fixture.destroy();
+      jest.advanceTimersByTime(60000);
+      expect(documentService.getDocumentsForContact).toHaveBeenCalledTimes(1);
+    });
+  });
 });

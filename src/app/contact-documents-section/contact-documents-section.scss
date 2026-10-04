@@ -114,10 +114,34 @@ h2 {
     white-space: nowrap;
   }
 
+  &:disabled {
+    cursor: default;
+
+    &:hover {
+      background: transparent;
+    }
+  }
+
+  .document-scan {
+    flex: 0 1 auto;
+    font-size: .85rem;
+    font-style: italic;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
   .document-meta {
     flex: 0 0 auto;
     font-size: .85rem;
     color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.document-row--blocked {
+  border-color: var(--mat-sys-error);
+
+  .document-scan,
+  .document-icon {
+    color: var(--mat-sys-error);
   }
 }
 

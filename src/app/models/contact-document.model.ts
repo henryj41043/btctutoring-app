@@ -1,3 +1,6 @@
+/** Where a document stands with the malware scan. */
+export type ScanStatus = 'scanning' | 'clean' | 'infected' | 'unscanned';
+
 /** One file an admin uploaded to a contact (a resume, a signed form). */
 export interface ContactDocument {
   id?: string;
@@ -7,6 +10,8 @@ export interface ContactDocument {
   /** Bytes. */
   size?: number;
   status?: 'pending' | 'ready';
+  /** Absent on documents stored before scanning existed; those still open. */
+  scan_status?: ScanStatus;
   uploaded_by?: string;
   uploaded_at?: string;
 }
