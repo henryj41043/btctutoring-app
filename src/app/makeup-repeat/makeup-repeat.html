@@ -1,0 +1,64 @@
+<div class="makeup-repeat">
+  <mat-form-field>
+    <mat-label>Repeat</mat-label>
+    <mat-select [ngModel]="mode" (ngModelChange)="onModeChange($event)" name="repeatMode">
+      <mat-option value="once">Just this once</mat-option>
+      <mat-option value="weekly">Weekly</mat-option>
+      <mat-option value="after">After each regular session</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  @if (mode !== 'once') {
+    <mat-form-field>
+      <mat-label>Until</mat-label>
+      <input matInput [matDatepicker]="untilPicker" [ngModel]="until" name="repeatUntil"
+             [min]="bounds.min" [max]="bounds.max" (ngModelChange)="onUntilChange($event)">
+      <mat-datepicker #untilPicker/>
+      <mat-datepicker-toggle [for]="untilPicker" matSuffix/>
+    </mat-form-field>
+
+    @if (mode === 'weekly') {
+      <div class="repeat-weekdays">
+        @for (option of weekdayOptions; track option.day) {
+          <mat-checkbox [checked]="isWeekdayOn(option.day)"
+                        (change)="onWeekdayToggle(option.day, $event.checked)">
+            {{option.label}}
+          </mat-checkbox>
+        }
+      </div>
+      <p class="repeat-hint">One make-up on each ticked day, at the times above.</p>
+    } @else {
+      <mat-form-field>
+        <mat-label>Minutes to add</mat-label>
+        <input matInput type="number" min="5" step="5" [ngModel]="afterMinutes" name="afterMinutes"
+               (ngModelChange)="onAfterMinutesChange($event)">
+      </mat-form-field>
+      <p class="repeat-hint">
+        One make-up straight after each of this tutor's upcoming regular sessions with the student.
+        The date and times above are not used.
+      </p>
+    }
+
+    @if (loading) {
+      <mat-spinner [diameter]="24"></mat-spinner>
+    } @else if (error) {
+      <p class="repeat-error">{{error}}</p>
+    } @else if (nothingProposed) {
+      <p class="repeat-empty">No dates match this pattern.</p>
+    } @else if (plan) {
+      <p class="repeat-summary">{{summary}}</p>
+      <ul class="repeat-preview">
+        @for (row of rows; track row.start) {
+          <li [class.repeat-skipped]="row.skipped">
+            <span class="repeat-when">
+              {{row.start | date:'EEE, MMM d'}} · {{row.start | date:'h:mm a'}} to {{row.end | date:'h:mm a'}}
+            </span>
+            @if (row.skipped) {
+              <span class="repeat-reason">Skipped: {{row.skipped}}</span>
+            }
+          </li>
+        }
+      </ul>
+    }
+  }
+</div>

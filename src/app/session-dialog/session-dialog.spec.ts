@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError, Subject } from 'rxjs';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { SessionDialog } from './session-dialog';
@@ -1869,6 +1870,140 @@ describe('SessionDialog', () => {
     c.selectedAttendance = SessionStatus.PENDING;
     return c;
   };
+
+  describe('repeating make-ups', () => {
+    const repeatOf = (c: SessionDialog, over: object = {}) => {
+      const repeat = {
+        mode: 'weekly',
+        acceptedCount: 3,
+        save: jest.fn(() => of({ created: 3, series_id: 'set-1' })),
+        ...over,
+      };
+      (c as unknown as { repeat: unknown }).repeat = repeat;
+      return repeat;
+    };
+    const makeupCreate = (): SessionDialog => {
+      const c = primedCreate();
+      c.selectedType = SessionType.MAKE_UP;
+      c.notes = 'Extra time';
+      return c;
+    };
+    const get = <T>(c: SessionDialog, name: string): T => (c as unknown as Record<string, T>)[name];
+
+    it('offers Repeat only for a new make-up with a tutor and a student', () => {
+      const c = makeupCreate();
+      expect(get<boolean>(c, 'canRepeatMakeup')).toBe(true);
+      expect(get<string>(c, 'selectedTutorName')).toBe(tutor().first_name);
+
+      c.selectedType = SessionType.TUTORING;
+      expect(get<boolean>(c, 'canRepeatMakeup')).toBe(false);
+      c.selectedType = SessionType.MAKE_UP;
+      c.selectedStudent = undefined;
+      expect(get<boolean>(c, 'canRepeatMakeup')).toBe(false);
+      c.selectedStudent = 's-1';
+      c.selectedTutor = undefined;
+      expect(get<boolean>(c, 'canRepeatMakeup')).toBe(false);
+      expect(get<string | undefined>(c, 'selectedTutorName')).toBeUndefined();
+    });
+
+    it('never offers Repeat when editing a make-up', () => {
+      const c = build({
+        type: 'edit',
+        session: { id: 'sess-1', type: SessionType.MAKE_UP, status: SessionStatus.PENDING },
+      } as never);
+      (c as unknown as { allStaff: Contact[] }).allStaff = [tutor()];
+      c.students = [student()];
+      c.selectedType = SessionType.MAKE_UP;
+      c.selectedTutor = 't-1';
+      c.selectedStudent = 's-1';
+      expect(get<boolean>(c, 'canRepeatMakeup')).toBe(false);
+    });
+
+    it('labels the button with the number it will create', () => {
+      const c = makeupCreate();
+      expect(get<string>(c, 'createLabel')).toBe('Create');
+      const repeat = repeatOf(c);
+      expect(get<string>(c, 'createLabel')).toBe('Create 3 make-ups');
+      repeat.acceptedCount = 1;
+      expect(get<string>(c, 'createLabel')).toBe('Create 1 make-up');
+      repeat.acceptedCount = 0;
+      expect(get<string>(c, 'createLabel')).toBe('Create 0 make-ups');
+      repeat.mode = 'once';
+      expect(get<string>(c, 'createLabel')).toBe('Create');
+    });
+
+    it('creates the set with the notes and closes with the count', () => {
+      const c = makeupCreate();
+      const repeat = repeatOf(c);
+      c.createSession();
+      expect(repeat.save).toHaveBeenCalledWith('Extra time');
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalledWith({ created: 3, series_id: 'set-1' });
+      expect(c.hasError).toBe(false);
+    });
+
+    it('creates a single make-up as before when Repeat is "Just this once"', () => {
+      const c = makeupCreate();
+      const repeat = repeatOf(c, { mode: 'once' });
+      c.students = [student({ make_up_minutes: 600 })];
+      sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
+      c.createSession();
+      expect(repeat.save).not.toHaveBeenCalled();
+      expect(sessionsService.createSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses to save a set in which no date fits', () => {
+      const c = makeupCreate();
+      const repeat = repeatOf(c, { acceptedCount: 0 });
+      c.createSession();
+      expect(repeat.save).not.toHaveBeenCalled();
+      expect(c.hasError).toBe(true);
+      expect(c.errorMessage).toBe('There is nothing to create: no date in the preview fits.');
+      expect(c.submitting).toBe(false);
+    });
+
+    it('shows the reason the service gives when the save is refused', () => {
+      const c = makeupCreate();
+      repeatOf(c, {
+        save: jest.fn(() => throwError(() => new HttpErrorResponse({
+          status: 400, error: { message: 'A make-up cannot start in the past.' },
+        }))),
+      });
+      c.createSession();
+      expect(c.errorMessage).toBe('A make-up cannot start in the past.');
+      expect(c.hasError).toBe(true);
+      expect(c.submitting).toBe(false);
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it('shows a plain message for any other failure, and blocks a double save', () => {
+      const c = makeupCreate();
+      const pending = new Subject<never>();
+      const repeat = repeatOf(c, { save: jest.fn(() => pending) });
+      c.createSession();
+      expect(c.submitting).toBe(true);
+      c.createSession();
+      expect(repeat.save).toHaveBeenCalledTimes(1);
+      pending.error(new HttpErrorResponse({ status: 500 }));
+      expect(c.errorMessage).toBe('Creating the make-ups failed. Please try again.');
+    });
+
+    it('renders the Repeat section in the form for a new make-up', () => {
+      sessionsService.getScheduledMakeup.mockReturnValue(of(new Map()));
+      TestBed.resetTestingModule();
+      const c = primedCreate({ lockToMakeup: true } as never);
+      const fixture = TestBed.createComponent(SessionDialog);
+      const live = fixture.componentInstance;
+      (live as unknown as { allStaff: Contact[] }).allStaff = [tutor({ id: 'c-self' })];
+      fixture.detectChanges();
+      live.students = [student({ assigned_tutor_id: 'c-self' })];
+      live.selectedStudent = 's-1';
+      fixture.detectChanges();
+      expect(live.selectedType).toBe(SessionType.MAKE_UP);
+      expect(fixture.nativeElement.querySelector('app-makeup-repeat')).not.toBeNull();
+      expect(c).toBeDefined();
+    });
+  });
 
   describe('CUSTOM_TRIAL', () => {
     const create = (): SessionDialog => {

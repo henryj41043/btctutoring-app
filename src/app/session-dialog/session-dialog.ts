@@ -1,4 +1,4 @@
-import {DestroyRef, Component, inject, OnInit} from '@angular/core';
+import {DestroyRef, Component, inject, OnInit, ViewChild} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
@@ -53,6 +53,9 @@ import {
 import {mutatesStudent, validateMakeupPendingBalance, validateMakeupAgainstScheduled,
   makeupAfterServiceEndError, makeupMinutesLeftToSchedule, validateSessionLength} from '../utils/session-rules';
 
+import {HttpErrorResponse} from '@angular/common/http';
+import {MakeupRepeat, messageOf} from '../makeup-repeat/makeup-repeat';
+
 @Component({
   selector: 'app-session-dialog',
   providers: [provideNativeDateAdapter()],
@@ -71,6 +74,7 @@ import {mutatesStudent, validateMakeupPendingBalance, validateMakeupAgainstSched
     MatProgressSpinnerModule,
     MatCheckboxModule,
     DatePipe,
+    MakeupRepeat,
   ],
   templateUrl: './session-dialog.html',
   standalone: true,
@@ -87,6 +91,8 @@ export class SessionDialog implements OnInit {
   hasError: boolean = false;
   /** Pending make-up minutes per student id; null until loaded (or when the read failed). */
   private scheduledMakeupById: Map<string, number> | null = null;
+  /** The Repeat part of the make-up form (present only for a new make-up). */
+  @ViewChild(MakeupRepeat) protected repeat?: MakeupRepeat;
   selectedType: SessionType = SessionType.TUTORING;
   selectedTutor: string | undefined;
   selectedStudent: string | undefined;
@@ -700,8 +706,58 @@ export class SessionDialog implements OnInit {
     this.selectedStudent = studentId;
   }
 
+  /** A new make-up with a tutor and a student may repeat. */
+  protected get canRepeatMakeup(): boolean {
+    return this.dialogData.type === 'create'
+      && this.selectedType === SessionType.MAKE_UP
+      && !!this.selectedTutor
+      && !!this.selectedStudentObj;
+  }
+
+  /** The selected tutor's first name, as stored on a session. */
+  protected get selectedTutorName(): string | undefined {
+    return this.tutors.find(t => t.id === this.selectedTutor)?.first_name;
+  }
+
+  /** True when the Repeat choice asks for a set, not a single make-up. */
+  private get repeating(): boolean {
+    return this.canRepeatMakeup && !!this.repeat && this.repeat.mode !== 'once';
+  }
+
+  /** "Create", or "Create 12 make-ups" for a repeating set. */
+  protected get createLabel(): string {
+    if (!this.repeating) return 'Create';
+    const count = this.repeat!.acceptedCount;
+    return `Create ${count} make-up${count === 1 ? '' : 's'}`;
+  }
+
+  /** Creates the make-ups the Repeat preview accepted (the service re-checks them). */
+  private createMakeupSet(): void {
+    if (this.repeat!.acceptedCount === 0) {
+      this.errorMessage = 'There is nothing to create: no date in the preview fits.';
+      this.hasError = true;
+      return;
+    }
+    this.submitting = true;
+    this.hasError = false;
+    this.repeat!.save(this.notes).pipe(
+      catchError((error: HttpErrorResponse) => {
+        this.errorMessage = messageOf(error, 'Creating the make-ups failed. Please try again.');
+        this.hasError = true;
+        this.submitting = false;
+        return EMPTY;
+      }),
+    ).subscribe(result => {
+      this.dialogRef.close({created: result.created, series_id: result.series_id});
+    });
+  }
+
   createSession(): void {
     if (this.submitting) return;
+    if (this.repeating) {
+      this.createMakeupSet();
+      return;
+    }
     if(this.date && this.startTime && this.endTime) {
       if(this.startTime > this.endTime) {
         this.errorMessage = 'Please enter a valid date and time range';
