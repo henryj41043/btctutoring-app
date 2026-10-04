@@ -23,6 +23,16 @@ describe('EmailService', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('discardForContact POSTs to the contact discard route', () => {
+    let result: unknown;
+    service.discardForContact('c-1').subscribe(r => (result = r));
+    const req = httpMock.expectOne(`${base}/emails/contact/c-1/discard`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    req.flush({ discarded: 2 });
+    expect(result).toEqual({ discarded: 2 });
+  });
+
   it('should be created', () => {
     expect(service).toBeTruthy();
   });

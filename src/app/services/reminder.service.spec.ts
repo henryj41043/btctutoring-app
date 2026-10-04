@@ -24,6 +24,15 @@ describe('ReminderService', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('deleteForContact DELETEs everything of a contact', () => {
+    let result: unknown;
+    service.deleteForContact('c-1').subscribe(r => (result = r));
+    const req = httpMock.expectOne(`${base}/reminders/contact/c-1`);
+    expect(req.request.method).toBe('DELETE');
+    req.flush({ deleted: 3 });
+    expect(result).toEqual({ deleted: 3 });
+  });
+
   it('should be created', () => {
     expect(service).toBeTruthy();
   });

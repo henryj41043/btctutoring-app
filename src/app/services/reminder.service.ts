@@ -41,6 +41,11 @@ export class ReminderService {
     return this.httpClient.post<Response>(`${this.baseUrl}/reminders/${id}/unack`, {});
   }
 
+  /** Deletes every reminder linked to a contact (the contact is being deleted). */
+  deleteForContact(contactId: string): Observable<{deleted: number}> {
+    return this.httpClient.delete<{deleted: number}>(`${this.baseUrl}/reminders/contact/${contactId}`);
+  }
+
   deleteReminder(id: string): Observable<Response> {
     return this.httpClient.delete<Response>(`${this.baseUrl}/reminders/${id}`);
   }

@@ -6,6 +6,9 @@ import { ContactService } from '../services/contact.service';
 import { StudentService } from '../services/student.service';
 import { NoteService } from '../services/note.service';
 import { DocumentService } from '../services/document.service';
+import { EmailService } from '../services/email.service';
+import { ReminderService } from '../services/reminder.service';
+import { ScholarshipService } from '../services/scholarship.service';
 import { AuthService } from '../services/auth.service';
 import { Contact } from '../models/contact.model';
 
@@ -16,10 +19,19 @@ describe('DeleteContactDialog', () => {
   const noteService = { getNotesByRecipient: jest.fn(), deleteNote: jest.fn() };
   const authService = { contact: () => ({ id: 'me' }) };
   const documentService = { getDocumentsForContact: jest.fn(), deleteForContact: jest.fn() };
+  const emailService = { getEmailsForContact: jest.fn(), discardForContact: jest.fn() };
+  const reminderService = { getReminders: jest.fn(), deleteForContact: jest.fn() };
+  const scholarshipService = { getScholarshipRecordsByContact: jest.fn(), deleteForContact: jest.fn() };
 
   beforeEach(() => {
     documentService.getDocumentsForContact.mockReturnValue(of([]));
     documentService.deleteForContact.mockReturnValue(of({ deleted: 0 }));
+    emailService.getEmailsForContact.mockReturnValue(of([]));
+    emailService.discardForContact.mockReturnValue(of({ discarded: 0 }));
+    reminderService.getReminders.mockReturnValue(of([]));
+    reminderService.deleteForContact.mockReturnValue(of({ deleted: 0 }));
+    scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([]));
+    scholarshipService.deleteForContact.mockReturnValue(of({ deleted: 0 }));
   });
 
   const build = (contact: Partial<Contact>): DeleteContactDialog => {
@@ -32,6 +44,9 @@ describe('DeleteContactDialog', () => {
         { provide: StudentService, useValue: studentService },
         { provide: NoteService, useValue: noteService },
         { provide: DocumentService, useValue: documentService },
+        { provide: EmailService, useValue: emailService },
+        { provide: ReminderService, useValue: reminderService },
+        { provide: ScholarshipService, useValue: scholarshipService },
         { provide: AuthService, useValue: authService },
       ],
     });
@@ -49,6 +64,85 @@ describe('DeleteContactDialog', () => {
     TestBed.resetTestingModule();
     const nameless = build({ id: 'c-2', email: 'subscriber@example.com' });
     expect((nameless as unknown as { displayName: string }).displayName).toBe('subscriber@example.com');
+  });
+
+  describe('emails, reminders and scholarship records', () => {
+    const text = (contact: Partial<Contact>): string | undefined => {
+      build(contact);
+      const fixture = TestBed.createComponent(DeleteContactDialog);
+      fixture.detectChanges();
+      return (fixture.nativeElement as HTMLElement).querySelector('.document-count')
+        ?.textContent?.replace(/\s+/g, ' ').trim();
+    };
+
+    it('says what else the contact has, counting only reminders linked to them', () => {
+      documentService.getDocumentsForContact.mockReturnValue(of([{ id: 'd-1' }, { id: 'd-2' }]));
+      emailService.getEmailsForContact.mockReturnValue(of([{ id: 'e-1' }, { id: 'e-2' }, { id: 'e-3' }]));
+      reminderService.getReminders.mockReturnValue(of([
+        { id: 'r-1', contact_id: 'c-1' },
+        { id: 'r-2', contact_id: 'c-other' },
+        { id: 'r-3' },
+      ]));
+      scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([{ id: 's-1' }, { id: 's-2' }]));
+      expect(text({ id: 'c-1' }))
+        .toBe('This contact has 2 documents, 3 filed emails, 1 reminder and 2 scholarship records.');
+      expect(emailService.getEmailsForContact).toHaveBeenCalledWith('c-1');
+      expect(scholarshipService.getScholarshipRecordsByContact).toHaveBeenCalledWith('c-1');
+    });
+
+    it.each([
+      [{ emails: [{ id: 'e-1' }] }, 'This contact has 1 filed email.'],
+      [{ scholarships: [{ id: 's-1' }] }, 'This contact has 1 scholarship record.'],
+      [{ emails: [{ id: 'e-1' }], scholarships: [{ id: 's-1' }, { id: 's-2' }] },
+        'This contact has 1 filed email and 2 scholarship records.'],
+    ])('lists only what there is', (has, expected) => {
+      emailService.getEmailsForContact.mockReturnValue(of(has.emails ?? []));
+      scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of(has.scholarships ?? []));
+      expect(text({ id: 'c-1' })).toBe(expected);
+    });
+
+    it('treats a failed or empty read as zero and still shows the rest', () => {
+      emailService.getEmailsForContact.mockReturnValue(throwError(() => new Error('boom')));
+      reminderService.getReminders.mockReturnValue(of(null));
+      documentService.getDocumentsForContact.mockReturnValue(of([{ id: 'd-1' }]));
+      expect(text({ id: 'c-1' })).toBe('This contact has 1 document.');
+    });
+
+    it('removes them before the contact is deleted', () => {
+      const order: string[] = [];
+      const track = (name: string, value: unknown) => () => { order.push(name); return of(value); };
+      studentService.getStudentsByContact.mockReturnValue(of([]));
+      noteService.getNotesByRecipient.mockReturnValue(of([]));
+      emailService.discardForContact.mockImplementation(track('emails', { discarded: 1 }));
+      reminderService.deleteForContact.mockImplementation(track('reminders', { deleted: 1 }));
+      scholarshipService.deleteForContact.mockImplementation(track('scholarships', { deleted: 1 }));
+      contactService.deleteContact.mockImplementation(track('contact', { message: 'ok' }));
+      dialogRef.close.mockClear();
+      build({ id: 'c-1' }).confirm();
+      expect(emailService.discardForContact).toHaveBeenCalledWith('c-1');
+      expect(reminderService.deleteForContact).toHaveBeenCalledWith('c-1');
+      expect(scholarshipService.deleteForContact).toHaveBeenCalledWith('c-1');
+      expect(order).toEqual(['emails', 'reminders', 'scholarships', 'contact']);
+      expect(dialogRef.close).toHaveBeenCalledWith(true);
+    });
+
+    it.each([
+      ['emails', () => emailService.discardForContact],
+      ['reminders', () => reminderService.deleteForContact],
+      ['scholarship records', () => scholarshipService.deleteForContact],
+    ])('keeps the contact when the %s cannot be removed', (_what, failing) => {
+      studentService.getStudentsByContact.mockReturnValue(of([]));
+      noteService.getNotesByRecipient.mockReturnValue(of([]));
+      failing().mockReturnValue(throwError(() => new Error('boom')));
+      contactService.deleteContact.mockClear();
+      dialogRef.close.mockClear();
+      const component = build({ id: 'c-1' });
+      component.confirm();
+      expect(contactService.deleteContact).not.toHaveBeenCalled();
+      expect(dialogRef.close).not.toHaveBeenCalled();
+      expect((component as unknown as { error: string }).error)
+        .toBe('Failed to delete the contact. Please try again.');
+    });
   });
 
   describe('documents', () => {

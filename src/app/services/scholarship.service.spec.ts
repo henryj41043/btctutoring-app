@@ -19,6 +19,15 @@ describe('ScholarshipService', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('deleteForContact DELETEs everything of a contact', () => {
+    let result: unknown;
+    service.deleteForContact('c-1').subscribe(r => (result = r));
+    const req = httpMock.expectOne(`${base}/scholarships/contact/c-1`);
+    expect(req.request.method).toBe('DELETE');
+    req.flush({ deleted: 3 });
+    expect(result).toEqual({ deleted: 3 });
+  });
+
   it('fetches a month of records', () => {
     service.getScholarshipRecordsByMonth('2026-08').subscribe();
     const req = httpMock.expectOne(`${base}/scholarships?month=2026-08`);
