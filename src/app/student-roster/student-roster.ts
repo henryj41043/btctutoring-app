@@ -33,6 +33,7 @@ import {UserGroup} from '../enums/user-group.enum';
 import {StudentStatus} from '../enums/student-status.enum';
 import {StudentSessionsDialog} from '../student-sessions-dialog/student-sessions-dialog';
 import {availableMakeupMinutes} from '../utils/makeup';
+import {makeupSummary} from '../utils/session-rules';
 import {round2} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
 import {studentStatusChipClass} from '../utils/status-chip';
@@ -76,6 +77,8 @@ export interface RosterHistoryRow {
 export class StudentRoster implements OnInit {
   private studentService: StudentService = inject(StudentService);
   private sessionsService: SessionsService = inject(SessionsService);
+  /** Pending make-up minutes per student id; null until loaded (or when the read failed). */
+  private scheduledMakeupById: Map<string, number> | null = null;
   private contactService: ContactService = inject(ContactService);
   protected authService: AuthService = inject(AuthService);
   private cdr: ChangeDetectorRef = inject(ChangeDetectorRef);
@@ -174,6 +177,7 @@ export class StudentRoster implements OnInit {
     const source$ = isAdmin
       ? this.studentService.getStudents(true)
       : this.studentService.getStudentsByTutor(tutorId!, true);
+    this.loadScheduledMakeup();
 
     forkJoin({
       students: source$,
@@ -391,6 +395,31 @@ export class StudentRoster implements OnInit {
   /** A student's currently-available make-up minutes (expired batches excluded). */
   protected availableMakeup(student: Student): number {
     return availableMakeupMinutes(student);
+  }
+
+  /**
+   * "270 · 120 scheduled · 150 left" for the Make Up Min column; just the
+   * balance until the scheduled read completes (or when it failed).
+   */
+  protected makeupSummary(student: Student): string {
+    const scheduled = this.scheduledMakeupById
+      ? this.scheduledMakeupById.get(student.id ?? '') ?? 0
+      : null;
+    return makeupSummary(this.availableMakeup(student), scheduled);
+  }
+
+  /** Pending make-up minutes per student, for every role (the service scopes a tutor). */
+  private loadScheduledMakeup(): void {
+    this.sessionsService.getScheduledMakeup().pipe(
+      catchError(error => {
+        console.log(error);
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(scheduled => {
+      this.scheduledMakeupById = scheduled;
+      this.cdr.markForCheck();
+    });
   }
 
   /**

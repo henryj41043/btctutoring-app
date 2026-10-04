@@ -58,6 +58,7 @@ describe('SessionDialog', () => {
     deleteSession: jest.fn(),
     emailSessionNotes: jest.fn(),
     getSessionsBySeries: jest.fn(),
+    getScheduledMakeup: jest.fn(),
   };
   const contactService = { getContacts: jest.fn(), getStaff: jest.fn() };
   const studentService = {
@@ -116,6 +117,8 @@ describe('SessionDialog', () => {
     ownContactId = 'c-self';
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    // Unknown by default: the dialog then falls back to the loaded sessions.
+    sessionsService.getScheduledMakeup.mockReturnValue(throwError(() => new Error('not loaded')));
     // The service echoes the session with the status it was given.
     sessionsService.setAttendance.mockImplementation(
       (id: string, request: { status: string }, dryRun?: boolean) => of({
@@ -1601,6 +1604,121 @@ describe('SessionDialog', () => {
       c.createSession();
       expect(c.hasError).toBe(true);
       expect(c.errorMessage).toContain('make-up');
+    });
+
+    describe('scheduled make-up minutes from the service', () => {
+      const withScheduled = (c: SessionDialog, entries: [string, number][]): SessionDialog => {
+        (c as unknown as { scheduledMakeupById: Map<string, number> }).scheduledMakeupById = new Map(entries);
+        return c;
+      };
+      const line = (c: SessionDialog, s: Student): string =>
+        (c as unknown as { makeupLine(s: Student): string }).makeupLine(s);
+
+      it('loads the totals when the dialog opens', () => {
+        sessionsService.getScheduledMakeup.mockReturnValue(of(new Map([['s-1', 30]])));
+        const c = build({ type: 'create', session: new Session(), existingSessions: [] } as SessionDialogData);
+        c.ngOnInit();
+        expect(line(c, student({ make_up_minutes: 90 }))).toBe('90 min · 30 scheduled · 60 left');
+      });
+
+      it('shows just the balance while the totals are unknown, and zero scheduled for a student without any', () => {
+        const c = primedCreate({});
+        expect(line(c, student({ make_up_minutes: 90 }))).toBe('90 min');
+        withScheduled(c, [['other', 30]]);
+        expect(line(c, student({ make_up_minutes: 90 }))).toBe('90 min · 0 scheduled · 90 left');
+        expect(line(c, student({ id: undefined, make_up_minutes: 90 }))).toBe('90 min · 0 scheduled · 90 left');
+      });
+
+      it('blocks a make-up that the loaded calendar months would have let through', () => {
+        // Nothing in the loaded sessions, but the service knows of 60 pending minutes.
+        const c = withScheduled(primedCreate({ existingSessions: [] }), [['s-1', 60]]);
+        c.selectedType = SessionType.MAKE_UP;
+        c.students = [student({ make_up_minutes: 90 })]; // 60 scheduled + new 60 = 120 > 90
+        c.createSession();
+        expect(c.hasError).toBe(true);
+        expect(c.errorMessage).toBe('Not enough make-up minutes. Pat has 90 min but this would commit 120 pending min.');
+        expect(sessionsService.createSession).not.toHaveBeenCalled();
+      });
+
+      it('lets a make-up through that fits the service total, whatever the loaded sessions say', () => {
+        const c = withScheduled(primedCreate({
+          existingSessions: [
+            {
+              student_id: 's-1', type: SessionType.MAKE_UP, status: SessionStatus.PENDING,
+              start_datetime: '2026-06-02T10:00:00Z', end_datetime: '2026-06-02T12:00:00Z',
+            },
+          ] as Session[],
+        }), [['s-1', 30]]);
+        c.selectedType = SessionType.MAKE_UP;
+        c.students = [student({ make_up_minutes: 90 })]; // 30 scheduled + new 60 = 90
+        sessionsService.createSession.mockReturnValue(of({ id: 'new-1' }));
+        c.createSession();
+        expect(c.hasError).toBe(false);
+        expect(sessionsService.createSession).toHaveBeenCalled();
+      });
+
+      it('does not count the pending make-up being edited twice', () => {
+        // Stored: a 60 minute pending make-up, already inside the service total of 60.
+        const c = withScheduled(editFor(
+          { type: SessionType.MAKE_UP, student_id: 's-1', end_datetime: '2026-06-01T11:00:00Z' },
+          {
+            selectedType: SessionType.MAKE_UP,
+            selectedAttendance: SessionStatus.PENDING,
+            students: [student({ make_up_minutes: 90 })],
+            endTime: new Date(2026, 5, 1, 11, 30), // lengthened to 90
+          },
+        ), [['s-1', 60]]);
+        sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
+        c.updateSession();
+        expect(c.hasError).toBe(false); // 0 other + 90 = 90
+        expect(sessionsService.updateSession).toHaveBeenCalled();
+      });
+
+      it('still blocks lengthening it past the balance', () => {
+        const c = withScheduled(editFor(
+          { type: SessionType.MAKE_UP, student_id: 's-1', end_datetime: '2026-06-01T11:00:00Z' },
+          {
+            selectedType: SessionType.MAKE_UP,
+            selectedAttendance: SessionStatus.PENDING,
+            students: [student({ make_up_minutes: 90 })],
+            endTime: new Date(2026, 5, 1, 11, 45), // 105
+          },
+        ), [['s-1', 60]]);
+        c.updateSession();
+        expect(c.errorMessage).toBe('Not enough make-up minutes. Pat has 90 min but this would commit 105 pending min.');
+      });
+
+      it.each([
+        ['it was a tutoring session', { type: SessionType.TUTORING, student_id: 's-1' }],
+        ['it belonged to another student', { type: SessionType.MAKE_UP, student_id: 's-other' }],
+        ['it was already held', { type: SessionType.MAKE_UP, student_id: 's-1', status: SessionStatus.COMPLETED }],
+      ])('takes nothing off the total when %s', (_why, stored) => {
+        const c = withScheduled(editFor(
+          { end_datetime: '2026-06-01T11:00:00Z', ...stored },
+          {
+            selectedType: SessionType.MAKE_UP,
+            selectedAttendance: SessionStatus.PENDING,
+            students: [student({ make_up_minutes: 90 })],
+          },
+        ), [['s-1', 60]]);
+        const scheduledFor = (c as unknown as {
+          scheduledMakeupFor(s: Student, exclude: Set<string>): number;
+        }).scheduledMakeupFor(student(), new Set(['sess-1']));
+        expect(scheduledFor).toBe(60);
+      });
+
+      it('never goes below zero, and ignores the stored session unless it is excluded', () => {
+        const c = withScheduled(editFor(
+          { type: SessionType.MAKE_UP, student_id: 's-1', end_datetime: '2026-06-01T11:00:00Z' },
+          {},
+        ), [['s-1', 30]]);
+        const scheduledFor = (exclude: Set<string>) => (c as unknown as {
+          scheduledMakeupFor(s: Student, exclude?: Set<string>): number;
+        }).scheduledMakeupFor(student(), exclude);
+        expect(scheduledFor(new Set(['sess-1']))).toBe(0); // 30 - 60, floored
+        expect(scheduledFor(new Set())).toBe(30);
+        expect((c as unknown as { scheduledMakeupFor(s: Student): number }).scheduledMakeupFor(student())).toBe(30);
+      });
     });
 
     it('blocks a make-up dated after the student service end date', () => {

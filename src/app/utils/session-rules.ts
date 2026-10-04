@@ -106,6 +106,16 @@ export function makeupMinutesLeftToSchedule(available: number, scheduled: number
 }
 
 /**
+ * "270 · 120 scheduled · 150 left": the available balance with what is
+ * already scheduled and what remains to book. Just the balance while the
+ * scheduled total is unknown (null).
+ */
+export function makeupSummary(available: number, scheduled: number | null): string {
+  if (scheduled === null) return `${available}`;
+  return `${available} · ${scheduled} scheduled · ${makeupMinutesLeftToSchedule(available, scheduled)} left`;
+}
+
+/**
  * The start_datetime window used to fetch sessions for the scheduled make-up
  * tallies: a year either side of today. Pending make-ups outside it are stale
  * enough that a full-table read isn't worth the cost.
@@ -128,6 +138,25 @@ export function validateMakeupPendingBalance(
 ): string | null {
   const balance = availableMakeupMinutes(student);
   const projected = pendingMakeupMinutesFor(existing, student.id, excludeIds) + addMinutes;
+  if (projected > balance) {
+    return `Not enough make-up minutes. ${student.name} has ${balance} min `
+      + `but this would commit ${projected} pending min.`;
+  }
+  return null;
+}
+
+/**
+ * The same rule against the service's own count of pending make-up minutes
+ * (every tutor, any date), which the loaded calendar months cannot give.
+ * `alreadyScheduled` must leave out the session being edited.
+ */
+export function validateMakeupAgainstScheduled(
+  student: Student,
+  addMinutes: number,
+  alreadyScheduled: number,
+): string | null {
+  const balance = availableMakeupMinutes(student);
+  const projected = alreadyScheduled + addMinutes;
   if (projected > balance) {
     return `Not enough make-up minutes. ${student.name} has ${balance} min `
       + `but this would commit ${projected} pending min.`;

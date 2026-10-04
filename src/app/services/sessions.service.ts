@@ -1,7 +1,7 @@
 import {inject, Injectable} from '@angular/core';
 import {environment} from '../../environments/environment';
 import {HttpClient, HttpParams} from '@angular/common/http';
-import {Observable} from 'rxjs';
+import {map, Observable} from 'rxjs';
 import {AttendanceRequest, AttendanceResult, Session} from '../models/session.model';
 import {Response} from '../models/response.model';
 
@@ -47,6 +47,17 @@ export class SessionsService {
   getTeamSessions(range?: SessionRange): Observable<Session[]> {
     const params = this.withRange(new HttpParams(), range);
     return this.httpClient.get<Session[]>(`${this.baseUrl}/sessions`, { params });
+  }
+
+  /**
+   * Pending make-up minutes per student id, counted by the service across
+   * every tutor. Admins get all students; a tutor gets the students they can
+   * see. Students with nothing scheduled are absent (read with `?? 0`).
+   */
+  getScheduledMakeup(): Observable<Map<string, number>> {
+    return this.httpClient
+      .get<{student_id: string; scheduled_minutes: number}[]>(`${this.baseUrl}/sessions/makeup-scheduled`)
+      .pipe(map(rows => new Map((rows ?? []).map(row => [row.student_id, row.scheduled_minutes]))));
   }
 
   getSessionsBySeries(seriesId: string): Observable<Session[]> {
