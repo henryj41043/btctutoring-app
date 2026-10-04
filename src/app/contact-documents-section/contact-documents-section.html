@@ -7,7 +7,7 @@
 </h2>
 <input #filePicker type="file" class="file-picker" multiple [accept]="accept"
        aria-label="Choose documents to upload" (change)="onFilesPicked($event)">
-<p class="documents-hint">PDF, Word, JPG or PNG, up to 15 MB each.</p>
+<p class="documents-hint">PDF, Word, JPG or PNG, up to 15 MB each. Every file is checked for malware before it can be opened.</p>
 
 @for (upload of uploads; track upload.key) {
   <div class="upload-row" [class.upload-row--failed]="upload.error">
@@ -37,11 +37,15 @@
 } @else {
   <div class="document-list">
     @for (document of documents; track document.id) {
-      <div class="document-row">
+      <div class="document-row" [class.document-row--blocked]="document.scan_status === 'infected' || document.scan_status === 'unscanned'">
         <button type="button" class="document-open" (click)="open(document)"
-                [matTooltip]="opensInBrowser(document.content_type) ? 'Open in a new tab' : 'Download'">
+                [disabled]="!canOpen(document.scan_status)"
+                [matTooltip]="scanNote(document.scan_status) ?? (opensInBrowser(document.content_type) ? 'Open in a new tab' : 'Download')">
           <mat-icon class="document-icon">{{documentIcon(document.content_type)}}</mat-icon>
           <span class="document-name">{{document.file_name}}</span>
+          @if (scanNote(document.scan_status); as note) {
+            <span class="document-scan">{{note}}</span>
+          }
           <span class="document-meta">
             {{formatFileSize(document.size)}} · {{document.uploaded_at | date:'mediumDate'}}
             @if (document.uploaded_by) {
@@ -58,10 +62,14 @@
             <button matButton type="button" (click)="cancelDelete()">Cancel</button>
           </span>
         } @else {
-          <button matIconButton type="button" aria-label="Download document" matTooltip="Download"
-                  (click)="download(document, $event)">
-            <mat-icon>download</mat-icon>
-          </button>
+          @if (document.scan_status === 'scanning') {
+            <mat-spinner [diameter]="20" aria-label="Checking for malware"></mat-spinner>
+          } @else if (canOpen(document.scan_status)) {
+            <button matIconButton type="button" aria-label="Download document" matTooltip="Download"
+                    (click)="download(document, $event)">
+              <mat-icon>download</mat-icon>
+            </button>
+          }
           <button matIconButton type="button" aria-label="Delete document" matTooltip="Delete"
                   (click)="askDelete(document, $event)">
             <mat-icon>delete</mat-icon>

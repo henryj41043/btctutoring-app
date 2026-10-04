@@ -7,7 +7,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {catchError, EMPTY} from 'rxjs';
+import {catchError, EMPTY, of, switchMap, timer} from 'rxjs';
 import {DocumentService} from '../services/document.service';
 import {AuthService} from '../services/auth.service';
 import {ContactDocument, DocumentUrlMode} from '../models/contact-document.model';
@@ -20,6 +20,7 @@ import {
   documentTypeOf,
   opensInBrowser,
 } from '../utils/document-rules';
+import {anyScanning, canOpen, SCAN_POLL_MAX, SCAN_POLL_MS, scanNote} from '../utils/document-scan';
 
 /** One file being sent, or one that could not be. */
 export interface PendingUpload {
@@ -30,6 +31,7 @@ export interface PendingUpload {
 }
 
 const UPLOAD_FAILED = 'The upload failed. Please try again.';
+const OPEN_FAILED = 'The document could not be opened. Please try again.';
 
 /**
  * The contact page's Documents card: files an admin uploaded to this contact
@@ -70,11 +72,16 @@ export class ContactDocumentsSection implements OnInit {
   protected busyId: string | null = null;
   protected actionError: string | null = null;
   private nextKey: number = 1;
+  /** A re-read of the list is already on its way. */
+  private polling: boolean = false;
+  private pollsLeft: number = SCAN_POLL_MAX;
 
   protected readonly accept = DOCUMENT_ACCEPT;
   protected readonly formatFileSize = formatFileSize;
   protected readonly documentIcon = documentIcon;
   protected readonly opensInBrowser = opensInBrowser;
+  protected readonly scanNote = scanNote;
+  protected readonly canOpen = canOpen;
 
   ngOnInit(): void {
     if (!this.authService.isAdmin()) {
@@ -99,6 +106,32 @@ export class ContactDocumentsSection implements OnInit {
       this.loading = false;
       this.loadFailed = false;
       this.cdr.markForCheck();
+      this.watchScans();
+    });
+  }
+
+  /**
+   * A malware scan takes a few seconds: while one is running the list is
+   * re-read, so the row opens up by itself. A failed re-read is just retried.
+   */
+  private watchScans(): void {
+    if (this.polling || this.pollsLeft <= 0 || !anyScanning(this.documents)) {
+      return;
+    }
+    this.polling = true;
+    this.pollsLeft--;
+    timer(SCAN_POLL_MS).pipe(
+      switchMap(() => this.documentService.getDocumentsForContact(this.contactId).pipe(
+        catchError(() => of(null)),
+      )),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(documents => {
+      this.polling = false;
+      if (documents) {
+        this.documents = documents;
+        this.cdr.markForCheck();
+      }
+      this.watchScans();
     });
   }
 
@@ -132,6 +165,8 @@ export class ContactDocumentsSection implements OnInit {
         this.uploads = this.uploads.filter(item => item.key !== upload.key);
         this.documents = [progress.document, ...this.documents];
         this.cdr.markForCheck();
+        this.pollsLeft = SCAN_POLL_MAX;
+        this.watchScans();
       } else {
         this.patch(upload.key, {percent: progress.percent});
       }
@@ -139,9 +174,9 @@ export class ContactDocumentsSection implements OnInit {
   }
 
   /** The service explains a refusal (400); anything else is a plain failure. */
-  private messageOf(error: HttpErrorResponse): string {
+  private messageOf(error: HttpErrorResponse, fallback: string = UPLOAD_FAILED): string {
     const message: unknown = error?.error?.message;
-    return error?.status === 400 && typeof message === 'string' && message ? message : UPLOAD_FAILED;
+    return error?.status === 400 && typeof message === 'string' && message ? message : fallback;
   }
 
   private patch(key: number, changes: Partial<PendingUpload>): void {
@@ -165,7 +200,7 @@ export class ContactDocumentsSection implements OnInit {
   }
 
   private fetch(document: ContactDocument, mode: DocumentUrlMode): void {
-    if (!document.id || this.busyId) {
+    if (!document.id || this.busyId || !canOpen(document.scan_status)) {
       return;
     }
     this.busyId = document.id;
@@ -175,7 +210,7 @@ export class ContactDocumentsSection implements OnInit {
       catchError(error => {
         console.log(error);
         this.busyId = null;
-        this.actionError = 'The document could not be opened. Please try again.';
+        this.actionError = this.messageOf(error, OPEN_FAILED);
         this.cdr.markForCheck();
         return EMPTY;
       }),
