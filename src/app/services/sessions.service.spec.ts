@@ -28,6 +28,32 @@ describe('SessionsService', () => {
     expect(service).toBeTruthy();
   });
 
+  describe('createMakeupSet', () => {
+    const body = {
+      student_id: 's-1',
+      tutor_id: 't-1',
+      sessions: [{ start_datetime: '2026-10-06T20:00:00.000Z', end_datetime: '2026-10-06T20:15:00.000Z' }],
+    };
+
+    it('posts the set for real by default', () => {
+      let result: unknown;
+      service.createMakeupSet(body).subscribe(r => (result = r));
+      const req = httpMock.expectOne(`${base}/sessions/makeup-set`);
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual(body);
+      expect(req.request.params.has('dry_run')).toBe(false);
+      req.flush({ created: 1 });
+      expect(result).toEqual({ created: 1 });
+    });
+
+    it('asks for a preview with dry_run=true', () => {
+      service.createMakeupSet(body, true).subscribe();
+      const req = httpMock.expectOne(`${base}/sessions/makeup-set?dry_run=true`);
+      expect(req.request.method).toBe('POST');
+      req.flush({ dry_run: true });
+    });
+  });
+
   it('getScheduledMakeup reads the per-student totals into a map', () => {
     let result: Map<string, number> | undefined;
     service.getScheduledMakeup().subscribe(r => (result = r));

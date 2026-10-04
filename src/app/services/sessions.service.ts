@@ -20,6 +20,8 @@ export interface HorizonFillResult {
   lockedOut: boolean;
 }
 
+import {MakeupSetRequest, MakeupSetResult} from '../models/makeup-set.model';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -111,6 +113,15 @@ export class SessionsService {
   setAttendance(id: string, request: AttendanceRequest, dryRun: boolean = false): Observable<AttendanceResult> {
     const options = dryRun ? {params: new HttpParams().set('dry_run', 'true')} : {};
     return this.httpClient.put<AttendanceResult>(`${this.baseUrl}/sessions/${id}/attendance`, request, options);
+  }
+
+  /**
+   * Plans a set of make-ups for one student and, unless `dryRun`, creates
+   * the ones the student's minutes cover. The service decides which fit.
+   */
+  createMakeupSet(request: MakeupSetRequest, dryRun: boolean = false): Observable<MakeupSetResult> {
+    const options = dryRun ? {params: new HttpParams().set('dry_run', 'true')} : {};
+    return this.httpClient.post<MakeupSetResult>(`${this.baseUrl}/sessions/makeup-set`, request, options);
   }
 
   /**
