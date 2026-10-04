@@ -28,6 +28,25 @@ describe('SessionsService', () => {
     expect(service).toBeTruthy();
   });
 
+  it('getScheduledMakeup reads the per-student totals into a map', () => {
+    let result: Map<string, number> | undefined;
+    service.getScheduledMakeup().subscribe(r => (result = r));
+    const req = httpMock.expectOne(`${base}/sessions/makeup-scheduled`);
+    expect(req.request.method).toBe('GET');
+    req.flush([
+      { student_id: 's-1', scheduled_minutes: 75 },
+      { student_id: 's-2', scheduled_minutes: 30 },
+    ]);
+    expect([...result!.entries()]).toEqual([['s-1', 75], ['s-2', 30]]);
+  });
+
+  it('getScheduledMakeup tolerates an empty body', () => {
+    let result: Map<string, number> | undefined;
+    service.getScheduledMakeup().subscribe(r => (result = r));
+    httpMock.expectOne(`${base}/sessions/makeup-scheduled`).flush(null);
+    expect(result!.size).toBe(0);
+  });
+
   it('getAllSessions GETs /sessions', () => {
     service.getAllSessions().subscribe();
     const req = httpMock.expectOne(`${base}/sessions`);

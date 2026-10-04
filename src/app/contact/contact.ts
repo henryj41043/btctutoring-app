@@ -51,7 +51,7 @@ import {TrialSessionDialog, TrialSessionDialogResult} from '../trial-session-dia
 import {minNoteOrder, noteDateIso, noteGroup, sortNotes} from '../utils/note-forms';
 import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-forms';
 import {availableMakeupMinutes} from '../utils/makeup';
-import {makeupMinutesLeftToSchedule, scheduledMakeupMinutesByStudent, scheduledMakeupRange} from '../utils/session-rules';
+import {makeupSummary} from '../utils/session-rules';
 import {SessionsService} from '../services/sessions.service';
 import {studentDisplayName} from '../utils/student-name';
 import {pendingChangeNote, pendingChangesOf} from '../utils/pending-package';
@@ -231,9 +231,6 @@ export class Contact implements OnInit {
     // load (and admin-gate) themselves.
     if (this.authService.isAdmin()) {
       this.loadStudents();
-      // Scheduled make-up tallies (admin-only sessions read) for both the
-      // family cards and a tutor's roster.
-      this.loadScheduledMakeup();
       // Notes are an admin view too (client 2026-10-02): a tutor's own page
       // neither shows nor fetches what was written about them.
       this.loadNotes();
@@ -241,6 +238,9 @@ export class Contact implements OnInit {
       this.studentsLoading = false;
       this.notesLoading = false;
     }
+    // Scheduled make-up tallies for the family cards and a tutor's roster.
+    // The service limits a tutor to their own students.
+    this.loadScheduledMakeup();
     this.getTutors();
   }
 
@@ -527,26 +527,22 @@ export class Contact implements OnInit {
   /**
    * "270 · 120 scheduled · 150 left" — the available balance with what is
    * already scheduled and what remains to book. Just the balance until the
-   * sessions read completes (or when it isn't available, e.g. a tutor's view).
+   * scheduled read completes (or when it failed).
    */
   makeupSummary(student: Student): string {
-    const available = this.availableMakeup(student);
-    const scheduled = this.scheduledMakeup(student);
-    if (scheduled === null) return `${available}`;
-    const left = makeupMinutesLeftToSchedule(available, scheduled);
-    return `${available} · ${scheduled} scheduled · ${left} left`;
+    return makeupSummary(this.availableMakeup(student), this.scheduledMakeup(student));
   }
 
-  /** Loads pending make-up minutes for every student (one ranged sessions read). */
+  /** Loads pending make-up minutes per student (counted by the service). */
   private loadScheduledMakeup(): void {
-    this.sessionsService.getAllSessions(scheduledMakeupRange()).pipe(
+    this.sessionsService.getScheduledMakeup().pipe(
       catchError(error => {
         console.log(error);
         return EMPTY;
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(sessions => {
-      this.scheduledMakeupById = scheduledMakeupMinutesByStudent(sessions);
+    ).subscribe(scheduled => {
+      this.scheduledMakeupById = scheduled;
       this.cdr.markForCheck();
     });
   }
@@ -1100,9 +1096,7 @@ export class Contact implements OnInit {
       width: '700px',
     });
     // Make-ups may have been scheduled or finalized inside — refresh the tallies.
-    ref.afterClosed().subscribe(() => {
-      if (this.authService.isAdmin()) this.loadScheduledMakeup();
-    });
+    ref.afterClosed().subscribe(() => this.loadScheduledMakeup());
   }
 
   getTutorName(id?: string): string {

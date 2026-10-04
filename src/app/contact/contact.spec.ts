@@ -81,7 +81,7 @@ describe('Contact', () => {
     scheduleSummary: jest.fn().mockReturnValue([]),
     deleteFuturePendingSessions: jest.fn(() => of(0)),
   };
-  const sessionsService = { getAllSessions: jest.fn() };
+  const sessionsService = { getAllSessions: jest.fn(), getScheduledMakeup: jest.fn() };
   const billingService = {
     getBillingRecordsByContact: jest.fn(),
     upsertBillingRecord: jest.fn(),
@@ -103,6 +103,7 @@ describe('Contact', () => {
     billingService.getBillingRecordsByContact.mockReturnValue(of([]));
     billingService.upsertBillingRecord.mockReturnValue(of({}));
     sessionsService.getAllSessions.mockReturnValue(of([]));
+    sessionsService.getScheduledMakeup.mockReturnValue(of(new Map<string, number>()));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -767,54 +768,47 @@ describe('Contact', () => {
       expect(c.availableMakeup(s)).toBe(25);
     });
 
-    it('makeupSummary shows available · scheduled · left once pending make-ups load (admin)', () => {
+    it('makeupSummary shows available · scheduled · left once the scheduled totals load', () => {
       const s = { id: 's-1', make_up_minutes: 270 } as Student;
-      const makeup = (minutes: number, over: object = {}) => ({
-        id: `m-${minutes}`,
-        student_id: 's-1',
-        type: SessionType.MAKE_UP,
-        status: SessionStatus.PENDING,
-        start_datetime: '2026-09-10T10:00:00.000Z',
-        end_datetime: new Date(new Date('2026-09-10T10:00:00.000Z').getTime() + minutes * 60000).toISOString(),
-        ...over,
-      });
-      sessionsService.getAllSessions.mockReturnValue(of([
-        makeup(60),
-        makeup(60, { id: 'm-b' }),
-        makeup(60, { id: 'done', status: SessionStatus.COMPLETED }),
-      ]));
+      sessionsService.getScheduledMakeup.mockReturnValue(of(new Map([['s-1', 120]])));
       const c = build();
       seedStudent(c);
-      expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+      expect(sessionsService.getScheduledMakeup).toHaveBeenCalledTimes(1);
       expect(c.scheduledMakeup(s)).toBe(120);
       expect(c.makeupSummary(s)).toBe('270 · 120 scheduled · 150 left');
       // A student with no pending make-ups: everything is left to schedule.
       expect(c.makeupSummary({ id: 's-2', make_up_minutes: 45 } as Student)).toBe('45 · 0 scheduled · 45 left');
+      expect(c.makeupSummary({ make_up_minutes: 45 } as Student)).toBe('45 · 0 scheduled · 45 left');
     });
 
-    it('makeupSummary is just the balance until (or unless) the sessions read completes', () => {
+    it('makeupSummary is just the balance until (or unless) the scheduled read completes', () => {
       const c = build();
       expect(c.scheduledMakeup({ id: 's-1' } as Student)).toBeNull();
       expect(c.makeupSummary({ id: 's-1', make_up_minutes: 270 } as Student)).toBe('270');
       // A failed read leaves it that way rather than showing false zeros.
-      sessionsService.getAllSessions.mockReturnValue(throwError(() => new Error('boom')));
+      sessionsService.getScheduledMakeup.mockReturnValue(throwError(() => new Error('boom')));
       seedStudent(c);
       expect(c.makeupSummary({ id: 's-1', make_up_minutes: 270 } as Student)).toBe('270');
     });
 
-    it('does not read sessions for a non-admin (tutor) view', () => {
+    it('a tutor sees scheduled and left on their own roster too', () => {
       isAdmin = false;
+      sessionsService.getScheduledMakeup.mockReturnValue(of(new Map([['s-1', 30]])));
       const c = build();
       c.ngOnInit();
+      expect(sessionsService.getScheduledMakeup).toHaveBeenCalledTimes(1);
+      // The tutor never reads other tutors' sessions for it.
       expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+      expect(c.makeupSummary({ id: 's-1', make_up_minutes: 90 } as Student)).toBe('90 · 30 scheduled · 60 left');
     });
 
-    it('re-reads the scheduled tallies after the sessions dialog closes', () => {
+    it.each([true, false])('re-reads the scheduled tallies after the sessions dialog closes (admin: %s)', admin => {
+      isAdmin = admin;
       const c = build();
-      seedStudent(c);
-      sessionsService.getAllSessions.mockClear();
+      c.ngOnInit();
+      sessionsService.getScheduledMakeup.mockClear();
       c.openSessionsDialog({ id: 's-1' } as Student);
-      expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
+      expect(sessionsService.getScheduledMakeup).toHaveBeenCalledTimes(1);
     });
 
     it('qualifiesForSiblingDiscount is true with 3+ active packaged students', () => {

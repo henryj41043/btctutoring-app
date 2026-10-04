@@ -45,12 +45,13 @@ import {studentVisibleToTutor} from '../utils/slot-tutor';
 import {
   combineDateTime,
   durationMinutes,
+  durationOf,
   futureSeriesTargets,
   retimeSeriesOccurrences,
   scheduleFieldsUnchanged,
 } from '../utils/session-times';
-import {mutatesStudent, validateMakeupPendingBalance,
-  makeupAfterServiceEndError, validateSessionLength} from '../utils/session-rules';
+import {mutatesStudent, validateMakeupPendingBalance, validateMakeupAgainstScheduled,
+  makeupAfterServiceEndError, makeupMinutesLeftToSchedule, validateSessionLength} from '../utils/session-rules';
 
 @Component({
   selector: 'app-session-dialog',
@@ -84,6 +85,8 @@ export class SessionDialog implements OnInit {
   errorMessage: String = '';
   notes: string = '';
   hasError: boolean = false;
+  /** Pending make-up minutes per student id; null until loaded (or when the read failed). */
+  private scheduledMakeupById: Map<string, number> | null = null;
   selectedType: SessionType = SessionType.TUTORING;
   selectedTutor: string | undefined;
   selectedStudent: string | undefined;
@@ -304,6 +307,15 @@ export class SessionDialog implements OnInit {
     if (ended) {
       return ended;
     }
+    // The service's count covers every tutor and every date; the calendar's
+    // loaded months are only the fallback while it is unknown.
+    if (this.scheduledMakeupById) {
+      return validateMakeupAgainstScheduled(
+        student,
+        this.sessionDurationMinutes,
+        this.scheduledMakeupFor(student, excludeIds),
+      );
+    }
     return validateMakeupPendingBalance(
       student,
       this.sessionDurationMinutes,
@@ -312,7 +324,38 @@ export class SessionDialog implements OnInit {
     );
   }
 
+  /**
+   * The student's pending make-up minutes per the service, leaving out the
+   * session on screen when it is one of them (it is being re-saved).
+   */
+  private scheduledMakeupFor(student: Student, excludeIds: Set<string> = new Set()): number {
+    const total = this.scheduledMakeupById?.get(student.id ?? '') ?? 0;
+    const stored = this.dialogData.session;
+    const counted =
+      !!stored?.id && excludeIds.has(stored.id) &&
+      stored.type === SessionType.MAKE_UP &&
+      stored.status === SessionStatus.PENDING &&
+      stored.student_id === student.id;
+    return Math.max(0, total - (counted ? durationOf(stored) : 0));
+  }
+
+  /**
+   * "270 min · 120 scheduled · 150 left" under the student picker; just the
+   * balance until the scheduled read completes (or when it failed).
+   */
+  protected makeupLine(student: Student): string {
+    const available = availableMakeupMinutes(student);
+    if (!this.scheduledMakeupById) return `${available} min`;
+    const scheduled = this.scheduledMakeupById.get(student.id ?? '') ?? 0;
+    return `${available} min · ${scheduled} scheduled · ${makeupMinutesLeftToSchedule(available, scheduled)} left`;
+  }
+
   ngOnInit(): void {
+    // Pending make-up minutes per student, counted by the service.
+    this.sessionsService.getScheduledMakeup().pipe(
+      catchError(() => EMPTY),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(scheduled => (this.scheduledMakeupById = scheduled));
     // Package catalog for length validation; a failed load just leaves the
     // cap unenforced (same degradation as an unconfigured CUSTOM package).
     this.packageService.getPackages().pipe(

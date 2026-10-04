@@ -27,7 +27,7 @@ describe('StudentRoster', () => {
     getStudents: jest.fn(),
     getStudentsByTutor: jest.fn(),
   };
-  const sessionsService = { getAllSessions: jest.fn() };
+  const sessionsService = { getAllSessions: jest.fn(), getScheduledMakeup: jest.fn() };
   const contactService = { getStaff: jest.fn(), getContact: jest.fn() };
   const authService = {
     isAdmin: () => isAdmin,
@@ -59,6 +59,7 @@ describe('StudentRoster', () => {
     contactId = 'contact-1';
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     sessionsService.getAllSessions.mockReturnValue(of([]));
+    sessionsService.getScheduledMakeup.mockReturnValue(of(new Map<string, number>()));
     contactService.getStaff.mockReturnValue(of([
       { id: 't-1', first_name: 'Tess', last_name: 'Ng' } as Contact,
     ]));
@@ -131,6 +132,38 @@ describe('StudentRoster', () => {
     expect(ds.filteredData.map(s => s.id)).toEqual(['s-2']);
     component.applyFilter('');
     expect(ds.filteredData).toHaveLength(2);
+  });
+
+  describe('Make Up Min column', () => {
+    const summary = (c: StudentRoster, s: Student): string =>
+      (c as unknown as { makeupSummary(s: Student): string }).makeupSummary(s);
+
+    it.each([true, false])('shows available · scheduled · left for every role (admin: %s)', admin => {
+      isAdmin = admin;
+      sessionsService.getScheduledMakeup.mockReturnValue(of(new Map([['s-1', 30]])));
+      const c = build();
+      c.ngOnInit();
+      expect(sessionsService.getScheduledMakeup).toHaveBeenCalledTimes(1);
+      expect(summary(c, { id: 's-1', make_up_minutes: 90 } as Student)).toBe('90 · 30 scheduled · 60 left');
+      expect(summary(c, { id: 's-2', make_up_minutes: 45 } as Student)).toBe('45 · 0 scheduled · 45 left');
+      expect(summary(c, { make_up_minutes: 45 } as Student)).toBe('45 · 0 scheduled · 45 left');
+    });
+
+    it('is just the balance before the read completes and after a failed one', () => {
+      sessionsService.getScheduledMakeup.mockReturnValue(throwError(() => new Error('boom')));
+      const c = build();
+      expect(summary(c, { id: 's-1', make_up_minutes: 90 } as Student)).toBe('90');
+      c.ngOnInit();
+      expect(summary(c, { id: 's-1', make_up_minutes: 90 } as Student)).toBe('90');
+    });
+
+    it('does not ask for the totals when the tutor has no contact id', () => {
+      isAdmin = false;
+      contactId = undefined as unknown as string;
+      const c = build();
+      c.ngOnInit();
+      expect(sessionsService.getScheduledMakeup).not.toHaveBeenCalled();
+    });
   });
 
   it('shows the available (unexpired) make-up balance', () => {

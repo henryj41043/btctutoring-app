@@ -7,6 +7,8 @@ import {
   scheduledMakeupRange,
   validateMakeupPendingBalance,
   validateSessionLength,
+  makeupSummary,
+  validateMakeupAgainstScheduled,
 } from './session-rules';
 import {Session} from '../models/session.model';
 import {Student} from '../models/student.model';
@@ -190,6 +192,37 @@ describe('session-rules', () => {
       expect(
         validateMakeupPendingBalance(banked, 60, [pendingMakeup('m1', 30)], new Set(['m1'])),
       ).toBeNull();
+    });
+  });
+
+  describe('makeupSummary', () => {
+    it('shows available, scheduled and left', () => {
+      expect(makeupSummary(270, 120)).toBe('270 · 120 scheduled · 150 left');
+      expect(makeupSummary(45, 0)).toBe('45 · 0 scheduled · 45 left');
+    });
+
+    it('never shows a negative amount left', () => {
+      expect(makeupSummary(30, 90)).toBe('30 · 90 scheduled · 0 left');
+    });
+
+    it('is just the balance while the scheduled total is unknown', () => {
+      expect(makeupSummary(270, null)).toBe('270');
+    });
+  });
+
+  describe('validateMakeupAgainstScheduled', () => {
+    const sam = {id: 's-1', name: 'Sam', make_up_minutes: 60} as Student;
+
+    it('allows a make-up that fits, up to the exact balance', () => {
+      expect(validateMakeupAgainstScheduled(sam, 30, 0)).toBeNull();
+      expect(validateMakeupAgainstScheduled(sam, 30, 30)).toBeNull();
+    });
+
+    it('refuses one that would commit more than the balance', () => {
+      expect(validateMakeupAgainstScheduled(sam, 30, 45))
+        .toBe('Not enough make-up minutes. Sam has 60 min but this would commit 75 pending min.');
+      expect(validateMakeupAgainstScheduled(sam, 61, 0))
+        .toBe('Not enough make-up minutes. Sam has 60 min but this would commit 61 pending min.');
     });
   });
 
