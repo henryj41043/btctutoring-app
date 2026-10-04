@@ -20,6 +20,11 @@ export class EmailService {
     return this.httpClient.get<EmailEntry[]>(`${this.baseUrl}/emails/unmatched`);
   }
 
+  /** Forwards the Hub refused (unknown or unverified sender, spam, virus). */
+  getRejected(): Observable<EmailEntry[]> {
+    return this.httpClient.get<EmailEntry[]>(`${this.baseUrl}/emails/rejected`);
+  }
+
   assign(id: string, contactId: string): Observable<Response> {
     return this.httpClient.post<Response>(`${this.baseUrl}/emails/${id}/assign`, {contact_id: contactId});
   }

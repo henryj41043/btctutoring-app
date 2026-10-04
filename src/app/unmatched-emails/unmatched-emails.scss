@@ -1,9 +1,13 @@
 .unmatched-emails {
   padding: 16px;
 
-  .queue-count {
+  .queue-view {
     margin-left: 12px;
     align-self: center;
+  }
+
+  .rejected-chip {
+    margin-left: 8px;
   }
 
   .queue-search {

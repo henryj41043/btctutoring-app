@@ -22,3 +22,19 @@ export function participantsLabel(entry: EmailEntry): string {
     .map(participantLabel)
     .join(', ');
 }
+
+/** Why the Hub refused a forward, in plain words. */
+export function rejectedReasonLabel(entry: EmailEntry): string {
+  switch (entry.rejected_reason) {
+    case 'unknown_sender':
+      return 'Sender is not staff';
+    case 'unverified':
+      return 'Sender could not be verified';
+    case 'spam':
+      return 'Flagged as spam';
+    case 'virus':
+      return 'Flagged as a virus';
+    default:
+      return 'Rejected';
+  }
+}

@@ -23,6 +23,15 @@ describe('EmailService', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('getRejected GETs the rejected list', () => {
+    let result: unknown;
+    service.getRejected().subscribe(r => (result = r));
+    const req = httpMock.expectOne(`${base}/emails/rejected`);
+    expect(req.request.method).toBe('GET');
+    req.flush([{ id: 'r-1' }]);
+    expect(result).toEqual([{ id: 'r-1' }]);
+  });
+
   it('discardForContact POSTs to the contact discard route', () => {
     let result: unknown;
     service.discardForContact('c-1').subscribe(r => (result = r));
