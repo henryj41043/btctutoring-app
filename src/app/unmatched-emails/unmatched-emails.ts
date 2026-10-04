@@ -10,21 +10,28 @@ import {MatInputModule} from '@angular/material/input';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatPaginatorModule, MatPaginator} from '@angular/material/paginator';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatDialog} from '@angular/material/dialog';
 import {catchError, EMPTY, forkJoin, of} from 'rxjs';
 import {EmailService} from '../services/email.service';
 import {ContactService} from '../services/contact.service';
 import {EmailEntry} from '../models/email-entry.model';
-import {conversationLabel, isConversation, participantsLabel} from '../utils/email-view';
+import {conversationLabel, isConversation, participantsLabel, rejectedReasonLabel} from '../utils/email-view';
 import {Contact} from '../models/contact.model';
 import {AssignEmailDialog, AssignEmailDialogMode} from '../assign-email-dialog/assign-email-dialog';
 import {TableStateStore} from '../utils/table-state';
+
+export type EmailQueueView = 'unmatched' | 'rejected';
 
 /**
  * Admin-only review queue for forwarded emails the parser couldn't safely
  * file (unknown sender, ambiguous match, or unparseable forward). Nothing is
  * ever dropped — every email lands here or on a contact page. Rows expand to
  * the stripped body; Assign files onto a contact, Discard removes for good.
+ *
+ * A second list, Rejected, holds forwards the Hub refused because they did
+ * not come from a verified staff sender. They can be assigned or discarded
+ * the same way.
  */
 @Component({
   selector: 'app-unmatched-emails',
@@ -39,6 +46,7 @@ import {TableStateStore} from '../utils/table-state';
     MatTooltipModule,
     MatPaginatorModule,
     MatProgressSpinnerModule,
+    MatButtonToggleModule,
   ],
   templateUrl: './unmatched-emails.html',
   styleUrl: './unmatched-emails.scss',
@@ -68,6 +76,11 @@ export class UnmatchedEmails implements OnInit {
   protected contacts: Contact[] = [];
   /** The entry whose stripped body is expanded. */
   protected expandedId: string | null = null;
+  /** Which list is on screen. */
+  protected view: EmailQueueView = 'unmatched';
+  protected unmatched: EmailEntry[] = [];
+  protected rejected: EmailEntry[] = [];
+  protected readonly rejectedReasonLabel = rejectedReasonLabel;
 
   protected readonly isConversation = isConversation;
   protected readonly conversationLabel = conversationLabel;
@@ -96,15 +109,28 @@ export class UnmatchedEmails implements OnInit {
     forkJoin({
       emails: this.emailService.getUnmatched()
         .pipe(catchError(error => { console.log(error); return of([] as EmailEntry[]); })),
+      rejected: this.emailService.getRejected()
+        .pipe(catchError(error => { console.log(error); return of([] as EmailEntry[]); })),
       // Lean cached summary — the assign dialog only needs names + emails.
       contacts: this.contactService.getContactsSummary()
         .pipe(catchError(error => { console.log(error); return of([] as Contact[]); })),
-    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({emails, contacts}) => {
-      this.dataSource.data = emails;
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({emails, rejected, contacts}) => {
+      this.unmatched = emails;
+      this.rejected = rejected;
+      this.dataSource.data = this.view === 'rejected' ? rejected : emails;
       this.contacts = contacts;
       this.loading = false;
       this.cdr.markForCheck();
     });
+  }
+
+  /** Switches between the review queue and the rejected forwards. */
+  setView(view: EmailQueueView): void {
+    this.view = view;
+    this.expandedId = null;
+    this.dataSource.data = view === 'rejected' ? this.rejected : this.unmatched;
+    this.dataSource.paginator?.firstPage();
+    this.cdr.markForCheck();
   }
 
   applyFilter(value: string): void {

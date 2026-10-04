@@ -5,7 +5,13 @@
 export interface EmailEntry {
   id?: string;
   /** matched = filed on a contact; unmatched = awaiting admin review. */
-  status?: 'matched' | 'unmatched' | 'discarded';
+  status?: 'matched' | 'unmatched' | 'discarded' | 'rejected';
+  /**
+   * Set with status 'rejected': the forward did not come from a known sender,
+   * could not be verified as really sent by them, or was flagged by the mail
+   * scan. An admin can still assign or discard it.
+   */
+  rejected_reason?: 'unknown_sender' | 'unverified' | 'spam' | 'virus';
   contact_id?: string;
   /** The ORIGINAL (parent) sender parsed out of the forward. */
   from_email?: string;

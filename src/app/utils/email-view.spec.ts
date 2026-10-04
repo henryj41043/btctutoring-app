@@ -1,4 +1,4 @@
-import {conversationLabel, isConversation, participantsLabel} from './email-view';
+import {conversationLabel, isConversation, participantsLabel, rejectedReasonLabel} from './email-view';
 
 describe('email-view', () => {
   describe('isConversation', () => {
@@ -41,6 +41,18 @@ describe('email-view', () => {
     it('is empty when nobody is listed', () => {
       expect(participantsLabel({})).toBe('');
       expect(participantsLabel({participants: []})).toBe('');
+    });
+  });
+
+  describe('rejectedReasonLabel', () => {
+    it.each([
+      ['unknown_sender', 'Sender is not staff'],
+      ['unverified', 'Sender could not be verified'],
+      ['spam', 'Flagged as spam'],
+      ['virus', 'Flagged as a virus'],
+      [undefined, 'Rejected'],
+    ] as const)('%s reads "%s"', (reason, label) => {
+      expect(rejectedReasonLabel({rejected_reason: reason})).toBe(label);
     });
   });
 });

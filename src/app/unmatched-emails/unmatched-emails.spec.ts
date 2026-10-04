@@ -23,6 +23,7 @@ describe('UnmatchedEmails', () => {
   let afterClosed: unknown;
   const emailService = {
     getUnmatched: jest.fn(),
+    getRejected: jest.fn(),
     getOriginalUrl: jest.fn(),
   };
   const contactService = { getContactsSummary: jest.fn() };
@@ -48,6 +49,7 @@ describe('UnmatchedEmails', () => {
     afterClosed = false;
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     emailService.getUnmatched.mockReturnValue(of([]));
+    emailService.getRejected.mockReturnValue(of([]));
     emailService.getOriginalUrl.mockReturnValue(of({ url: 'https://signed' }));
     contactService.getContactsSummary.mockReturnValue(of([]));
   });
@@ -152,6 +154,128 @@ describe('UnmatchedEmails', () => {
     open('single');
     expect(el.querySelector('.email-participants')).toBeNull();
     expect(el.querySelector('.email-text')?.classList.contains('email-text--thread')).toBe(false);
+  });
+
+  describe('rejected forwards', () => {
+    const rejected = (over: Partial<EmailEntry> = {}): EmailEntry => entry({
+      id: 'r-1',
+      status: 'rejected',
+      rejected_reason: 'unknown_sender',
+      forwarded_by: 'someone@example.com',
+      ...over,
+    });
+    const view = (c: UnmatchedEmails) => c as unknown as {
+      view: string; unmatched: EmailEntry[]; rejected: EmailEntry[]; expandedId: string | null;
+      dataSource: { paginator: { firstPage: jest.Mock } | null };
+    };
+
+    it('loads both lists and starts on the review queue', () => {
+      emailService.getUnmatched.mockReturnValue(of([entry()]));
+      emailService.getRejected.mockReturnValue(of([rejected(), rejected({ id: 'r-2' })]));
+      const c = build();
+      c.ngOnInit();
+      expect(view(c).view).toBe('unmatched');
+      expect(view(c).unmatched.map(e => e.id)).toEqual(['hash-1']);
+      expect(view(c).rejected.map(e => e.id)).toEqual(['r-1', 'r-2']);
+      expect(data(c).map(e => e.id)).toEqual(['hash-1']);
+    });
+
+    it('switches lists, closes the open row and goes back to the first page', () => {
+      emailService.getUnmatched.mockReturnValue(of([entry()]));
+      emailService.getRejected.mockReturnValue(of([rejected()]));
+      const c = build();
+      c.ngOnInit();
+      c.toggleExpanded({ id: 'hash-1' });
+      const firstPage = jest.fn();
+      view(c).dataSource.paginator = { firstPage };
+      c.setView('rejected');
+      expect(data(c).map(e => e.id)).toEqual(['r-1']);
+      expect(view(c).expandedId).toBeNull();
+      expect(firstPage).toHaveBeenCalledTimes(1);
+      c.setView('unmatched');
+      expect(data(c).map(e => e.id)).toEqual(['hash-1']);
+    });
+
+    it('switches lists before a paginator exists', () => {
+      const c = build();
+      c.ngOnInit();
+      view(c).dataSource.paginator = null;
+      expect(() => c.setView('rejected')).not.toThrow();
+    });
+
+    it('stays on the rejected list after an assign reloads the page', () => {
+      emailService.getRejected.mockReturnValue(of([rejected(), rejected({ id: 'r-2' })]));
+      const c = build();
+      c.ngOnInit();
+      c.setView('rejected');
+      afterClosed = true;
+      emailService.getRejected.mockReturnValue(of([rejected({ id: 'r-2' })]));
+      c.openAssignDialog(rejected(), { stopPropagation: jest.fn() } as unknown as Event);
+      expect(view(c).view).toBe('rejected');
+      expect(data(c).map(e => e.id)).toEqual(['r-2']);
+    });
+
+    it('shows an empty rejected list when it cannot be read, without losing the queue', () => {
+      emailService.getUnmatched.mockReturnValue(of([entry()]));
+      emailService.getRejected.mockReturnValue(throwError(() => new Error('boom')));
+      const c = build();
+      c.ngOnInit();
+      expect(view(c).rejected).toEqual([]);
+      expect(data(c)).toHaveLength(1);
+    });
+
+    it('shows the counts, the reason and who sent it', () => {
+      emailService.getUnmatched.mockReturnValue(of([entry()]));
+      emailService.getRejected.mockReturnValue(of([
+        rejected(),
+        rejected({ id: 'r-2', rejected_reason: 'spam', forwarded_by: undefined }),
+      ]));
+      const fixture = TestBed.configureTestingModule({
+        imports: [UnmatchedEmails],
+        providers: [
+          { provide: EmailService, useValue: emailService },
+          { provide: ContactService, useValue: contactService },
+          { provide: MatDialog, useValue: dialog },
+        ],
+      }).createComponent(UnmatchedEmails);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      const toggles = Array.from(el.querySelectorAll('mat-button-toggle')).map(n => n.textContent?.trim());
+      expect(toggles).toEqual(['Awaiting review (1)', 'Rejected (2)']);
+      expect(el.querySelector('.rejected-chip')).toBeNull();
+
+      const show = () => { fixture.componentInstance['cdr'].markForCheck(); fixture.detectChanges(); };
+      fixture.componentInstance.setView('rejected');
+      show();
+      expect(Array.from(el.querySelectorAll('.rejected-chip')).map(n => n.textContent?.trim()))
+        .toEqual(['Sender is not staff', 'Flagged as spam']);
+
+      fixture.componentInstance.toggleExpanded({ id: 'r-1' });
+      show();
+      expect(el.querySelector('.rejected-note')?.textContent?.replace(/\s+/g, ' ').trim())
+        .toBe('Sent to the Hub by someone@example.com. Sender is not staff. Assign it if it is genuine, or discard it.');
+      fixture.componentInstance.toggleExpanded({ id: 'r-2' });
+      show();
+      expect(el.querySelector('.rejected-note')?.textContent).toContain('Sent to the Hub by an unknown address.');
+    });
+
+    it('says so when a list is empty', () => {
+      const fixture = TestBed.configureTestingModule({
+        imports: [UnmatchedEmails],
+        providers: [
+          { provide: EmailService, useValue: emailService },
+          { provide: ContactService, useValue: contactService },
+          { provide: MatDialog, useValue: dialog },
+        ],
+      }).createComponent(UnmatchedEmails);
+      fixture.detectChanges();
+      const note = () => (fixture.nativeElement as HTMLElement).querySelector('.empty-note')?.textContent?.trim();
+      expect(note()).toBe('No emails waiting for review.');
+      fixture.componentInstance.setView('rejected');
+      fixture.componentInstance['cdr'].markForCheck();
+      fixture.detectChanges();
+      expect(note()).toBe('No rejected emails.');
+    });
   });
 
   it('expands and collapses a row; an id-less row collapses to null', () => {
