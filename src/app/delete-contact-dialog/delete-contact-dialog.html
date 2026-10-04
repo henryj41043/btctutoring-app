@@ -14,12 +14,11 @@
     <div class="cognito-warning">
       <mat-icon color="warn">warning</mat-icon>
       <p>
-        All <strong>students</strong>, <strong>notes</strong> and <strong>documents</strong>
-        associated with this contact will also be permanently deleted.
-        @if (documentCount > 0) {
-          <span class="document-count">
-            This contact has {{documentCount}} {{documentCount === 1 ? 'document' : 'documents'}}.
-          </span>
+        All <strong>students</strong>, <strong>notes</strong>, <strong>documents</strong>,
+        <strong>reminders</strong> and <strong>scholarship records</strong> associated with this
+        contact will also be permanently deleted, and their <strong>filed emails</strong> removed.
+        @if (countsText) {
+          <span class="document-count">{{countsText}}</span>
         }
       </p>
     </div>

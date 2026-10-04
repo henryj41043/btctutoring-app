@@ -28,6 +28,11 @@ export class EmailService {
     return this.httpClient.post<Response>(`${this.baseUrl}/emails/${id}/discard`, {});
   }
 
+  /** Removes every email filed on a contact (the contact is being deleted). */
+  discardForContact(contactId: string): Observable<{discarded: number}> {
+    return this.httpClient.post<{discarded: number}>(`${this.baseUrl}/emails/contact/${contactId}/discard`, {});
+  }
+
   getOriginalUrl(id: string): Observable<{url: string}> {
     return this.httpClient.get<{url: string}>(`${this.baseUrl}/emails/${id}/original-url`);
   }

@@ -24,6 +24,11 @@ export class ScholarshipService {
       `${this.baseUrl}/scholarships`, {params: {contact: contactId}});
   }
 
+  /** Deletes every month's record of a contact (the contact is being deleted). */
+  deleteForContact(contactId: string): Observable<{deleted: number}> {
+    return this.httpClient.delete<{deleted: number}>(`${this.baseUrl}/scholarships/contact/${contactId}`);
+  }
+
   upsertScholarshipRecord(record: ScholarshipRecord): Observable<Response> {
     return this.httpClient.post<Response>(`${this.baseUrl}/scholarships`, record);
   }
