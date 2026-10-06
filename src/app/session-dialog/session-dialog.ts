@@ -892,8 +892,9 @@ export class SessionDialog implements OnInit {
 
       const originalStatus = this.dialogData.session.status;
       const newStatus: SessionStatus = this.selectedAttendance;
-      const isStatusChange = this.hasStudent
-        && originalStatus === SessionStatus.PENDING
+      // Attendance on ANY session, admin sessions included, goes through the
+      // attendance route: the ordinary update refuses to finalize a session.
+      const isStatusChange = originalStatus === SessionStatus.PENDING
         && newStatus !== SessionStatus.PENDING;
 
       if (this.hasStudent) {

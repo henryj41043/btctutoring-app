@@ -1725,8 +1725,13 @@ describe('StudentDialog', () => {
       Array.from({ length: n }, (_, i) => ({ id: `x-${i}`, type: 'TUTORING', status: 'Pending' }));
 
     beforeEach(() => {
+      // The fixture's change dates are fixed; pin the clock so they stay in
+      // the future (a change may only be moved to tomorrow or later).
+      jest.useFakeTimers().setSystemTime(new Date(2026, 8, 1, 12, 0));
       studentService.updateStudent.mockReturnValue(of({} as Student));
     });
+
+    afterEach(() => jest.useRealTimers());
 
     it('an untouched list never prompts or rebuilds', () => {
       const c = build({ mode: 'edit', student: enrolled() });
