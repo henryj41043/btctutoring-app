@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError, Subject } from 'rxjs';
@@ -72,6 +72,13 @@ describe('SessionDialog', () => {
     contact: () => ({ id: ownContactId }),
   };
 
+  /** The fixture behind the last build(), for specs that read the template. */
+  let lastFixture: ComponentFixture<SessionDialog>;
+  const renderedText = (): string => {
+    lastFixture.detectChanges();
+    return (lastFixture.nativeElement as HTMLElement).textContent ?? '';
+  };
+
   const build = (data: SessionDialogData): SessionDialog => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -86,7 +93,8 @@ describe('SessionDialog', () => {
         { provide: PackageService, useValue: packageServiceStub },
       ],
     });
-    const c = TestBed.createComponent(SessionDialog).componentInstance;
+    lastFixture = TestBed.createComponent(SessionDialog);
+    const c = lastFixture.componentInstance;
     // Specs drive the component without ngOnInit; give it the loaded catalog
     // (production state once the SWR fetch lands).
     (c as unknown as { catalog: unknown }).catalog = TEST_CATALOG;
@@ -929,6 +937,38 @@ describe('SessionDialog', () => {
       sessionsService.updateSession.mockReturnValue(of({ id: 'sess-1' }));
       c.updateSession();
       expect(sessionsService.updateSession).toHaveBeenCalled();
+      expect(sessionsService.updateSession.mock.calls[0][0].status).toBe(SessionStatus.PENDING);
+      expect(sessionsService.setAttendance).not.toHaveBeenCalled();
+    });
+
+    it('completing an admin session goes through the attendance route (regression: 2026-10-05 "Update session failed")', () => {
+      const c = primedEdit(editData({ type: SessionType.ADMIN }));
+      c.selectedType = SessionType.ADMIN;
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      c.notes = 'Billing and emails.';
+      c.updateSession();
+      expect(c.showStatusConfirm).toBe(true);
+      expect(c.hasError).toBe(false);
+      expect(renderedText()).toContain('Attendance is final once saved.');
+      expect(renderedText()).toContain('Only an admin can change it afterwards. Are you sure you want to continue?');
+      expect(renderedText()).not.toContain('bank their minutes');
+      c.confirmStatusChange();
+      // The ordinary update never carries the finalized status (the service
+      // refuses it); only the attendance call does.
+      expect(sessionsService.updateSession.mock.calls.map(call => call[0].status))
+        .toEqual(sessionsService.updateSession.mock.calls.map(() => SessionStatus.PENDING));
+      expect(sessionsService.setAttendance).toHaveBeenCalledWith(
+        'sess-1', { status: SessionStatus.COMPLETED, notes: 'Billing and emails.' },
+      );
+      expect(studentService.updateStudent).not.toHaveBeenCalled();
+      expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    it('a student session keeps the make-up wording in the attendance warning', () => {
+      const c = primedEdit(editData());
+      c.selectedAttendance = SessionStatus.COMPLETED;
+      c.updateSession();
+      expect(renderedText()).toContain('bank their minutes');
     });
 
     it('surfaces an update error', () => {
