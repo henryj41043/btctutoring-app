@@ -535,6 +535,58 @@ describe('Payroll', () => {
     expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
   });
 
+  it('counts sessions on the first and last day of the period (regression: Sept 30 dropped)', () => {
+    sessionsService.getSessionsByTutor.mockReturnValue(
+      of([
+        {
+          // Midnight on the first day of the period.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-09-16T00:00:00',
+          end_datetime: '2026-09-16T01:00:00',
+        },
+        {
+          // Evening of the last day of the period.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-09-30T19:00:00',
+          end_datetime: '2026-09-30T20:30:00',
+        },
+        {
+          // Last minute of the last day still counts.
+          type: SessionType.ADMIN,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-09-30T23:59:59',
+          end_datetime: '2026-09-30T23:59:59',
+        },
+        {
+          // The next period's first minute does not.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-10-01T00:00:00',
+          end_datetime: '2026-10-01T01:00:00',
+        },
+        {
+          // Nor the previous period's last minute.
+          type: SessionType.TUTORING,
+          status: SessionStatus.COMPLETED,
+          start_datetime: '2026-09-15T23:59:59',
+          end_datetime: '2026-09-16T01:00:00',
+        },
+      ] as Session[]),
+    );
+    const p = build();
+    p.onDateChange(new Date(2026, 8, 30));
+    expect(priv(p).startDate).toEqual(new Date(2026, 8, 16));
+    expect(priv(p).endDate).toEqual(new Date(2026, 8, 30, 23, 59, 59, 999));
+    const entry = data(p)[0];
+    expect(entry.tutoring_hours).toBe(2.5);
+    expect(entry.administrative_time).toBe(0);
+    expect(entry.hours_subtotal).toBe(2.5);
+    const [, range] = sessionsService.getSessionsByTutor.mock.calls.at(-1)!;
+    expect(range.to).toBe(new Date(2026, 8, 30, 23, 59, 59, 999).toISOString());
+  });
+
   it('uses the first half of the month for an early date and the second half later', () => {
     sessionsService.getSessionsByTutor.mockReturnValue(of([]));
     const p = build();
