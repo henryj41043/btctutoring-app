@@ -163,10 +163,29 @@ describe('Scholarships', () => {
   it('exports the month as CSV with formatted dates', () => {
     const toCsvSpy = jest.spyOn(csv, 'toCsvString').mockReturnValue('CSV');
     const downloadSpy = jest.spyOn(csv, 'downloadCsv').mockImplementation(() => undefined);
+    // Three families: dates + family N/A, BTC N/A + family date, no record yet.
+    contactService.getContacts.mockReturnValue(of([
+      contact(),
+      contact({id: 'c-2', first_name: 'Dana', last_name: 'Moss', scholarship_name: 'Fund B'}),
+      contact({id: 'c-3', first_name: 'Eli', last_name: 'Nash', scholarship_name: 'Fund C'}),
+    ]));
+    studentService.getStudents.mockReturnValue(of([
+      scholarshipStudent(),
+      scholarshipStudent({id: 's-2', contact_id: 'c-2'}),
+      scholarshipStudent({id: 's-3', contact_id: 'c-3'}),
+    ]));
     scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(of([
       record({
         date_funds_requested_by_btc: new Date(2026, 7, 5),
+        funds_requested_by_family_na: true,
         invoice_paid_date: new Date(2026, 7, 20),
+      }),
+      record({
+        contact_id: 'c-2',
+        invoice_number: 'INV-9',
+        funds_requested_by_btc_na: true,
+        date_funds_requested_by_btc: new Date(2026, 7, 6),
+        date_funds_requested_by_family: new Date(2026, 7, 7),
       }),
     ]));
     const c = build();
@@ -175,7 +194,11 @@ describe('Scholarships', () => {
     expect(toCsvSpy).toHaveBeenCalledWith(
       ['Family', 'Scholarship Name', 'State', 'Funds Requested By BTC',
        'Funds Requested By Family', 'Invoice Number', 'Invoice Paid Date'],
-      [['Casey Lee', 'Fund A', 'PA', '8/5/2026', '', 'INV-8', '8/20/2026']],
+      [
+        ['Casey Lee', 'Fund A', 'PA', '8/5/2026', 'N/A', 'INV-8', '8/20/2026'],
+        ['Dana Moss', 'Fund B', 'PA', 'N/A', '8/7/2026', 'INV-9', ''],
+        ['Eli Nash', 'Fund C', '', '', '', '', ''],
+      ],
     );
     expect(downloadSpy).toHaveBeenCalledWith('scholarships-2026-08.csv', 'CSV');
     toCsvSpy.mockRestore();

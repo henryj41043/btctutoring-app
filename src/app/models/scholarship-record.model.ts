@@ -13,6 +13,9 @@ export class ScholarshipRecord {
   invoice_Month?: string;
   date_funds_requested_by_btc?: Date;
   date_funds_requested_by_family?: Date;
+  /** 'N/A': no request by BTC (resp. the family) this month; the date is then empty. */
+  funds_requested_by_btc_na?: boolean;
+  funds_requested_by_family_na?: boolean;
   invoice_number?: string;
   invoice_paid_date?: Date;
 }

@@ -12,6 +12,11 @@ export function scholarshipDate(value: DateValue): string {
   return isNaN(date.getTime()) ? '' : formatDate(date, 'M/d/yyyy', 'en-US');
 }
 
+/** 'N/A' when marked so, else the formatted date, else ''. */
+export function requestedDateText(value: DateValue, notApplicable: boolean | undefined): string {
+  return notApplicable ? 'N/A' : scholarshipDate(value);
+}
+
 /** One line for exports: 'Scholarship: PA · Invoice INV-7 · Paid 9/3/2026'. */
 export function scholarshipSummary(record: ScholarshipRecord): string {
   const parts: string[] = [];
@@ -21,11 +26,11 @@ export function scholarshipSummary(record: ScholarshipRecord): string {
   if (record.invoice_number) {
     parts.push(`Invoice ${record.invoice_number}`);
   }
-  const requestedByBtc = scholarshipDate(record.date_funds_requested_by_btc);
+  const requestedByBtc = requestedDateText(record.date_funds_requested_by_btc, record.funds_requested_by_btc_na);
   if (requestedByBtc) {
     parts.push(`Requested by BTC ${requestedByBtc}`);
   }
-  const requestedByFamily = scholarshipDate(record.date_funds_requested_by_family);
+  const requestedByFamily = requestedDateText(record.date_funds_requested_by_family, record.funds_requested_by_family_na);
   if (requestedByFamily) {
     parts.push(`Requested by family ${requestedByFamily}`);
   }

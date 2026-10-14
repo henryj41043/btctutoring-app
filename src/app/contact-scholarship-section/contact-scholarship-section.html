@@ -29,18 +29,24 @@
       <mat-label>Invoice Month</mat-label>
       <input matInput formControlName="invoice_Month">
     </mat-form-field>
-    <mat-form-field>
-      <mat-label>Date Funds Requested By BTC</mat-label>
-      <input matInput [matDatepicker]="dfrbbtcDatepicker" formControlName="date_funds_requested_by_btc">
-      <mat-datepicker #dfrbbtcDatepicker/>
-      <mat-datepicker-toggle [for]="dfrbbtcDatepicker" matSuffix/>
-    </mat-form-field>
-    <mat-form-field>
-      <mat-label>Date Funds Requested By Family</mat-label>
-      <input matInput [matDatepicker]="dfrbfDatepicker" formControlName="date_funds_requested_by_family">
-      <mat-datepicker #dfrbfDatepicker/>
-      <mat-datepicker-toggle [for]="dfrbfDatepicker" matSuffix/>
-    </mat-form-field>
+    <div class="date-with-na">
+      <mat-form-field>
+        <mat-label>Date Funds Requested By BTC</mat-label>
+        <input matInput [matDatepicker]="dfrbbtcDatepicker" formControlName="date_funds_requested_by_btc">
+        <mat-datepicker #dfrbbtcDatepicker/>
+        <mat-datepicker-toggle [for]="dfrbbtcDatepicker" matSuffix/>
+      </mat-form-field>
+      <mat-checkbox formControlName="funds_requested_by_btc_na">N/A</mat-checkbox>
+    </div>
+    <div class="date-with-na">
+      <mat-form-field>
+        <mat-label>Date Funds Requested By Family</mat-label>
+        <input matInput [matDatepicker]="dfrbfDatepicker" formControlName="date_funds_requested_by_family">
+        <mat-datepicker #dfrbfDatepicker/>
+        <mat-datepicker-toggle [for]="dfrbfDatepicker" matSuffix/>
+      </mat-form-field>
+      <mat-checkbox formControlName="funds_requested_by_family_na">N/A</mat-checkbox>
+    </div>
     <mat-form-field>
       <mat-label>Invoice Number</mat-label>
       <input matInput formControlName="invoice_number">
