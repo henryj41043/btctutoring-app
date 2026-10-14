@@ -245,7 +245,9 @@ export class Payroll implements OnInit {
   }
 
   private loadPayroll(date: Date): void {
-    this.endDate = date;
+    // The period runs to the END of the picked day: a session on the last
+    // day of the period counts (Sept 30 was dropped before 2026-10-13).
+    this.endDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
     if (date.getDate() <= 15) {
       this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
     } else {
@@ -309,7 +311,7 @@ export class Payroll implements OnInit {
   private payPeriodRange(): {from: string; to: string} {
     return {
       from: this.startDate!.toISOString(),
-      to: new Date(this.endDate!.getFullYear(), this.endDate!.getMonth(), this.endDate!.getDate(), 23, 59, 59, 999).toISOString(),
+      to: this.endDate!.toISOString(),
     };
   }
 
@@ -401,7 +403,8 @@ export class Payroll implements OnInit {
   private calculateTime(startTime: string, endTime: string): number {
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
-    if (startDate.getTime() < this.endDate!.getTime() && startDate.getTime() > this.startDate!.getTime()) {
+    // Inclusive at both ends: midnight on the 1st/16th and the whole last day.
+    if (startDate.getTime() <= this.endDate!.getTime() && startDate.getTime() >= this.startDate!.getTime()) {
       const msInHour = 1000 * 60 * 60;
       return Math.round(((endDate.getTime() - startDate.getTime()) / msInHour) * 100) / 100;
     }
