@@ -1,4 +1,5 @@
 import {TestBed} from '@angular/core/testing';
+import {FormGroup} from '@angular/forms';
 import {of, throwError} from 'rxjs';
 import {ContactScholarshipSection, SCHOLARSHIP_MONTHS_AHEAD} from './contact-scholarship-section';
 import {ScholarshipService} from '../services/scholarship.service';
@@ -166,6 +167,41 @@ describe('ContactScholarshipSection', () => {
     const c = build();
     c.onMonthChange('2026-07');
     expect(priv(c).scholarshipForm.value['invoice_paid_date']).toBeInstanceOf(Date);
+  });
+
+  it("marking a request date N/A clears and locks it; unmarking opens it again", () => {
+    scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([]));
+    const c = build();
+    const form = (c as never as {scholarshipForm: FormGroup}).scholarshipForm;
+    form.patchValue({date_funds_requested_by_btc: new Date(2026, 7, 2)});
+    form.patchValue({funds_requested_by_btc_na: true});
+    expect(form.get('date_funds_requested_by_btc')!.value).toBeNull();
+    expect(form.get('date_funds_requested_by_btc')!.disabled).toBe(true);
+    expect(form.get('date_funds_requested_by_family')!.disabled).toBe(false);
+    c.save();
+    expect(scholarshipService.upsertScholarshipRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        funds_requested_by_btc_na: true,
+        date_funds_requested_by_btc: null,
+        funds_requested_by_family_na: false,
+      }),
+    );
+    form.patchValue({funds_requested_by_btc_na: false});
+    expect(form.get('date_funds_requested_by_btc')!.disabled).toBe(false);
+  });
+
+  it('a stored N/A loads locked, and a month without it loads open', () => {
+    scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([
+      record({funds_requested_by_family_na: true}),
+    ]));
+    const c = build();
+    const form = (c as never as {scholarshipForm: FormGroup}).scholarshipForm;
+    c.onMonthChange('2026-07');
+    expect(form.get('funds_requested_by_family_na')!.value).toBe(true);
+    expect(form.get('date_funds_requested_by_family')!.disabled).toBe(true);
+    c.onMonthChange('2026-08');
+    expect(form.get('funds_requested_by_family_na')!.value).toBe(false);
+    expect(form.get('date_funds_requested_by_family')!.disabled).toBe(false);
   });
 
   it('switching back to an empty month resets the form', () => {

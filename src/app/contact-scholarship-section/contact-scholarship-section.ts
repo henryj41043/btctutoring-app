@@ -7,6 +7,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatCheckboxModule} from '@angular/material/checkbox';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {catchError, EMPTY} from 'rxjs';
 import {ScholarshipService} from '../services/scholarship.service';
@@ -36,6 +37,7 @@ export const SCHOLARSHIP_MONTHS_AHEAD = 12;
     MatButtonModule,
     MatDatepickerModule,
     MatProgressSpinnerModule,
+    MatCheckboxModule,
   ],
   templateUrl: './contact-scholarship-section.html',
   styleUrl: './contact-scholarship-section.scss',
@@ -66,9 +68,37 @@ export class ContactScholarshipSection implements OnInit {
     invoice_Month: [''],
     date_funds_requested_by_btc: [null],
     date_funds_requested_by_family: [null],
+    // 'N/A': no request will be made; the matching date is cleared and locked.
+    funds_requested_by_btc_na: [false],
+    funds_requested_by_family_na: [false],
     invoice_number: [''],
     invoice_paid_date: [null],
   });
+
+  /** The N/A flag of each request date and the date it governs. */
+  private static readonly NA_PAIRS: ReadonlyArray<[string, string]> = [
+    ['funds_requested_by_btc_na', 'date_funds_requested_by_btc'],
+    ['funds_requested_by_family_na', 'date_funds_requested_by_family'],
+  ];
+
+  constructor() {
+    for (const [flag, date] of ContactScholarshipSection.NA_PAIRS) {
+      this.scholarshipForm.get(flag)!.valueChanges.pipe(
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe((notApplicable: boolean) => this.applyNa(date, notApplicable));
+    }
+  }
+
+  /** A date marked N/A is cleared and locked; unmarking opens it again. */
+  private applyNa(date: string, notApplicable: boolean): void {
+    const control = this.scholarshipForm.get(date)!;
+    if (notApplicable) {
+      control.setValue(null, {emitEvent: false});
+      control.disable({emitEvent: false});
+    } else {
+      control.enable({emitEvent: false});
+    }
+  }
 
   ngOnInit(): void {
     if (!this.authService.isAdmin()) {
@@ -135,6 +165,8 @@ export class ContactScholarshipSection implements OnInit {
       invoice_Month: record?.invoice_Month ?? '',
       date_funds_requested_by_btc: toDate(record?.date_funds_requested_by_btc),
       date_funds_requested_by_family: toDate(record?.date_funds_requested_by_family),
+      funds_requested_by_btc_na: record?.funds_requested_by_btc_na ?? false,
+      funds_requested_by_family_na: record?.funds_requested_by_family_na ?? false,
       invoice_number: record?.invoice_number ?? '',
       invoice_paid_date: toDate(record?.invoice_paid_date),
     });
@@ -148,10 +180,11 @@ export class ContactScholarshipSection implements OnInit {
     }
     this.saving = true;
     this.hasError = false;
+    // getRawValue: a date locked by N/A is still sent (as null) and cleared.
     const record: ScholarshipRecord = {
       contact_id: this.contactId,
       month: this.selectedMonth,
-      ...this.scholarshipForm.value,
+      ...this.scholarshipForm.getRawValue(),
     };
     this.scholarshipService.upsertScholarshipRecord(record).pipe(
       catchError(error => {

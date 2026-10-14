@@ -1,4 +1,4 @@
-import {scholarshipDate, scholarshipSummary} from './scholarship-view';
+import {requestedDateText, scholarshipDate, scholarshipSummary} from './scholarship-view';
 
 describe('scholarship-view', () => {
   describe('scholarshipDate', () => {
@@ -14,6 +14,16 @@ describe('scholarship-view', () => {
     });
   });
 
+  describe('requestedDateText', () => {
+    it("is 'N/A' when marked, else the date, else empty", () => {
+      expect(requestedDateText(new Date(2026, 8, 3), true)).toBe('N/A');
+      expect(requestedDateText(null, true)).toBe('N/A');
+      expect(requestedDateText(new Date(2026, 8, 3), false)).toBe('9/3/2026');
+      expect(requestedDateText(new Date(2026, 8, 3), undefined)).toBe('9/3/2026');
+      expect(requestedDateText(null, undefined)).toBe('');
+    });
+  });
+
   describe('scholarshipSummary', () => {
     it('lists what is filled in, in a fixed order', () => {
       expect(scholarshipSummary({
@@ -23,6 +33,14 @@ describe('scholarship-view', () => {
         date_funds_requested_by_family: new Date(2026, 7, 5),
         invoice_paid_date: new Date(2026, 8, 3),
       })).toBe('Scholarship: PA · Invoice INV-7 · Requested by BTC 8/1/2026 · Requested by family 8/5/2026 · Paid 9/3/2026');
+    });
+
+    it("says N/A for a request that will not be made", () => {
+      expect(scholarshipSummary({
+        funds_requested_by_btc_na: true,
+        date_funds_requested_by_family: new Date(2026, 7, 5),
+        funds_requested_by_family_na: false,
+      })).toBe('Scholarship: Requested by BTC N/A · Requested by family 8/5/2026');
     });
 
     it('leaves out what is missing', () => {

@@ -35,7 +35,7 @@ import {TableStateStore} from '../utils/table-state';
 import {StatementLine} from '../models/statement.model';
 import {flagLabels, formatMoney, linePeriod, lineSessions, lineSummary, toBillingEntry} from '../utils/statement-view';
 import {monthKeyOf} from '../utils/month-key';
-import {scholarshipSummary} from '../utils/scholarship-view';
+import {requestedDateText, scholarshipSummary} from '../utils/scholarship-view';
 
 /** The month picker shows and announces a month, never a day. */
 const MONTH_FORMATS = {
@@ -109,6 +109,7 @@ export class Billing implements OnInit {
   /** Contact ids of the rows whose breakdown is open. */
   private expanded = new Set<string>();
   protected readonly detailColumns: string[] = ['detail'];
+  protected readonly requestedDateText = requestedDateText;
   /** First-of-month for the selected billing month, used for the header. */
   protected monthStart: Date = new Date();
 

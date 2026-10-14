@@ -24,6 +24,7 @@ import {StudentStatus} from '../enums/student-status.enum';
 import {ScholarshipRecord} from '../models/scholarship-record.model';
 import {downloadCsv, toCsvString} from '../utils/csv';
 import {TableStateStore} from '../utils/table-state';
+import {requestedDateText} from '../utils/scholarship-view';
 
 /** One at-a-glance row: a scholarship family and its record for the month. */
 export interface ScholarshipRow {
@@ -164,6 +165,8 @@ export class Scholarships implements OnInit {
     return !!row.record?.invoice_paid_date;
   }
 
+  protected readonly requestedDateText = requestedDateText;
+
   exportCsv(): void {
     const monthKey = this.monthKeyOf(this.selectedDate);
     const header = [
@@ -174,8 +177,8 @@ export class Scholarships implements OnInit {
       this.familyName(row),
       row.contact.scholarship_name ?? '',
       row.record?.scholarship_state ?? '',
-      this.csvDate(row.record?.date_funds_requested_by_btc),
-      this.csvDate(row.record?.date_funds_requested_by_family),
+      row.record?.funds_requested_by_btc_na ? 'N/A' : this.csvDate(row.record?.date_funds_requested_by_btc),
+      row.record?.funds_requested_by_family_na ? 'N/A' : this.csvDate(row.record?.date_funds_requested_by_family),
       row.record?.invoice_number ?? '',
       this.csvDate(row.record?.invoice_paid_date),
     ]);

@@ -166,6 +166,7 @@ describe('Scholarships', () => {
     scholarshipService.getScholarshipRecordsByMonth.mockReturnValue(of([
       record({
         date_funds_requested_by_btc: new Date(2026, 7, 5),
+        funds_requested_by_family_na: true,
         invoice_paid_date: new Date(2026, 7, 20),
       }),
     ]));
@@ -175,7 +176,7 @@ describe('Scholarships', () => {
     expect(toCsvSpy).toHaveBeenCalledWith(
       ['Family', 'Scholarship Name', 'State', 'Funds Requested By BTC',
        'Funds Requested By Family', 'Invoice Number', 'Invoice Paid Date'],
-      [['Casey Lee', 'Fund A', 'PA', '8/5/2026', '', 'INV-8', '8/20/2026']],
+      [['Casey Lee', 'Fund A', 'PA', '8/5/2026', 'N/A', 'INV-8', '8/20/2026']],
     );
     expect(downloadSpy).toHaveBeenCalledWith('scholarships-2026-08.csv', 'CSV');
     toCsvSpy.mockRestore();

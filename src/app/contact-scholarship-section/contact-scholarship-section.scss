@@ -24,6 +24,17 @@
   }
 }
 
+.date-with-na {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+
+  mat-form-field {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .scholarship-actions {
   display: flex;
   align-items: center;

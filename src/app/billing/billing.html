@@ -258,11 +258,11 @@
                     </div>
                     <div>
                       <dt>Funds requested by BTC</dt>
-                      <dd>{{(scholarship.date_funds_requested_by_btc | date:'M/d/yyyy') || '—'}}</dd>
+                      <dd>{{requestedDateText(scholarship.date_funds_requested_by_btc, scholarship.funds_requested_by_btc_na) || '—'}}</dd>
                     </div>
                     <div>
                       <dt>Funds requested by family</dt>
-                      <dd>{{(scholarship.date_funds_requested_by_family | date:'M/d/yyyy') || '—'}}</dd>
+                      <dd>{{requestedDateText(scholarship.date_funds_requested_by_family, scholarship.funds_requested_by_family_na) || '—'}}</dd>
                     </div>
                     <div>
                       <dt>Invoice number</dt>
