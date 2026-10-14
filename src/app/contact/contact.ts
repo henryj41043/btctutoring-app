@@ -679,6 +679,15 @@ export class Contact implements OnInit {
   }
 
   /** A read-only one-line summary of a student's schedule, e.g. "Mon 10:00 AM · Wed 10:00 AM". */
+  /** 'Jul 1, 2026' from the stored start (first 10 chars, read as a local day). */
+  packageStartLabel(student: Student): string | null {
+    const [year, month, day] = (student.package_start_date ?? '').slice(0, 10).split('-').map(Number);
+    if (!year || !month || !day) {
+      return null;
+    }
+    return new Date(year, month - 1, day).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+  }
+
   /**
    * A warning when the schedule's slot count differs from the package's
    * sessions per week (a package change applied without its own schedule

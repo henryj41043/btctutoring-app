@@ -192,7 +192,9 @@ export class StudentDialog implements OnInit {
       end_status: [student.end_status ?? StudentStatus.PAST_STUDENT],
       // Carried through untouched — owned by the Manage Schedule + billing flows.
       schedule: [student.schedule ?? null],
-      package_start_date: [student.package_start_date ?? null],
+      // Set by Manage Schedule when the first schedule is created; an admin
+      // can move it here (client 2026-10-13). Sent back unchanged when untouched.
+      package_start_date: [this.toDate((student.package_start_date ?? '').slice(0, 10))],
       auto_renew: [student.auto_renew ?? false],
     });
     this.buildPlanningOverrideRows(student);
@@ -251,6 +253,32 @@ export class StudentDialog implements OnInit {
     return (this.data.student?.service_end_date ?? '').slice(0, 10) || undefined;
   }
 
+  private get storedStartKey(): string | undefined {
+    return (this.data.student?.package_start_date ?? '').slice(0, 10) || undefined;
+  }
+
+  /** The package start date is editable once a package is set (edit mode). */
+  get showPackageStart(): boolean {
+    return this.mode === 'edit' && !this.locked && !!this.data.student?.package;
+  }
+
+  /**
+   * The start date as it will be saved: the stored value when untouched
+   * (whatever form it has), the new day at local midnight when moved, and
+   * the stored value again when the field was blanked (it cannot be cleared
+   * here). Returns the new key when it moved, else undefined.
+   */
+  private applyPackageStart(student: Student, entered: Date | string | null): string | undefined {
+    const stored = this.data.student?.package_start_date ?? undefined;
+    const key = this.toDateString(entered);
+    if (!key || key === this.storedStartKey) {
+      student.package_start_date = stored;
+      return undefined;
+    }
+    student.package_start_date = `${key}T00:00:00`;
+    return key;
+  }
+
   private startOfDay(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
@@ -300,7 +328,11 @@ export class StudentDialog implements OnInit {
    * What the save must clean up: every upcoming pending tutoring session
    * when leaving Active, or only those after a newly set end date.
    */
-  private cleanupPlan(student: Student, changes: PendingChange[]): {from?: Date; rebuildFrom?: string} | null {
+  private cleanupPlan(
+    student: Student,
+    changes: PendingChange[],
+    movedStart?: string,
+  ): {from?: Date; rebuildFrom?: string} | null {
     if (this.leavingActive(student)) {
       return {};
     }
@@ -313,7 +345,14 @@ export class StudentDialog implements OnInit {
       : undefined;
     // A scheduled change that was removed or re-dated leaves the sessions
     // generated on its schedule behind: they are removed and rebuilt.
-    const rebuildFrom = earliestAffectedChange(pendingChangesOf(this.data.student), changes) ?? undefined;
+    // A moved start date does the same from the earlier of the two dates.
+    const startRebuild = movedStart && (this.data.student?.schedule ?? []).length > 0
+      ? [movedStart, this.storedStartKey ?? movedStart].sort()[0]
+      : undefined;
+    const rebuildFrom = [
+      earliestAffectedChange(pendingChangesOf(this.data.student), changes) ?? undefined,
+      startRebuild,
+    ].filter((key): key is string => !!key).sort()[0];
     const rebuildDate = this.toDate(rebuildFrom) ?? undefined;
     if (!afterEnd && !rebuildDate) {
       return null;
@@ -753,7 +792,12 @@ export class StudentDialog implements OnInit {
     }
     this.applyPricing(student);
     this.applyServiceEnd(student);
+    const movedStart = this.applyPackageStart(student, raw.package_start_date);
     const changes = this.pendingChangesFromRows(pendingRows as Record<string, unknown>[]);
+    if (movedStart && changes.some(c => c.effective && c.effective <= movedStart)) {
+      this.fail('The package start date must be before the first scheduled change.');
+      return;
+    }
     // Per-tutor planning overrides: blank rows mean "use the default". An
     // explicit [] only goes out when stored overrides are being cleared —
     // otherwise the key is omitted so the backend leaves the field alone.
@@ -781,7 +825,7 @@ export class StudentDialog implements OnInit {
     } else {
       student.pending_changes = changes; // [] = clear them all
     }
-    const cleanup = this.cleanupPlan(student, changes);
+    const cleanup = this.cleanupPlan(student, changes, movedStart);
     if (cleanup && !this.deactivationConfirmed) {
       this.cleanupFrom = cleanup.from;
       this.rebuildFromKey = cleanup.rebuildFrom;
