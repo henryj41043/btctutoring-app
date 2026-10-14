@@ -211,7 +211,7 @@
                               <span class="billing-label">{{label}}</span>
                             }
                           </td>
-                          <td>{{linePeriod(line)}}</td>
+                          <td>{{linePeriod(line, statement.month)}}</td>
                           <td>{{lineSessions(line)}}</td>
                           <td class="num">{{line.rate ? (line.rate | currency:'USD':'symbol':'1.2-2') : '—'}}</td>
                           <td class="num">{{line.amount | currency:'USD':'symbol':'1.2-2'}}</td>

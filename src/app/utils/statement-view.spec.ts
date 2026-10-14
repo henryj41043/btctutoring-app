@@ -32,24 +32,48 @@ describe('statement-view', () => {
     expect(shortDate('2026-01-01')).toBe('Jan 1');
   });
 
-  it('knows a whole month from a partial one', () => {
+  it('knows a whole month from a partial one by the session counts', () => {
     expect(coversWholeMonth(statementLine())).toBe(true);
-    expect(coversWholeMonth(statementLine({from: '2026-07-02'}))).toBe(false);
-    expect(coversWholeMonth(statementLine({to: '2026-07-30'}))).toBe(false);
-    expect(coversWholeMonth(statementLine({from: '2026-02-01', to: '2026-02-28'}))).toBe(true);
-    expect(coversWholeMonth(statementLine({from: '2026-09-01', to: '2026-09-30'}))).toBe(true);
-    expect(coversWholeMonth(statementLine({from: '2026-12-01', to: '2026-12-31'}))).toBe(true);
+    // October under the straddling-weeks rule runs Oct 4 to Oct 31 and is still full.
+    expect(coversWholeMonth(statementLine({from: '2026-10-04', to: '2026-10-31', sessions_billed: 8, sessions_in_month: 8}))).toBe(true);
+    expect(coversWholeMonth(statementLine({from: '2026-07-02', sessions_billed: 3}))).toBe(false);
+    expect(coversWholeMonth(statementLine({to: '2026-07-30', sessions_billed: 3}))).toBe(false);
+    // An inner line of a package-change month: fewer sessions than the month holds.
+    expect(coversWholeMonth(statementLine({from: '2026-07-14', sessions_billed: 2, flags: ['package_change']}))).toBe(false);
+  });
+
+  it('falls back to the calendar dates for lines without session counts', () => {
+    const uncounted = {sessions_in_month: 0, sessions_billed: 0};
+    expect(coversWholeMonth(statementLine({...uncounted}))).toBe(true);
+    expect(coversWholeMonth(statementLine({...uncounted, from: '2026-07-02'}))).toBe(false);
+    expect(coversWholeMonth(statementLine({...uncounted, to: '2026-07-30'}))).toBe(false);
+    expect(coversWholeMonth(statementLine({...uncounted, from: '2026-02-01', to: '2026-02-28'}))).toBe(true);
+    expect(coversWholeMonth(statementLine({...uncounted, from: '2026-12-01', to: '2026-12-31'}))).toBe(true);
     // The 11th is not the 1st even though it ends in "1".
-    expect(coversWholeMonth(statementLine({from: '2026-07-11'}))).toBe(false);
+    expect(coversWholeMonth(statementLine({...uncounted, from: '2026-07-11'}))).toBe(false);
+    expect(coversWholeMonth(statementLine({kind: 'prior_package', to: '2026-07-13'}))).toBe(false);
   });
 
   it('describes the days a line covers', () => {
+    const partial = {sessions_billed: 2};
     expect(linePeriod(statementLine())).toBe('Full month');
-    expect(linePeriod(statementLine({from: '2026-07-14'}))).toBe('From Jul 14');
-    expect(linePeriod(statementLine({to: '2026-07-18'}))).toBe('Through Jul 18');
-    expect(linePeriod(statementLine({from: '2026-07-14', to: '2026-07-20'}))).toBe('Jul 14 to Jul 20');
-    expect(linePeriod(statementLine({from: '2026-09-14', to: '2026-09-30'}))).toBe('From Sep 14');
-    expect(linePeriod(statementLine({from: '2026-07-11', to: '2026-07-21'}))).toBe('Jul 11 to Jul 21');
+    expect(linePeriod(statementLine({...partial, from: '2026-07-14'}))).toBe('From Jul 14');
+    expect(linePeriod(statementLine({...partial, to: '2026-07-18'}))).toBe('Through Jul 18');
+    expect(linePeriod(statementLine({...partial, from: '2026-07-14', to: '2026-07-20'}))).toBe('Jul 14 to Jul 20');
+    expect(linePeriod(statementLine({...partial, from: '2026-09-14', to: '2026-09-30'}))).toBe('From Sep 14');
+    expect(linePeriod(statementLine({...partial, from: '2026-07-11', to: '2026-07-21'}))).toBe('Jul 11 to Jul 21');
+  });
+
+  it('reads From and Through against the statement month when given', () => {
+    const partial = {sessions_billed: 1, sessions_in_month: 10};
+    // A September statement carrying the Oct 1 to 3 week.
+    expect(linePeriod(statementLine({...partial, from: '2026-10-01', to: '2026-10-03'}), '2026-09')).toBe('Oct 1 to Oct 3');
+    expect(linePeriod(statementLine({...partial, from: '2026-09-14', to: '2026-10-03'}), '2026-09')).toBe('Sep 14 to Oct 3');
+    // A December statement carrying Nov 29 to Dec 1.
+    expect(linePeriod(statementLine({...partial, from: '2026-11-29', to: '2026-12-01'}), '2026-12')).toBe('Nov 29 to Dec 1');
+    expect(linePeriod(statementLine({...partial, from: '2026-12-01', to: '2026-12-10'}), '2026-12')).toBe('Through Dec 10');
+    // Without the month the line's own month is assumed.
+    expect(linePeriod(statementLine({...partial, from: '2026-10-01', to: '2026-10-03'}))).toBe('Through Oct 3');
   });
 
   it('shows counted sessions only', () => {
@@ -67,6 +91,8 @@ describe('statement-view', () => {
     it('a prorated start', () => {
       expect(lineSummary(statementLine({from: '2026-07-14', sessions_billed: 3, flags: ['prorated_start']})))
         .toBe('Pat: Succeed, from Jul 14, 3 of 4 sessions at $83.54');
+      expect(lineSummary(statementLine({from: '2026-10-01', to: '2026-10-03', sessions_billed: 1, sessions_in_month: 10, flags: ['prorated_start']}), '2026-09'))
+        .toBe('Pat: Succeed, Oct 1 to Oct 3, 1 of 10 sessions at $83.54');
     });
 
     it('a legacy prior-package portion has no session count', () => {
