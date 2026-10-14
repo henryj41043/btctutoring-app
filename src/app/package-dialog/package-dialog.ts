@@ -47,7 +47,8 @@ export class PackageDialog {
 
   protected packageForm: FormGroup = this.formBuilder.group({
     id: ['', Validators.required],
-    monthlyCost: [null, [Validators.required, Validators.min(1)]],
+    // $0 is allowed: a 'ghost' package for students who are not charged.
+    monthlyCost: [null, [Validators.required, Validators.min(0)]],
     sessionsPerWeek: [null, [Validators.required, Validators.min(1)]],
     sessionLengthMin: [null, [Validators.required, Validators.min(1)]],
   });
@@ -67,8 +68,12 @@ export class PackageDialog {
       this.errorMessage = `'${CUSTOM_PACKAGE}' is reserved for per-student custom packages.`;
       return;
     }
-    if (!(value.monthlyCost > 0) || !(value.sessionsPerWeek > 0) || !(value.sessionLengthMin > 0)) {
-      this.errorMessage = 'Price, sessions per week, and session length must all be positive.';
+    if (!(value.monthlyCost >= 0)) {
+      this.errorMessage = 'The price must be $0 or more.';
+      return;
+    }
+    if (!(value.sessionsPerWeek > 0) || !(value.sessionLengthMin > 0)) {
+      this.errorMessage = 'Sessions per week and session length must both be positive.';
       return;
     }
     this.submitting = true;
