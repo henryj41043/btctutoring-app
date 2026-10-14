@@ -80,6 +80,7 @@ describe('Contact', () => {
   const scheduleService = {
     scheduleSummary: jest.fn().mockReturnValue([]),
     deleteFuturePendingSessions: jest.fn(() => of(0)),
+    resolveDef: jest.fn(),
   };
   const sessionsService = { getAllSessions: jest.fn(), getScheduledMakeup: jest.fn() };
   const billingService = {
@@ -1062,6 +1063,42 @@ describe('Contact', () => {
       c.discardContactChanges();
       expect(form(c).controls['first_name'].value).toBe('Ada');
       expect(form(c).pristine).toBe(true);
+    });
+
+    it('warns on the card when the schedule has fewer slots than the package', () => {
+      const c = build();
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{
+          id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT,
+          package: 'Achieve', schedule: [{ weekday: 'TUESDAY', start_time: '14:30', end_time: '15:00' }],
+        }]),
+      );
+      scheduleService.resolveDef.mockReturnValue({ monthlyCost: 546, sessionsPerWeek: 3, sessionLengthMin: 30 });
+      c.ngOnInit();
+      expect(c.scheduleGap(students(c)[0]))
+        .toBe('Schedule has 1 of 3 sessions per week. Use Manage schedule to fix it.');
+      const fixture = TestBed.createComponent(Contact);
+      fixture.componentInstance.id = 'c-1';
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector('.schedule-gap')?.textContent)
+        .toContain('Schedule has 1 of 3 sessions per week');
+    });
+
+    it('shows no schedule warning when the slots match, cannot be compared, or there is no schedule', () => {
+      const c = build();
+      studentService.getStudentsByContact.mockReturnValue(
+        of([{ id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT, package: 'Thrive' }]),
+      );
+      scheduleService.resolveDef.mockReturnValue({ monthlyCost: 1, sessionsPerWeek: 1, sessionLengthMin: 30 });
+      c.ngOnInit();
+      const student = students(c)[0];
+      expect(c.scheduleGap(student)).toBeNull(); // no schedule
+      student.schedule = [{ weekday: 'MONDAY', start_time: '10:00', end_time: '10:30' }];
+      expect(c.scheduleGap(student)).toBeNull(); // matches
+      scheduleService.resolveDef.mockReturnValue(null);
+      expect(c.scheduleGap(student)).toBeNull(); // unresolvable package
+      (c as unknown as { catalog: unknown }).catalog = null;
+      expect(c.scheduleGap(student)).toBeNull(); // catalog not loaded
     });
 
     it('summarizes a student schedule for the card', () => {

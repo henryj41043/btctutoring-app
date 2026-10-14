@@ -233,6 +233,11 @@
   .save-status--err { color: var(--mat-sys-error, red); }
 }
 
+.schedule-gap {
+  color: var(--mat-sys-error);
+  font-weight: 500;
+}
+
 .schedule-summary {
   grid-column: 1 / -1;
   display: flex;

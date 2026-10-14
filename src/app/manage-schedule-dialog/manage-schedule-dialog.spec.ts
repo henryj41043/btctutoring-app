@@ -92,6 +92,25 @@ describe('ManageScheduleDialog', () => {
       expect(c.autoRenew).toBe(true);
     });
 
+    it('pads an existing schedule that has fewer slots than the package (edit mode)', () => {
+      // Determination is 2 a week; one stored slot (a change applied without a
+      // schedule) gets a blank second row.
+      const c = build({student: {name: 'Pat', package: 'Determination', schedule: [slots[0]]} as Student, tutor});
+      expect(c.isEdit).toBe(true);
+      expect(c.scheduleSlots).toEqual([
+        {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null, length_min: null},
+        {weekday: null, start_time: '', tutor_id: null, length_min: null},
+      ]);
+    });
+
+    it('keeps extra slots of an existing schedule for review (edit mode)', () => {
+      const three = [...slots, {weekday: Weekday.FRIDAY, start_time: '10:00', end_time: '11:00'}];
+      const c = build({student: {name: 'Pat', package: 'Determination', schedule: three} as Student, tutor});
+      expect(c.scheduleSlots).toHaveLength(3);
+      c.save();
+      expect(c.errorMessage).toContain('requires 2');
+    });
+
     it('pre-seeds slots from an existing schedule (edit mode)', () => {
       const c = build({student: {name: 'Pat', package: 'Determination', schedule: slots, auto_renew: false} as Student, tutor});
       expect(c.isEdit).toBe(true);
