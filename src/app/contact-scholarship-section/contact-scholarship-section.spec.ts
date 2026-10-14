@@ -169,12 +169,35 @@ describe('ContactScholarshipSection', () => {
     expect(priv(c).scholarshipForm.value['invoice_paid_date']).toBeInstanceOf(Date);
   });
 
+  it('starts with both N/A flags off and both request dates open', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [ContactScholarshipSection],
+      providers: [
+        {provide: ScholarshipService, useValue: scholarshipService},
+        {provide: AuthService, useValue: authService},
+      ],
+    });
+    // Before ngOnInit: the form's own defaults.
+    const c = TestBed.createComponent(ContactScholarshipSection).componentInstance;
+    const form = (c as never as {scholarshipForm: FormGroup}).scholarshipForm;
+    expect(form.value['funds_requested_by_btc_na']).toBe(false);
+    expect(form.value['funds_requested_by_family_na']).toBe(false);
+    expect(form.get('date_funds_requested_by_btc')!.enabled).toBe(true);
+    expect(form.get('date_funds_requested_by_family')!.enabled).toBe(true);
+  });
+
   it("marking a request date N/A clears and locks it; unmarking opens it again", () => {
     scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([]));
     const c = build();
     const form = (c as never as {scholarshipForm: FormGroup}).scholarshipForm;
     form.patchValue({date_funds_requested_by_btc: new Date(2026, 7, 2)});
+    // The lock itself is silent: one form change per checkbox click, so the
+    // unsaved-changes hint and OnPush see exactly the user's edit.
+    let changes = 0;
+    const sub = form.valueChanges.subscribe(() => changes++);
     form.patchValue({funds_requested_by_btc_na: true});
+    expect(changes).toBe(1);
     expect(form.get('date_funds_requested_by_btc')!.value).toBeNull();
     expect(form.get('date_funds_requested_by_btc')!.disabled).toBe(true);
     expect(form.get('date_funds_requested_by_family')!.disabled).toBe(false);
@@ -186,20 +209,27 @@ describe('ContactScholarshipSection', () => {
         funds_requested_by_family_na: false,
       }),
     );
+    changes = 0;
     form.patchValue({funds_requested_by_btc_na: false});
+    expect(changes).toBe(1);
     expect(form.get('date_funds_requested_by_btc')!.disabled).toBe(false);
+    sub.unsubscribe();
   });
 
   it('a stored N/A loads locked, and a month without it loads open', () => {
     scholarshipService.getScholarshipRecordsByContact.mockReturnValue(of([
-      record({funds_requested_by_family_na: true}),
+      record({funds_requested_by_btc_na: true, funds_requested_by_family_na: true}),
     ]));
     const c = build();
     const form = (c as never as {scholarshipForm: FormGroup}).scholarshipForm;
     c.onMonthChange('2026-07');
+    expect(form.get('funds_requested_by_btc_na')!.value).toBe(true);
+    expect(form.get('date_funds_requested_by_btc')!.disabled).toBe(true);
     expect(form.get('funds_requested_by_family_na')!.value).toBe(true);
     expect(form.get('date_funds_requested_by_family')!.disabled).toBe(true);
     c.onMonthChange('2026-08');
+    expect(form.get('funds_requested_by_btc_na')!.value).toBe(false);
+    expect(form.get('date_funds_requested_by_btc')!.disabled).toBe(false);
     expect(form.get('funds_requested_by_family_na')!.value).toBe(false);
     expect(form.get('date_funds_requested_by_family')!.disabled).toBe(false);
   });
