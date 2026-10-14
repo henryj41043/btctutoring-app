@@ -363,18 +363,16 @@ export class Payroll implements OnInit {
       if (session.type === SessionType.ADMIN) {
         payrollEntry.administrative_time = payrollEntry.administrative_time! + this.calculateTime(session.start_datetime!, session.end_datetime!);
       } else if (session.type === SessionType.TRIAL) {
-        // A held trial (completed or no-show) pays a FLAT hour at the regular
-        // rate — never its 45-minute duration, and never planning credit.
-        if (
-          (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) &&
-          this.calculateTime(session.start_datetime!, session.end_datetime!) > 0
-        ) {
-          payrollEntry.trial_hours = payrollEntry.trial_hours! + 1;
+        // A held trial (completed or no-show) pays its actual length at the
+        // regular rate (client policy 2026-10-13; a flat hour before), and
+        // never planning credit.
+        if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) {
+          payrollEntry.trial_hours = payrollEntry.trial_hours! + this.calculateTime(session.start_datetime!, session.end_datetime!);
         }
       } else if (session.type === SessionType.GROUP) {
         // A held BTC & Me group session pays a FLAT hour at the regular rate
-        // (client policy, trial precedent) — never its 45-minute duration,
-        // never per-student, and never planning credit.
+        // (client policy) — never its 45-minute duration, never per-student,
+        // and never planning credit.
         if (
           (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) &&
           this.calculateTime(session.start_datetime!, session.end_datetime!) > 0
