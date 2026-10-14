@@ -58,6 +58,9 @@ import {pendingChangeNote, pendingChangesOf} from '../utils/pending-package';
 import {studentStatusChipClass} from '../utils/status-chip';
 import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
+import {PackageService} from '../services/package.service';
+import {PackageRow} from '../models/package-row.model';
+import {PackageCatalog, toCatalog} from '../utils/package-config';
 import {ContactRemindersSection} from '../contact-reminders-section/contact-reminders-section';
 import {ContactEmailsSection} from '../contact-emails-section/contact-emails-section';
 import {ContactDocumentsSection} from '../contact-documents-section/contact-documents-section';
@@ -111,6 +114,9 @@ export class Contact implements OnInit {
   private destroyRef: DestroyRef = inject(DestroyRef);
   private dialog: MatDialog = inject(MatDialog);
   private scheduleService: ScheduleService = inject(ScheduleService);
+  private packageService: PackageService = inject(PackageService);
+  /** The package catalog, for the schedule warning on each student card. */
+  protected catalog: PackageCatalog | null = null;
   private sessionsService: SessionsService = inject(SessionsService);
   /** Pending make-up minutes per student id; null until loaded (or when the read failed). */
   private scheduledMakeupById: Map<string, number> | null = null;
@@ -231,6 +237,7 @@ export class Contact implements OnInit {
     // load (and admin-gate) themselves.
     if (this.authService.isAdmin()) {
       this.loadStudents();
+      this.loadCatalog();
       // Notes are an admin view too (client 2026-10-02): a tutor's own page
       // neither shows nor fetches what was written about them.
       this.loadNotes();
@@ -242,6 +249,17 @@ export class Contact implements OnInit {
     // The service limits a tutor to their own students.
     this.loadScheduledMakeup();
     this.getTutors();
+  }
+
+  /** The package catalog behind the student cards' schedule warning. */
+  private loadCatalog(): void {
+    this.packageService.getPackages().pipe(
+      catchError(() => of([] as PackageRow[])),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(rows => {
+      this.catalog = toCatalog(rows);
+      this.cdr.markForCheck();
+    });
   }
 
   private loadRosterStudents() {
@@ -661,6 +679,20 @@ export class Contact implements OnInit {
   }
 
   /** A read-only one-line summary of a student's schedule, e.g. "Mon 10:00 AM · Wed 10:00 AM". */
+  /**
+   * A warning when the schedule's slot count differs from the package's
+   * sessions per week (a package change applied without its own schedule
+   * leaves the old slots behind); null when they agree or cannot be compared.
+   */
+  scheduleGap(student: Student): string | null {
+    const slots = student.schedule?.length ?? 0;
+    const def = this.catalog ? this.scheduleService.resolveDef(student, this.catalog) : null;
+    if (slots === 0 || !def || slots === def.sessionsPerWeek) {
+      return null;
+    }
+    return `Schedule has ${slots} of ${def.sessionsPerWeek} sessions per week. Use Manage schedule to fix it.`;
+  }
+
   scheduleSummary(student: Student): string {
     return this.scheduleService.scheduleSummary(
       student.schedule,

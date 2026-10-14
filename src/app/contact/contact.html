@@ -308,6 +308,9 @@
                 <div class="schedule-summary">
                   @if (student.schedule?.length) {
                     <span>Schedule: {{scheduleSummary(student)}}</span>
+                    @if (scheduleGap(student); as gap) {
+                      <span class="schedule-gap">{{gap}}</span>
+                    }
                     <span>Auto-renew: {{student.auto_renew ? 'On' : 'Off'}}</span>
                   } @else if (canManageSchedule(student)) {
                     <span>Schedule: None set</span>

@@ -279,6 +279,12 @@ export class ManageScheduleDialog implements OnInit {
       this.scheduleSlots = existing.map(
         s => ({weekday: s.weekday, start_time: s.start_time, tutor_id: s.tutor_id ?? null,
                length_min: this.slotLength(s)}));
+      // A package change applied without its own schedule keeps the old
+      // slots: pad with blank rows up to the package's sessions per week so
+      // the missing day can be added here. Extra rows are left for review.
+      if (this.def && this.scheduleSlots.length < this.def.sessionsPerWeek) {
+        this.seedScheduleSlots();
+      }
     } else {
       this.startDate = new Date();
       this.seedScheduleSlots();
