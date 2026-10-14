@@ -14,6 +14,7 @@ describe('statement-view', () => {
       price_override: 'Custom price',
       discount: 'Discount',
       unpriced: 'Not priced',
+      no_charge: 'No charge',
     });
     expect(flagLabels(['prorated_start', 'discount'])).toEqual(['Prorated start', 'Discount']);
     expect(flagLabels(undefined)).toEqual([]);

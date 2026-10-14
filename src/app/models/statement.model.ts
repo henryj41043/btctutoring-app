@@ -8,7 +8,9 @@ export type LineFlag =
   | 'package_change'
   | 'price_override'
   | 'discount'
-  | 'unpriced';
+  | 'unpriced'
+  /** Statement-level: every line is $0 (a ghost package), nothing is owed. */
+  | 'no_charge';
 
 export interface StatementLine {
   student_id?: string;

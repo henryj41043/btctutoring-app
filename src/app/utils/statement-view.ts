@@ -10,6 +10,7 @@ export const FLAG_LABELS: Record<LineFlag, string> = {
   price_override: 'Custom price',
   discount: 'Discount',
   unpriced: 'Not priced',
+  no_charge: 'No charge',
 };
 
 export function flagLabels(flags: LineFlag[] | undefined): string[] {

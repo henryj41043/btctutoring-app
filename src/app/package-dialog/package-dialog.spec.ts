@@ -67,11 +67,27 @@ describe('PackageDialog', () => {
     expect(packageService.createPackage).not.toHaveBeenCalled();
   });
 
-  it('rejects non-positive numbers client-side', () => {
+  it('accepts a $0 price (a ghost package)', () => {
     const c = build();
-    fill(c, {monthlyCost: 0});
+    fill(c, {id: 'Ghost', monthlyCost: 0});
+    expect(priv(c).packageForm.invalid).toBe(false);
     c.save();
-    expect(priv(c).errorMessage).toContain('positive');
+    expect(packageService.createPackage).toHaveBeenCalledWith(
+      expect.objectContaining({id: 'Ghost', monthlyCost: 0}),
+    );
+  });
+
+  it('rejects a negative price and non-positive sessions or length client-side', () => {
+    const c = build();
+    fill(c, {monthlyCost: -1});
+    c.save();
+    expect(priv(c).errorMessage).toBe('The price must be $0 or more.');
+    fill(c, {monthlyCost: 10, sessionsPerWeek: 0});
+    c.save();
+    expect(priv(c).errorMessage).toBe('Sessions per week and session length must both be positive.');
+    fill(c, {sessionsPerWeek: 1, sessionLengthMin: 0});
+    c.save();
+    expect(priv(c).errorMessage).toBe('Sessions per week and session length must both be positive.');
     expect(packageService.createPackage).not.toHaveBeenCalled();
   });
 
