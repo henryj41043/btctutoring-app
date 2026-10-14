@@ -1770,6 +1770,97 @@ describe('StudentDialog', () => {
       expect(dialogRef.close).toHaveBeenCalledWith(true);
     });
 
+    describe('moving the package start date', () => {
+      const startControl = (c: StudentDialog) => form(c).get('package_start_date')!;
+
+      it('is offered in edit mode once a package is set, never in create mode', () => {
+        expect((build({ mode: 'edit', student: enrolled() }) as unknown as { showPackageStart: boolean })
+          .showPackageStart).toBe(true);
+        TestBed.resetTestingModule();
+        expect((build({ mode: 'edit', student: enrolled({ package: undefined }) }) as unknown as { showPackageStart: boolean })
+          .showPackageStart).toBe(false);
+        TestBed.resetTestingModule();
+        expect((build({ mode: 'create' }) as unknown as { showPackageStart: boolean }).showPackageStart).toBe(false);
+      });
+
+      it('loads the stored start as a local day and sends it back unchanged when untouched', () => {
+        const c = build({ mode: 'edit', student: enrolled({ package_start_date: '2026-05-01T04:00:00.000Z' }) });
+        expect(startControl(c).value).toEqual(new Date(2026, 4, 1));
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.package_start_date).toBe('2026-05-01T04:00:00.000Z');
+        expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+      });
+
+      it('a blanked start keeps the stored value', () => {
+        const c = build({ mode: 'edit', student: enrolled() });
+        startControl(c).setValue(null);
+        c.save();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.package_start_date).toBe('2026-05-01T00:00:00');
+        expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+      });
+
+      it('moving it later prompts, then rebuilds from the old date; earlier, from the new date', () => {
+        scheduleService.futurePendingTutoring.mockReturnValue(of(pending(3) as never));
+        scheduleService.deleteFuturePendingSessions.mockReturnValue(of(3));
+        const c1 = build({ mode: 'edit', student: enrolled({ schedule: monday }) });
+        startControl(c1).setValue(new Date(2026, 4, 15));
+        c1.save();
+        expect(view(c1).showDeactivateConfirm).toBe(true);
+        expect(view(c1).confirmingRebuild).toBe(true);
+        expect(view(c1).rebuildLabel).toBe('May 1, 2026');
+        expect(view(c1).upcomingSessionCount).toBe(3);
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+        c1.confirmDeactivation();
+        const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+        expect(payload.package_start_date).toBe('2026-05-15T00:00:00');
+        expect(scheduleService.deleteFuturePendingSessions).toHaveBeenCalledWith(
+          's-1', expect.any(Date), { from: new Date(2026, 4, 1) },
+        );
+        expect(scheduleService.rebuildFrom).toHaveBeenLastCalledWith('s-1', '2026-05-01');
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+
+        TestBed.resetTestingModule();
+        const c2 = build({ mode: 'edit', student: enrolled({ schedule: monday }) });
+        startControl(c2).setValue(new Date(2026, 3, 20));
+        c2.save();
+        c2.confirmDeactivation();
+        expect(scheduleService.rebuildFrom).toHaveBeenLastCalledWith('s-1', '2026-04-20');
+      });
+
+      it('a moved start without a schedule just saves', () => {
+        const c = build({ mode: 'edit', student: enrolled({ schedule: undefined }) });
+        startControl(c).setValue(new Date(2026, 4, 15));
+        c.save();
+        expect(studentService.updateStudent.mock.calls[0][0].package_start_date).toBe('2026-05-15T00:00:00');
+        expect(scheduleService.futurePendingTutoring).not.toHaveBeenCalled();
+        expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+        expect(dialogRef.close).toHaveBeenCalledWith(true);
+      });
+
+      it('refuses a start on or after the first scheduled change', () => {
+        const c = build({ mode: 'edit', student: enrolled({ schedule: monday }) });
+        startControl(c).setValue(new Date(2026, 9, 14));
+        c.save();
+        expect(priv(c).errorMessage).toBe('The package start date must be before the first scheduled change.');
+        expect(studentService.updateStudent).not.toHaveBeenCalled();
+        startControl(c).setValue(new Date(2026, 9, 13));
+        c.save();
+        c.confirmDeactivation();
+        expect(studentService.updateStudent).toHaveBeenCalled();
+      });
+
+      it('combines with a removed change: rebuilds from the earliest date of the two', () => {
+        const c = build({ mode: 'edit', student: enrolled({ schedule: monday }) });
+        c.removePendingChange(1);
+        startControl(c).setValue(new Date(2026, 4, 15));
+        c.save();
+        c.confirmDeactivation();
+        expect(scheduleService.rebuildFrom).toHaveBeenLastCalledWith('s-1', '2026-05-01');
+      });
+    });
+
     it('rebuilds from the earliest affected change', () => {
       const c = build({ mode: 'edit', student: enrolled() });
       c.removePendingChange(1);

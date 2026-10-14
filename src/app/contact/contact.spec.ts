@@ -1065,6 +1065,32 @@ describe('Contact', () => {
       expect(form(c).pristine).toBe(true);
     });
 
+    it('shows the package start on the card, read as a local day', () => {
+      const c = build();
+      studentService.getStudentsByContact.mockReturnValue(
+        of([
+          { id: 's-1', contact_id: 'c-1', name: 'Pat', status: StudentStatus.ACTIVE_STUDENT,
+            package: 'Achieve', package_start_date: '2026-07-01T04:00:00.000Z' },
+          { id: 's-2', contact_id: 'c-1', name: 'Sam', status: StudentStatus.ACTIVE_STUDENT,
+            package: 'Achieve', package_start_date: '2026-10-10T00:00:00' },
+          { id: 's-3', contact_id: 'c-1', name: 'Kim', status: StudentStatus.ACTIVE_STUDENT },
+        ]),
+      );
+      c.ngOnInit();
+      const [pat, sam, kim] = students(c);
+      expect(c.packageStartLabel(pat)).toBe('Jul 1, 2026');
+      expect(c.packageStartLabel(sam)).toBe('Oct 10, 2026');
+      expect(c.packageStartLabel(kim)).toBeNull();
+      expect(c.packageStartLabel({ package_start_date: 'soon' } as Student)).toBeNull();
+      const fixture = TestBed.createComponent(Contact);
+      fixture.componentInstance.id = 'c-1';
+      fixture.detectChanges();
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Started: Jul 1, 2026');
+      expect(text).toContain('Started: Oct 10, 2026');
+      expect((text.match(/Started:/g) ?? []).length).toBe(2);
+    });
+
     it('warns on the card when the schedule has fewer slots than the package', () => {
       const c = build();
       studentService.getStudentsByContact.mockReturnValue(

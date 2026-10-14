@@ -286,6 +286,9 @@
                 <div>Assigned Tutor: {{getTutorName(student.assigned_tutor_id)}}</div>
                 <div>Make Up Minutes: {{makeupSummary(student)}}</div>
                 <div>Package: {{student.package || '—'}}</div>
+                @if (packageStartLabel(student); as started) {
+                  <div>Started: {{started}}</div>
+                }
                 @for (change of pendingChanges(student); track change.effective) {
                   <div class="pending-change-line">
                     <span>{{pendingChangeNote(change)}} · {{change.schedule?.length ? 'schedule set' : 'no schedule'}}</span>
