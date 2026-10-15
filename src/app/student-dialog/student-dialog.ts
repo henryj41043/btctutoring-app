@@ -600,7 +600,7 @@ export class StudentDialog implements OnInit {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(result => {
       const own = (result?.statement?.lines ?? []).filter(line => line.student_id === this.data.student?.id);
-      this.rowPreviews.set(row, own.map(line => `${lineSummary(line)}: ${formatMoney(line.net)}`));
+      this.rowPreviews.set(row, own.map(line => `${lineSummary(line, result?.statement?.month)}: ${formatMoney(line.net)}`));
     });
   }
 

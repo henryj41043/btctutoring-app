@@ -28,7 +28,7 @@
         <input matInput [matDatepicker]="startpicker" [(ngModel)]="startDate">
         <mat-datepicker #startpicker/>
         <mat-datepicker-toggle [for]="startpicker" matSuffix/>
-        <mat-hint>Defaults to today and can be moved later on the student. Starting on or before the first scheduled session of the month bills the full month; later starts are prorated per session.</mat-hint>
+        <mat-hint>Defaults to today and can be moved later on the student. The week of the start (Sunday to Saturday) is billed by the month holding most of its days; a start inside the month's own weeks bills the full month, a later start is prorated per session.</mat-hint>
       </mat-form-field>
       <br/>
     }

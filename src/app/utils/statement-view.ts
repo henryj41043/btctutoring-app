@@ -30,19 +30,39 @@ export function shortDate(key: string): string {
 }
 
 /** True when a line runs from the first to the last day of its month. */
+/**
+ * A line billed at the full monthly price: every scheduled session of the
+ * month's window was billed. Since the straddling-weeks rule (2026-10-14)
+ * a full month's days need not be the calendar month (October may run
+ * Oct 4 to Oct 31), so the session counts decide; a line without counts
+ * (no schedule, a legacy portion) falls back to the calendar dates.
+ */
 export function coversWholeMonth(line: StatementLine): boolean {
+  if (line.kind === 'package' && line.sessions_in_month > 0) {
+    return line.sessions_billed >= line.sessions_in_month;
+  }
   const [y, m] = line.from.split('-').map(Number);
   const lastDay = new Date(y, m, 0).getDate();
   return line.from.endsWith('-01') && line.to === `${line.from.slice(0, 8)}${String(lastDay).padStart(2, '0')}`;
 }
 
-/** The days a line covers: 'Full month', 'From Sep 14', 'Through Sep 18' or 'Sep 14 to Sep 20'. */
-export function linePeriod(line: StatementLine): string {
-  if (coversWholeMonth(line)) return 'Full month';
-  const [y, m] = line.from.split('-').map(Number);
+/** 'YYYY-MM' → its first and last day keys. */
+function monthBounds(month: string): {first: string; last: string} {
+  const [y, m] = month.split('-').map(Number);
   const lastDay = String(new Date(y, m, 0).getDate()).padStart(2, '0');
-  if (line.to.endsWith(`-${lastDay}`)) return `From ${shortDate(line.from)}`;
-  if (line.from.endsWith('-01')) return `Through ${shortDate(line.to)}`;
+  return {first: `${month}-01`, last: `${month}-${lastDay}`};
+}
+
+/**
+ * The days a line covers: 'Full month', 'From Sep 14', 'Through Sep 18' or
+ * 'Sep 14 to Sep 20'. "From" and "Through" are read against the statement
+ * month when given (a line may begin or end in a neighbouring month's days).
+ */
+export function linePeriod(line: StatementLine, month?: string): string {
+  if (coversWholeMonth(line)) return 'Full month';
+  const bounds = monthBounds(month ?? line.from.slice(0, 7));
+  if (line.to === bounds.last) return `From ${shortDate(line.from)}`;
+  if (line.from === bounds.first) return `Through ${shortDate(line.to)}`;
   return `${shortDate(line.from)} to ${shortDate(line.to)}`;
 }
 
@@ -53,14 +73,15 @@ export function lineSessions(line: StatementLine): string {
 }
 
 /** One line as a sentence, e.g. 'Robbie: Succeed, from Sep 14, 3 of 4 sessions at $63.00'. */
-export function lineSummary(line: StatementLine): string {
+export function lineSummary(line: StatementLine, month?: string): string {
   const parts: string[] = [`${line.student_name}: ${line.package}`];
   if (line.flags.includes('unpriced')) {
     parts.push('not priced');
     return parts.join(', ');
   }
-  const period = linePeriod(line);
-  parts.push(period.charAt(0).toLowerCase() + period.slice(1));
+  const period = linePeriod(line, month);
+  // 'from Jul 14' reads as a clause; a range starting with a date keeps its case.
+  parts.push(/^[A-Z][a-z]{2} \d/.test(period) ? period : period.charAt(0).toLowerCase() + period.slice(1));
   const sessions = lineSessions(line);
   if (sessions !== '—' && !coversWholeMonth(line)) {
     parts.push(`${sessions} sessions at ${formatMoney(line.rate)}`);

@@ -220,7 +220,7 @@ export class Billing implements OnInit {
     return !!entry.contact_id && this.expanded.has(entry.contact_id);
   }
 
-  protected linePeriod(line: StatementLine): string { return linePeriod(line); }
+  protected linePeriod(line: StatementLine, month?: string): string { return linePeriod(line, month); }
   protected lineSessions(line: StatementLine): string { return lineSessions(line); }
   protected lineLabels(line: StatementLine): string[] { return flagLabels(line.flags); }
 
@@ -391,7 +391,7 @@ export class Billing implements OnInit {
     ];
     const rows = statement.lines.map(line => {
       const labels = flagLabels(line.flags);
-      return row(`${lineSummary(line)}${labels.length ? ` [${labels.join(', ')}]` : ''}`, line.net);
+      return row(`${lineSummary(line, statement.month)}${labels.length ? ` [${labels.join(', ')}]` : ''}`, line.net);
     });
     if (statement.sibling_discount_amount > 0) {
       rows.push(row(`Sibling discount ${statement.sibling_discount_percent}%`, -statement.sibling_discount_amount));
