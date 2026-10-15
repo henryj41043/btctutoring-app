@@ -1,7 +1,9 @@
 import {
-  coversWholeMonth, FLAG_LABELS, flagLabels, formatMoney, linePeriod, lineSessions, lineSummary,
+  coversWholeMonth, cycleLabel, duesTotal, FLAG_LABELS, flagLabels, formatMoney, linePeriod, lineSessions, lineSummary,
   shortDate, statementPackages, toBillingEntry,
 } from './statement-view';
+import {EntryDue} from '../models/billing-entry.model';
+import {StatementDue} from '../models/statement.model';
 import {semiStatement, statement, statementDue, statementLine} from '../../testing/statement.fixture';
 import {LineFlag} from '../models/statement.model';
 
@@ -133,24 +135,21 @@ describe('statement-view', () => {
   });
 
   describe('toBillingEntry', () => {
-    it('maps a monthly statement', () => {
+    const due = (over: Partial<EntryDue> = {}): EntryDue => ({
+      period_start: '2026-07-01', label: '1st', derived: 362, override: null, amount: 362, paid: false, ...over,
+    });
+
+    it('maps a monthly statement to one due on the 1st', () => {
       const s = statement();
       expect(toBillingEntry(s)).toEqual({
         contact_id: 'c-1',
         name: 'Casey Lee',
         packages: 'Pat: Succeed',
         cycle: 'monthly',
-        due_first: 362,
-        due_fifteenth: null,
-        derived_first: 362,
-        derived_fifteenth: null,
-        override_first: null,
-        override_fifteenth: null,
+        dues: [due()],
         total: 362,
         discount: 0,
         discount_percent: 0,
-        paid_first: false,
-        paid_fifteenth: false,
         needs_attention: false,
         labels: [],
         statement: s,
@@ -164,20 +163,18 @@ describe('statement-view', () => {
           statementDue({day: 15, period_start: '2026-07-15', derived: 181.01, amount: 181.01, paid: true}),
         ],
       }));
-      expect(entry.due_first).toBe(181);
-      expect(entry.due_fifteenth).toBe(181.01);
+      expect(entry.dues).toEqual([
+        due({derived: 181, amount: 181, paid: true}),
+        due({period_start: '2026-07-15', label: '15th', derived: 181.01, amount: 181.01, paid: true}),
+      ]);
       expect(entry.total).toBe(362.01);
-      expect(entry.paid_first).toBe(true);
-      expect(entry.paid_fifteenth).toBe(true);
     });
 
     it('ignores a 15th due on a monthly statement', () => {
       const entry = toBillingEntry(statement({
         dues: [statementDue(), statementDue({day: 15, derived: 50, amount: 50, override: 5, paid: true})],
       }));
-      expect(entry.due_fifteenth).toBeNull();
-      expect(entry.override_fifteenth).toBeNull();
-      expect(entry.paid_fifteenth).toBe(false);
+      expect(entry.dues).toHaveLength(1);
       expect(entry.total).toBe(362);
     });
 
@@ -188,9 +185,8 @@ describe('statement-view', () => {
           statementDue({day: 15, derived: 126, amount: 126}),
         ],
       }));
-      expect(entry.due_first).toBeNull();
-      expect(entry.derived_first).toBeNull();
-      expect(entry.due_fifteenth).toBe(126);
+      expect(entry.dues![0]).toEqual(due({derived: null, amount: null}));
+      expect(entry.dues![1].amount).toBe(126);
       expect(entry.total).toBe(126);
     });
 
@@ -201,20 +197,53 @@ describe('statement-view', () => {
           statementDue({day: 15, derived: 181, override: 0, amount: 0}),
         ],
       }));
-      expect(entry.due_first).toBe(150);
-      expect(entry.derived_first).toBe(181);
-      expect(entry.override_first).toBe(150);
-      expect(entry.due_fifteenth).toBe(0);
-      expect(entry.override_fifteenth).toBe(0);
+      expect(entry.dues![0]).toEqual(expect.objectContaining({derived: 181, override: 150, amount: 150}));
+      expect(entry.dues![1]).toEqual(expect.objectContaining({derived: 181, override: 0, amount: 0}));
       expect(entry.total).toBe(150);
     });
 
     it('tolerates a statement without dues', () => {
       const entry = toBillingEntry(statement({dues: []}));
-      expect(entry.due_first).toBeNull();
-      expect(entry.override_first).toBeNull();
-      expect(entry.paid_first).toBe(false);
+      expect(entry.dues).toEqual([]);
       expect(entry.total).toBe(0);
+      expect(toBillingEntry(statement({dues: undefined as unknown as StatementDue[]})).dues).toEqual([]);
+    });
+
+    it('maps every weekly due, dated and labelled by its day', () => {
+      const weekly = statement({
+        cycle: 'weekly',
+        dues: [
+          statementDue({day: 4, period_start: '2026-09-04', derived: 105.23, amount: 105.23}),
+          statementDue({day: 11, period_start: '2026-09-11', derived: 105.23, amount: 105.23, paid: true}),
+          statementDue({day: 18, period_start: '2026-09-18', derived: 105.23, override: 0, amount: 0}),
+          statementDue({day: 25, period_start: '2026-09-25', derived: 105.23, amount: 105.23}),
+          statementDue({day: 2, period_start: '2026-10-02', derived: 52.62, amount: 52.62}),
+        ],
+      });
+      const entry = toBillingEntry(weekly);
+      expect(entry.dues!.map(d => [d.label, d.amount, d.paid])).toEqual([
+        ['Sep 4', 105.23, false],
+        ['Sep 11', 105.23, true],
+        ['Sep 18', 0, false],
+        ['Sep 25', 105.23, false],
+        ['Oct 2', 52.62, false],
+      ]);
+      expect(entry.dues![2].override).toBe(0);
+      expect(entry.total).toBe(368.31);
+    });
+
+    it('labels the cycle, with the weekday read off a weekly family\'s first due', () => {
+      expect(cycleLabel('monthly')).toBe('Monthly');
+      expect(cycleLabel(undefined)).toBe('Monthly');
+      expect(cycleLabel('semi_monthly')).toBe('Semi-monthly');
+      expect(cycleLabel('weekly')).toBe('Weekly');
+      expect(cycleLabel('weekly', [due({period_start: '2026-10-09'})])).toBe('Weekly (Fri)');
+      expect(cycleLabel('weekly', [due({period_start: '2026-10-04'})])).toBe('Weekly (Sun)');
+    });
+
+    it('duesTotal counts the effective amounts, blanks as nothing', () => {
+      expect(duesTotal([])).toBe(0);
+      expect(duesTotal([due({amount: 0.1}), due({amount: 0.2}), due({amount: null})])).toBe(0.3);
     });
 
     it('shows the sibling percent only when it is the sole discount', () => {

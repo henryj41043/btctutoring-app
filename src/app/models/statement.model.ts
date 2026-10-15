@@ -32,6 +32,8 @@ export interface StatementLine {
   /** The charge after the student discount. */
   net: number;
   flags: LineFlag[];
+  /** Weekly families: the line's charge per Sunday–Saturday week. */
+  weeks?: {week_start: string; sessions: number; amount: number}[];
 }
 
 export interface StatementDue {
@@ -50,7 +52,7 @@ export interface Statement {
   contact_name: string;
   /** 'YYYY-MM' */
   month: string;
-  cycle: 'monthly' | 'semi_monthly';
+  cycle: 'monthly' | 'semi_monthly' | 'weekly';
   lines: StatementLine[];
   package_gross: number;
   package_subtotal: number;

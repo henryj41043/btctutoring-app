@@ -11,7 +11,7 @@ import { BillingService } from '../services/billing.service';
 import { NoteService } from '../services/note.service';
 import { ScholarshipService } from '../services/scholarship.service';
 import { BillingRecord } from '../models/billing-record.model';
-import { BillingEntry } from '../models/billing-entry.model';
+import { BillingEntry, EntryDue } from '../models/billing-entry.model';
 import { BillingCycle } from '../enums/billing-cycle.enum';
 import { semiStatement, statement, statementDue, statementLine } from '../../testing/statement.fixture';
 
@@ -28,6 +28,9 @@ jest.mock('jspdf', () => ({
 jest.mock('jspdf-autotable', () => ({ __esModule: true, default: jest.fn() }));
 
 const click = (): Event => ({ stopPropagation: jest.fn() }) as unknown as Event;
+const due = (over: Partial<EntryDue> = {}): EntryDue => ({
+  period_start: '2026-07-01', label: '1st', derived: 362, override: null, amount: 362, paid: false, ...over,
+});
 
 describe('Billing', () => {
   let isAdmin: boolean;
@@ -167,7 +170,7 @@ describe('Billing', () => {
       expect((c as any).dataSource.data).toHaveLength(2);
       expect(entry.name).toBe('Casey Lee');
       expect(entry.packages).toBe('Pat: Succeed');
-      expect(entry.due_first).toBe(362);
+      expect(entry.dues).toEqual([due()]);
       expect(entry.total).toBe(362);
       expect((c as any).loading).toBe(false);
       expect((c as any).hasError).toBe(false);
@@ -264,11 +267,11 @@ describe('Billing', () => {
     it('a closed month can still be marked paid and overridden', () => {
       billingService.getStatements.mockReturnValue(of([statement({ frozen_at: FROZEN })]));
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'first', true);
-      expect(entry.paid_first).toBe(true);
+      c.togglePaid(entry, dueOf(entry), true);
+      expect(dueOf(entry).paid).toBe(true);
       dialogResult = { amount_override: 300 };
-      c.openOverrideDialog(entry, 'first', click());
-      expect(entry.due_first).toBe(300);
+      c.openOverrideDialog(entry, dueOf(entry), click());
+      expect(dueOf(entry).amount).toBe(300);
     });
 
     it('the PDF header says when the month closed', () => {
@@ -337,10 +340,12 @@ describe('Billing', () => {
     });
   });
 
+  const dueOf = (entry: BillingEntry, index = 0): EntryDue => entry.dues![index];
+
   describe('paid toggle', () => {
     it('persists the full record and updates the row', () => {
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'first', true);
+      c.togglePaid(entry, dueOf(entry), true);
       const record = billingService.upsertBillingRecord.mock.calls.at(-1)![0];
       expect(record.contact_id).toBe('c-1');
       expect(record.period_start).toBe('2026-07-01');
@@ -349,12 +354,12 @@ describe('Billing', () => {
       expect(record.paid).toBe(true);
       expect(typeof record.paid_date).toBe('string');
       expect('amount_override' in record).toBe(false);
-      expect(entry.paid_first).toBe(true);
+      expect(dueOf(entry).paid).toBe(true);
     });
 
     it('files a payment note on the family contact when marked paid', () => {
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'first', true);
+      c.togglePaid(entry, dueOf(entry), true);
       const note = noteService.createNote.mock.calls.at(-1)![0];
       expect(note.message).toBe('Payment received: $362.00 for Jul 1, 2026 (Pat: Succeed)');
       expect(note.recipient_id).toBe('c-1');
@@ -368,14 +373,14 @@ describe('Billing', () => {
     it('omits the package list from the note when there is none', () => {
       const { c, entry } = loaded();
       entry.packages = '';
-      c.togglePaid(entry, 'first', true);
+      c.togglePaid(entry, dueOf(entry), true);
       expect(noteService.createNote.mock.calls.at(-1)![0].message)
         .toBe('Payment received: $362.00 for Jul 1, 2026');
     });
 
     it('does not file a note when un-marking paid', () => {
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'first', false);
+      c.togglePaid(entry, dueOf(entry), false);
       expect(noteService.createNote).not.toHaveBeenCalled();
       expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
         expect.objectContaining({ paid: false, paid_date: undefined }),
@@ -385,8 +390,8 @@ describe('Billing', () => {
     it('a note failure never blocks the paid toggle', () => {
       noteService.createNote.mockReturnValue(throwError(() => new Error('note boom')));
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'first', true);
-      expect(entry.paid_first).toBe(true);
+      c.togglePaid(entry, dueOf(entry), true);
+      expect(dueOf(entry).paid).toBe(true);
     });
 
     it('carries the loaded override so the full-record upsert never drops it', () => {
@@ -394,7 +399,7 @@ describe('Billing', () => {
         statement({ dues: [statementDue({ override: 150, amount: 150 })] }),
       ]));
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'first', true);
+      c.togglePaid(entry, dueOf(entry), true);
       const saved = billingService.upsertBillingRecord.mock.calls.at(-1)![0] as BillingRecord;
       expect(saved.amount).toBe(150);
       expect(saved.amount_override).toBe(150);
@@ -408,7 +413,7 @@ describe('Billing', () => {
         ] }),
       ]));
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'fifteenth', true);
+      c.togglePaid(entry, dueOf(entry, 1), true);
       const saved = billingService.upsertBillingRecord.mock.calls.at(-1)![0] as BillingRecord;
       expect(saved.amount).toBe(0);
       expect(saved.amount_override).toBe(0);
@@ -417,35 +422,44 @@ describe('Billing', () => {
     it('toggles the 15th of a semi-monthly family', () => {
       billingService.getStatements.mockReturnValue(of([semiStatement()]));
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'fifteenth', true);
+      c.togglePaid(entry, dueOf(entry, 1), true);
       expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
         expect.objectContaining({ period_start: '2026-07-15', cycle: 'semi_monthly', amount: 181, paid: true }),
       );
-      expect(entry.paid_fifteenth).toBe(true);
-      expect(entry.paid_first).toBe(false);
+      expect(dueOf(entry, 1).paid).toBe(true);
+      expect(dueOf(entry, 0).paid).toBe(false);
       expect(noteService.createNote.mock.calls.at(-1)![0].message)
         .toBe('Payment received: $181.00 for Jul 15, 2026 (Pat: Succeed)');
     });
 
-    it('toggles the 15th of a monthly entry using a zero amount', () => {
+    it('toggles a weekly due under its own date', () => {
+      billingService.getStatements.mockReturnValue(of([statement({
+        cycle: 'weekly',
+        dues: [
+          statementDue({ day: 3, period_start: '2026-07-03', derived: 83.54, amount: 83.54 }),
+          statementDue({ day: 10, period_start: '2026-07-10', derived: 83.54, amount: 83.54 }),
+        ],
+      })]));
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'fifteenth', true);
+      c.togglePaid(entry, dueOf(entry, 1), true);
       expect(billingService.upsertBillingRecord).toHaveBeenCalledWith(
-        expect.objectContaining({ period_start: '2026-07-15', amount: 0 }),
+        expect.objectContaining({ period_start: '2026-07-10', cycle: 'weekly', amount: 83.54, paid: true }),
       );
+      expect(noteService.createNote.mock.calls.at(-1)![0].message)
+        .toBe('Payment received: $83.54 for Jul 10, 2026 (Pat: Succeed)');
     });
 
     it('keeps the row state when persisting fails', () => {
       billingService.upsertBillingRecord.mockReturnValue(throwError(() => new Error('x')));
       const { c, entry } = loaded();
-      c.togglePaid(entry, 'first', true);
-      expect(entry.paid_first).toBe(false);
+      c.togglePaid(entry, dueOf(entry), true);
+      expect(dueOf(entry).paid).toBe(false);
       expect(noteService.createNote).not.toHaveBeenCalled();
     });
   });
 
   describe('amount overrides', () => {
-    it('knows which halves are overridden', () => {
+    it('knows which dues are overridden', () => {
       billingService.getStatements.mockReturnValue(of([
         semiStatement({ dues: [
           statementDue({ derived: 181, override: 0, amount: 0 }),
@@ -453,9 +467,9 @@ describe('Billing', () => {
         ] }),
       ]));
       const { c, entry } = loaded();
-      expect((c as any).isOverridden(entry, 'first')).toBe(true);
-      expect((c as any).isOverridden(entry, 'fifteenth')).toBe(false);
-      expect(c.overrideTooltip(entry, 'first')).toBe('Overridden — calculated amount $181.00');
+      expect((c as any).isOverridden(dueOf(entry))).toBe(true);
+      expect((c as any).isOverridden(dueOf(entry, 1))).toBe(false);
+      expect(c.overrideTooltip(dueOf(entry))).toBe('Overridden — calculated amount $181.00');
     });
 
     it('opens the dialog with the derived/current amounts and never navigates', () => {
@@ -464,7 +478,7 @@ describe('Billing', () => {
       ]));
       const { c, entry } = loaded();
       const event = click();
-      c.openOverrideDialog(entry, 'first', event);
+      c.openOverrideDialog(entry, dueOf(entry), event);
       expect(event.stopPropagation).toHaveBeenCalled();
       expect(dialog.open).toHaveBeenCalledWith(expect.anything(), {
         data: { contactName: 'Casey Lee', periodLabel: 'Due 1st — July 2026', derived: 362, current: 150 },
@@ -477,12 +491,12 @@ describe('Billing', () => {
       const { c, entry } = loaded();
       const rows = (c as any).dataSource.data;
       dialogResult = { amount_override: 200 };
-      c.openOverrideDialog(entry, 'first', click());
+      c.openOverrideDialog(entry, dueOf(entry), click());
       expect(billingService.setAmountOverride).toHaveBeenCalledWith({
         contact_id: 'c-1', period_start: '2026-07-01', cycle: BillingCycle.MONTHLY, amount_override: 200,
       });
-      expect(entry.due_first).toBe(200);
-      expect(entry.override_first).toBe(200);
+      expect(dueOf(entry).amount).toBe(200);
+      expect(dueOf(entry).override).toBe(200);
       expect(entry.total).toBe(200);
       expect((c as any).grandTotal).toBe(200);
       // A fresh array so the OnPush table re-renders its footer.
@@ -490,76 +504,94 @@ describe('Billing', () => {
       expect((c as any).dataSource.data).toEqual(rows);
 
       dialogResult = { amount_override: null };
-      c.openOverrideDialog(entry, 'first', click());
+      c.openOverrideDialog(entry, dueOf(entry), click());
       expect(billingService.setAmountOverride).toHaveBeenLastCalledWith(expect.objectContaining({ amount_override: null }));
-      expect(entry.due_first).toBe(362);
-      expect(entry.override_first).toBeNull();
+      expect(dueOf(entry).amount).toBe(362);
+      expect(dueOf(entry).override).toBeNull();
       expect(entry.total).toBe(362);
     });
 
     it('a cancelled dialog or a failed save changes nothing', () => {
       const { c, entry } = loaded();
-      c.openOverrideDialog(entry, 'first', click());
+      c.openOverrideDialog(entry, dueOf(entry), click());
       expect(billingService.setAmountOverride).not.toHaveBeenCalled();
       dialogResult = { amount_override: 0 };
       billingService.setAmountOverride.mockReturnValue(throwError(() => new Error('x')));
-      c.openOverrideDialog(entry, 'first', click());
-      expect(entry.due_first).toBe(362);
-      expect(entry.override_first).toBeNull();
+      c.openOverrideDialog(entry, dueOf(entry), click());
+      expect(dueOf(entry).amount).toBe(362);
+      expect(dueOf(entry).override).toBeNull();
     });
 
     it('handles the 15th half and clearing back to a blank derived half', () => {
       billingService.getStatements.mockReturnValue(of([semiStatement()]));
       const { c, entry } = loaded();
       dialogResult = { amount_override: 0 };
-      c.openOverrideDialog(entry, 'fifteenth', click());
+      c.openOverrideDialog(entry, dueOf(entry, 1), click());
       expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
         data: { contactName: 'Casey Lee', periodLabel: 'Due 15th — July 2026', derived: 181, current: null },
       }));
       expect(billingService.setAmountOverride).toHaveBeenCalledWith({
         contact_id: 'c-1', period_start: '2026-07-15', cycle: BillingCycle.SEMI_MONTHLY, amount_override: 0,
       });
-      expect(entry.due_fifteenth).toBe(0);
-      expect(entry.override_fifteenth).toBe(0);
-      expect(entry.due_first).toBe(181);
+      expect(dueOf(entry, 1).amount).toBe(0);
+      expect(dueOf(entry, 1).override).toBe(0);
+      expect(dueOf(entry).amount).toBe(181);
       expect(entry.total).toBe(181);
 
-      entry.derived_fifteenth = null;
+      dueOf(entry, 1).derived = null;
       dialogResult = { amount_override: null };
-      c.openOverrideDialog(entry, 'fifteenth', click());
-      expect(entry.due_fifteenth).toBeNull();
+      c.openOverrideDialog(entry, dueOf(entry, 1), click());
+      expect(dueOf(entry, 1).amount).toBeNull();
       expect(entry.total).toBe(181);
+    });
+
+    it('labels a weekly due by its date and keys the override on it', () => {
+      billingService.getStatements.mockReturnValue(of([statement({
+        cycle: 'weekly',
+        dues: [statementDue({ day: 10, period_start: '2026-07-10', derived: 83.54, amount: 83.54 })],
+      })]));
+      const { c, entry } = loaded();
+      dialogResult = { amount_override: 50 };
+      c.openOverrideDialog(entry, dueOf(entry), click());
+      expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        data: { contactName: 'Casey Lee', periodLabel: 'Due Jul 10, 2026', derived: 83.54, current: null },
+      }));
+      expect(billingService.setAmountOverride).toHaveBeenCalledWith({
+        contact_id: 'c-1', period_start: '2026-07-10', cycle: 'weekly', amount_override: 50,
+      });
+      expect(entry.total).toBe(50);
     });
 
     it('tolerates sparse entries', () => {
       const { c } = loaded();
-      c.openOverrideDialog({ name: 'X' } as BillingEntry, 'first', click());
+      const blank: EntryDue = { period_start: '2026-07-01', label: '1st', derived: null, override: null, amount: null, paid: false };
+      c.openOverrideDialog({ name: 'X' } as BillingEntry, blank, click());
       expect(dialog.open).not.toHaveBeenCalled();
 
-      const sparse = { contact_id: 'c-9', derived_first: null, override_first: null } as BillingEntry;
-      expect(c.overrideTooltip(sparse, 'first')).toBe('Overridden — calculated amount —');
-      expect(c.overrideTooltip({} as BillingEntry, 'fifteenth')).toBe('Overridden — calculated amount —');
+      const sparse = { contact_id: 'c-9' } as BillingEntry;
+      expect(c.overrideTooltip(blank)).toBe('Overridden — calculated amount —');
       dialogResult = { amount_override: 25 };
-      c.openOverrideDialog(sparse, 'first', click());
+      c.openOverrideDialog(sparse, blank, click());
       expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
         data: expect.objectContaining({ contactName: '', derived: null, current: null }),
       }));
       expect(billingService.setAmountOverride).toHaveBeenCalledWith(expect.objectContaining({
         contact_id: 'c-9', cycle: BillingCycle.MONTHLY, amount_override: 25,
       }));
-      expect(sparse.due_first).toBe(25);
+      expect(blank.amount).toBe(25);
       expect(sparse.total).toBe(25);
       dialogResult = { amount_override: null };
-      c.openOverrideDialog(sparse, 'first', click());
-      expect(sparse.due_first).toBeNull();
+      c.openOverrideDialog(sparse, blank, click());
+      expect(blank.amount).toBeNull();
       expect(sparse.total).toBe(0);
     });
   });
 
-  it('isSemiMonthly reflects the entry cycle', () => {
+  it('cycleLabel reads the entry cycle and the weekday of a weekly family', () => {
     const c = build();
-    expect((c as any).isSemiMonthly({ cycle: BillingCycle.SEMI_MONTHLY })).toBe(true);
-    expect((c as any).isSemiMonthly({ cycle: BillingCycle.MONTHLY })).toBe(false);
+    expect((c as any).cycleLabel({ cycle: BillingCycle.SEMI_MONTHLY })).toBe('Semi-monthly');
+    expect((c as any).cycleLabel({ cycle: BillingCycle.MONTHLY })).toBe('Monthly');
+    expect((c as any).cycleLabel({ cycle: 'weekly', dues: [{ period_start: '2026-10-09' }] })).toBe('Weekly (Fri)');
   });
 
   it('wires the sort and paginator setters and ignores falsy values', () => {
@@ -594,7 +626,7 @@ describe('Billing', () => {
       expect(body).toHaveLength(3);
       expect(body[1]).toEqual([{
         content: '    Scholarship: PA · Invoice INV-7',
-        colSpan: 7,
+        colSpan: 6,
         styles: { fontSize: 8, textColor: 90, fontStyle: 'italic' },
       }]);
       expect((body[2] as string[])[0]).toBe('Sam Roe');
@@ -605,11 +637,17 @@ describe('Billing', () => {
       (c as any).dataSource.data = [
         {
           name: 'Casey Lee', packages: 'Pat: Succeed', cycle: BillingCycle.MONTHLY,
-          due_first: 362, due_fifteenth: null, total: 362,
+          dues: [due({ amount: 362 })], total: 362,
         } as BillingEntry,
         {
           name: 'Sam Roe', packages: 'Kai: Thrive; Rio: Thrive', cycle: BillingCycle.SEMI_MONTHLY,
-          due_first: 163, due_fifteenth: 163, total: 326, discount: 36, discount_percent: 10,
+          dues: [due({ amount: 163 }), due({ period_start: '2026-07-15', label: '15th', amount: 163 })],
+          total: 326, discount: 36, discount_percent: 10,
+        } as BillingEntry,
+        {
+          name: 'Wen Kly', packages: 'Fri: Start', cycle: 'weekly',
+          dues: [due({ period_start: '2026-07-03', label: 'Jul 3', amount: 63 }), due({ period_start: '2026-07-10', label: 'Jul 10', amount: 63 })],
+          total: 126,
         } as BillingEntry,
         { name: 'Both', total: 10, discount: 5, discount_percent: 0 } as BillingEntry,
         {} as BillingEntry,
@@ -631,15 +669,16 @@ describe('Billing', () => {
       expect(config.startY).toBe(28);
       expect(config.styles).toEqual({ fontSize: 9 });
       expect(config.headStyles).toEqual({ fillColor: [17, 138, 178] });
-      expect(config.head).toEqual([['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Discount', 'Total']]);
+      expect(config.head).toEqual([['Contact', 'Students', 'Cycle', 'Due', 'Discount', 'Total']]);
       expect(config.body).toEqual([
-        ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '—', '$362.00'],
-        ['Sam Roe', 'Kai: Thrive; Rio: Thrive', 'Semi-monthly', '$163.00', '$163.00', '-$36.00 (10%)', '$326.00'],
-        ['Both', '', 'Monthly', '—', '—', '-$5.00', '$10.00'],
-        ['', '', 'Monthly', '—', '—', '—', '$0.00'],
+        ['Casey Lee', 'Pat: Succeed', 'Monthly', 'Jul 1 $362.00', '—', '$362.00'],
+        ['Sam Roe', 'Kai: Thrive; Rio: Thrive', 'Semi-monthly', 'Jul 1 $163.00\nJul 15 $163.00', '-$36.00 (10%)', '$326.00'],
+        ['Wen Kly', 'Fri: Start', 'Weekly (Fri)', 'Jul 3 $63.00\nJul 10 $63.00', '—', '$126.00'],
+        ['Both', '', 'Monthly', '—', '-$5.00', '$10.00'],
+        ['', '', 'Monthly', '—', '—', '$0.00'],
       ]);
       expect(config.foot).toEqual([
-        ['Grand Total', '', '', '$525.00', '$163.00', '', '$698.00'],
+        ['Grand Total', '', '', '1st $525.00 · 15th $163.00 · weekly $126.00', '', '$824.00'],
       ]);
       expect(config.showFoot).toBe('lastPage');
       expect(config.footStyles).toEqual({ fillColor: [17, 138, 178] });
@@ -649,7 +688,7 @@ describe('Billing', () => {
       const { c } = loaded();
       c.exportPDF();
       expect(lastTable().body).toEqual([
-        ['Casey Lee', 'Pat: Succeed', 'Monthly', '$362.00', '—', '—', '$362.00'],
+        ['Casey Lee', 'Pat: Succeed', 'Monthly', 'Jul 1 $362.00', '—', '$362.00'],
       ]);
       expect(lastDoc().text).not.toHaveBeenCalledWith('* manually overridden amount', 120, 23);
     });
@@ -676,21 +715,21 @@ describe('Billing', () => {
       c.exportPDF();
       const styles = { fontSize: 8, textColor: 90, fontStyle: 'italic' };
       expect(lastTable().body).toEqual([
-        ['Casey Lee', 'Pat: Succeed; Sam: Start; Sam: BTC & Me', 'Monthly', '$633.18', '—', '-$54.44', '$633.18'],
+        ['Casey Lee', 'Pat: Succeed; Sam: Start; Sam: BTC & Me', 'Monthly', 'Jul 1 $633.18', '-$54.44', '$633.18'],
         [
-          { content: '    Pat: Succeed, from Jul 14, 3 of 4 sessions at $83.54, less 10% ($25.06) [Prorated start, Discount]', colSpan: 6, styles },
+          { content: '    Pat: Succeed, from Jul 14, 3 of 4 sessions at $83.54, less 10% ($25.06) [Prorated start, Discount]', colSpan: 5, styles },
           { content: '$225.56', styles },
         ],
         [
-          { content: '    Sam: Start, full month', colSpan: 6, styles },
+          { content: '    Sam: Start, full month', colSpan: 5, styles },
           { content: '$362.00', styles },
         ],
         [
-          { content: '    Sibling discount 5%', colSpan: 6, styles },
+          { content: '    Sibling discount 5%', colSpan: 5, styles },
           { content: '-$29.38', styles },
         ],
         [
-          { content: '    BTC & Me fee (Sam)', colSpan: 6, styles },
+          { content: '    BTC & Me fee (Sam)', colSpan: 5, styles },
           { content: '$75.00', styles },
         ],
       ]);
@@ -726,8 +765,7 @@ describe('Billing', () => {
       ]));
       const { c } = loaded();
       c.exportPDF();
-      expect(lastTable().body[0][3]).toBe('$150.00*');
-      expect(lastTable().body[0][4]).toBe('No charge');
+      expect(lastTable().body[0][3]).toBe('Jul 1 $150.00*\nJul 15 No charge');
       expect(lastDoc().text).toHaveBeenCalledWith('* manually overridden amount', 120, 23);
     });
 
@@ -740,8 +778,7 @@ describe('Billing', () => {
       ]));
       const { c } = loaded();
       c.exportPDF();
-      expect(lastTable().body[0][3]).toBe('$181.00');
-      expect(lastTable().body[0][4]).toBe('$5.00*');
+      expect(lastTable().body[0][3]).toBe('Jul 1 $181.00\nJul 15 $5.00*');
       expect(lastDoc().text).toHaveBeenCalledWith('* manually overridden amount', 120, 23);
     });
   });
@@ -760,19 +797,22 @@ describe('Billing', () => {
     it('is zero with no rows', () => {
       const c = build();
       expect((c as any).grandTotal).toBe(0);
-      expect((c as any).grandDueFirst).toBe(0);
-      expect((c as any).grandDueFifteenth).toBe(0);
+      expect((c as any).grandDues).toEqual({ first: 0, fifteenth: 0, weekly: 0 });
+      expect((c as any).grandDuesText).toBe('');
     });
 
-    it('sums the due columns null-safely, re-rounded', () => {
+    it('sums the dues by date kind null-safely, re-rounded, and words them', () => {
       const c = build();
       (c as any).dataSource.data = [
-        { due_first: 0.1, due_fifteenth: 0.2 } as BillingEntry,
-        { due_first: 0.2, due_fifteenth: null } as BillingEntry,
+        { dues: [due({ amount: 0.1 }), due({ label: '15th', amount: 0.2 })] } as BillingEntry,
+        { dues: [due({ amount: 0.2 }), due({ label: '15th', amount: null })] } as BillingEntry,
+        { dues: [due({ label: 'Oct 9', amount: 1.5 }), due({ label: 'Oct 16', amount: 1.5 })] } as BillingEntry,
         {} as BillingEntry,
       ];
-      expect((c as any).grandDueFirst).toBe(0.3);
-      expect((c as any).grandDueFifteenth).toBe(0.2);
+      expect((c as any).grandDues).toEqual({ first: 0.3, fifteenth: 0.2, weekly: 3 });
+      expect((c as any).grandDuesText).toBe('1st $0.30 · 15th $0.20 · weekly $3.00');
+      (c as any).dataSource.data = [{ dues: [due({ amount: 5 })] } as BillingEntry];
+      expect((c as any).grandDuesText).toBe('1st $5.00');
     });
   });
 

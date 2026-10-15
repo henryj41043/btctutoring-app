@@ -19,6 +19,8 @@ export class Contact {
   /** StaffStatus values for Hiring contacts; ParentStatus values for Tutoring. */
   status?: string;
   billing_cycle?: BillingCycle;
+  /** Weekly families: 'SUNDAY' … 'SATURDAY', the day each due falls on. */
+  billing_weekday?: string;
   /** Percent (0–100) off the family's recurring billing when 2+ students are enrolled. */
   sibling_discount?: number;
   cc_authorization_received?: boolean;
