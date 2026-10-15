@@ -33,7 +33,8 @@ import {BillingCycle} from '../enums/billing-cycle.enum';
 import {round2} from '../utils/package-config';
 import {TableStateStore} from '../utils/table-state';
 import {StatementLine} from '../models/statement.model';
-import {flagLabels, formatMoney, linePeriod, lineSessions, lineSummary, toBillingEntry} from '../utils/statement-view';
+import {cycleLabel, duesTotal, flagLabels, formatMoney, linePeriod, lineSessions, lineSummary, shortDate, toBillingEntry} from '../utils/statement-view';
+import {EntryDue} from '../models/billing-entry.model';
 import {monthKeyOf} from '../utils/month-key';
 import {requestedDateText, scholarshipSummary} from '../utils/scholarship-view';
 
@@ -99,7 +100,7 @@ export class Billing implements OnInit {
   }
 
   protected billingColumns: string[] = [
-    'expand', 'name', 'packages', 'cycle', 'due_first', 'due_fifteenth', 'discount', 'total', 'paid',
+    'expand', 'name', 'packages', 'cycle', 'dues', 'discount', 'total', 'paid',
   ];
   protected dataSource = new MatTableDataSource<BillingEntry>([]);
   protected selectedDate: Date = new Date();
@@ -141,15 +142,9 @@ export class Billing implements OnInit {
     this.onDateChange(new Date(this.monthStart.getFullYear(), this.monthStart.getMonth() + delta, 1));
   }
 
-  /** 'YYYY-MM-DD' period key for the selected month and day-of-month. */
-  private periodKey(date: Date, day: number): string {
-    const y = date.getFullYear();
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    return `${y}-${m}-${day.toString().padStart(2, '0')}`;
-  }
-
-  protected isSemiMonthly(entry: BillingEntry): boolean {
-    return entry.cycle === BillingCycle.SEMI_MONTHLY;
+  /** 'Monthly', 'Semi-monthly' or 'Weekly (Fri)'. */
+  protected cycleLabel(entry: BillingEntry): string {
+    return cycleLabel(entry.cycle, entry.dues ?? []);
   }
 
   private loadBilling(date: Date): void {
@@ -224,28 +219,35 @@ export class Billing implements OnInit {
   protected lineSessions(line: StatementLine): string { return lineSessions(line); }
   protected lineLabels(line: StatementLine): string[] { return flagLabels(line.flags); }
 
-  /** True when a period's amount is an admin override rather than derived. */
-  protected isOverridden(entry: BillingEntry, half: 'first' | 'fifteenth'): boolean {
-    return (half === 'first' ? entry.override_first : entry.override_fifteenth) != null;
+  /** True when a due's amount is an admin override rather than derived. */
+  protected isOverridden(due: EntryDue): boolean {
+    return due.override != null;
   }
 
   /** Tooltip for an overridden cell: what the package math would have charged. */
-  protected overrideTooltip(entry: BillingEntry, half: 'first' | 'fifteenth'): string {
-    const derived = half === 'first' ? entry.derived_first : entry.derived_fifteenth;
-    return `Overridden — calculated amount ${derived == null ? '—' : this.formatMoney(derived)}`;
+  protected overrideTooltip(due: EntryDue): string {
+    return `Overridden — calculated amount ${due.derived == null ? '—' : this.formatMoney(due.derived)}`;
   }
 
-  /** Opens the per-period override editor; persists the result and patches the row. */
-  openOverrideDialog(entry: BillingEntry, half: 'first' | 'fifteenth', event: Event): void {
+  /** 'Due 1st — July 2026' for a monthly half; 'Due Oct 9, 2026' for a weekly date. */
+  private dueLabel(due: EntryDue): string {
+    if (due.label === '1st' || due.label === '15th') {
+      return `Due ${due.label} — ${this.monthStart.toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}`;
+    }
+    return `Due ${this.formatPeriod(due.period_start)}`;
+  }
+
+  /** Opens the per-due override editor; persists the result and patches the row. */
+  openOverrideDialog(entry: BillingEntry, due: EntryDue, event: Event): void {
     // Icon-button action — never also navigate to the contact.
     event.stopPropagation();
     if (!entry.contact_id) return;
-    const period = this.periodKey(this.selectedDate, half === 'first' ? 1 : 15);
+    const period = due.period_start;
     const data: BillingOverrideDialogData = {
       contactName: entry.name ?? '',
-      periodLabel: `Due ${half === 'first' ? '1st' : '15th'} — ${this.monthStart.toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}`,
-      derived: (half === 'first' ? entry.derived_first : entry.derived_fifteenth) ?? null,
-      current: (half === 'first' ? entry.override_first : entry.override_fifteenth) ?? null,
+      periodLabel: this.dueLabel(due),
+      derived: due.derived ?? null,
+      current: due.override ?? null,
     };
     const ref = this.dialog.open<BillingOverrideDialog, BillingOverrideDialogData, BillingOverrideResult | undefined>(
       BillingOverrideDialog, {data, width: '420px'},
@@ -260,22 +262,17 @@ export class Billing implements OnInit {
       }).pipe(
         catchError(error => { console.log(error); return EMPTY; }),
       ).subscribe(() => {
-        this.applyOverride(entry, half, result.amount_override);
+        this.applyOverride(entry, due, result.amount_override);
         this.cdr.markForCheck();
       });
     });
   }
 
-  /** Patches a row's effective dues and total after an override is saved or cleared. */
-  private applyOverride(entry: BillingEntry, half: 'first' | 'fifteenth', override: number | null): void {
-    if (half === 'first') {
-      entry.override_first = override;
-      entry.due_first = override ?? entry.derived_first ?? null;
-    } else {
-      entry.override_fifteenth = override;
-      entry.due_fifteenth = override ?? entry.derived_fifteenth ?? null;
-    }
-    entry.total = round2((entry.due_first ?? 0) + (entry.due_fifteenth ?? 0));
+  /** Patches a row's effective due and total after an override is saved or cleared. */
+  private applyOverride(entry: BillingEntry, due: EntryDue, override: number | null): void {
+    due.override = override;
+    due.amount = override ?? due.derived ?? null;
+    entry.total = duesTotal(entry.dues ?? [due]);
     // A fresh array reference so the OnPush table re-renders the footer totals.
     this.dataSource.data = [...this.dataSource.data];
   }
@@ -293,11 +290,11 @@ export class Billing implements OnInit {
     }
   }
 
-  /** Persists a paid/unpaid toggle for one half of a contact's billing month. */
-  togglePaid(entry: BillingEntry, half: 'first' | 'fifteenth', checked: boolean): void {
-    const period = this.periodKey(this.selectedDate, half === 'first' ? 1 : 15);
-    const amount = (half === 'first' ? entry.due_first : entry.due_fifteenth) ?? 0;
-    const override = half === 'first' ? entry.override_first : entry.override_fifteenth;
+  /** Persists a paid/unpaid toggle for one due of a contact's billing month. */
+  togglePaid(entry: BillingEntry, due: EntryDue, checked: boolean): void {
+    const period = due.period_start;
+    const amount = due.amount ?? 0;
+    const override = due.override;
     const record: BillingRecord = {
       contact_id: entry.contact_id,
       period_start: period,
@@ -311,7 +308,7 @@ export class Billing implements OnInit {
     this.billingService.upsertBillingRecord(record).pipe(
       catchError(error => { console.log(error); return EMPTY; }),
     ).subscribe(() => {
-      if (half === 'first') { entry.paid_first = checked; } else { entry.paid_fifteenth = checked; }
+      due.paid = checked;
       if (checked) {
         // Client request: marking paid files a note on the family's contact
         // page. Best-effort — a note failure never blocks the paid toggle.
@@ -355,21 +352,41 @@ export class Billing implements OnInit {
     return round2(this.dataSource.data.reduce((sum, e) => sum + (e.total ?? 0), 0));
   }
 
-  protected get grandDueFirst(): number {
-    return round2(this.dataSource.data.reduce((sum, e) => sum + (e.due_first ?? 0), 0));
+  /** What is due on the 1st, the 15th and on weekly dates across all rows, re-rounded. */
+  protected get grandDues(): {first: number; fifteenth: number; weekly: number} {
+    const sums = {first: 0, fifteenth: 0, weekly: 0};
+    for (const entry of this.dataSource.data) {
+      for (const due of entry.dues ?? []) {
+        const key = due.label === '1st' ? 'first' : due.label === '15th' ? 'fifteenth' : 'weekly';
+        sums[key] += due.amount ?? 0;
+      }
+    }
+    return {first: round2(sums.first), fifteenth: round2(sums.fifteenth), weekly: round2(sums.weekly)};
   }
 
-  protected get grandDueFifteenth(): number {
-    return round2(this.dataSource.data.reduce((sum, e) => sum + (e.due_fifteenth ?? 0), 0));
+  /** '1st $525.00 · 15th $163.00 · weekly $420.92', leaving out what is zero. */
+  protected get grandDuesText(): string {
+    const sums = this.grandDues;
+    return ([['1st', sums.first], ['15th', sums.fifteenth], ['weekly', sums.weekly]] as [string, number][])
+      .filter(([, amount]) => amount > 0)
+      .map(([label, amount]) => `${label} ${this.formatMoney(amount)}`)
+      .join(' · ');
   }
 
-  /** A due cell for the PDF: '—', 'No charge', '$x.xx' or '$x.xx*' when overridden. */
-  private pdfDue(entry: BillingEntry, half: 'first' | 'fifteenth'): string {
-    const due = half === 'first' ? entry.due_first : entry.due_fifteenth;
-    if (due == null) return '—';
-    if (!this.isOverridden(entry, half)) return this.formatMoney(due);
-    return due === 0 ? 'No charge' : `${this.formatMoney(due)}*`;
+  /** A due's amount for the PDF: '—', 'No charge', '$x.xx' or '$x.xx*' when overridden. */
+  private pdfDueAmount(due: EntryDue): string {
+    if (due.amount == null) return '—';
+    if (!this.isOverridden(due)) return this.formatMoney(due.amount);
+    return due.amount === 0 ? 'No charge' : `${this.formatMoney(due.amount)}*`;
   }
+
+  /** The PDF's Due cell: one line per due, e.g. 'Jul 1 $362.00' / 'Oct 9 $105.23*'. */
+  private pdfDues(entry: BillingEntry): string {
+    const dues = entry.dues ?? [];
+    if (dues.length === 0) return '—';
+    return dues.map(due => `${shortDate(due.period_start)} ${this.pdfDueAmount(due)}`).join('\n');
+  }
+
 
   private pdfDiscount(entry: BillingEntry): string {
     if (!entry.discount) return '—';
@@ -386,7 +403,7 @@ export class Billing implements OnInit {
     if (!statement || (entry.labels ?? []).length === 0) return [];
     const styles: Partial<Styles> = {fontSize: 8, textColor: 90, fontStyle: 'italic'};
     const row = (text: string, amount: number): RowInput => [
-      {content: `    ${text}`, colSpan: 6, styles},
+      {content: `    ${text}`, colSpan: 5, styles},
       {content: this.formatMoney(amount), styles},
     ];
     const rows = statement.lines.map(line => {
@@ -406,7 +423,7 @@ export class Billing implements OnInit {
   private pdfScholarshipRow(entry: BillingEntry): RowInput[] {
     if (!entry.scholarship) return [];
     const styles: Partial<Styles> = {fontSize: 8, textColor: 90, fontStyle: 'italic'};
-    return [[{content: `    ${scholarshipSummary(entry.scholarship)}`, colSpan: 7, styles}]];
+    return [[{content: `    ${scholarshipSummary(entry.scholarship)}`, colSpan: 6, styles}]];
   }
 
   exportPDF(): void {
@@ -420,21 +437,20 @@ export class Billing implements OnInit {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
     doc.text(this.monthClosed ? `Billing: ${monthStr} (closed ${this.closedOn})` : `Billing: ${monthStr}`, 14, 23);
-    if (this.dataSource.data.some(e => this.isOverridden(e, 'first') || this.isOverridden(e, 'fifteenth'))) {
+    if (this.dataSource.data.some(e => (e.dues ?? []).some(due => this.isOverridden(due)))) {
       doc.text('* manually overridden amount', 120, 23);
     }
     doc.setTextColor(0);
 
     autoTable(doc, {
       startY: 28,
-      head: [['Contact', 'Students', 'Cycle', 'Due 1st', 'Due 15th', 'Discount', 'Total']],
+      head: [['Contact', 'Students', 'Cycle', 'Due', 'Discount', 'Total']],
       body: this.dataSource.data.flatMap((e): RowInput[] => [
         [
           e.name ?? '',
           e.packages ?? '',
-          e.cycle === BillingCycle.SEMI_MONTHLY ? 'Semi-monthly' : 'Monthly',
-          this.pdfDue(e, 'first'),
-          this.pdfDue(e, 'fifteenth'),
+          this.cycleLabel(e),
+          this.pdfDues(e),
           this.pdfDiscount(e),
           this.formatMoney(e.total),
         ],
@@ -442,8 +458,7 @@ export class Billing implements OnInit {
         ...this.pdfScholarshipRow(e),
       ]),
       foot: [[
-        'Grand Total', '', '', this.formatMoney(this.grandDueFirst),
-        this.formatMoney(this.grandDueFifteenth), '', this.formatMoney(this.grandTotal),
+        'Grand Total', '', '', this.grandDuesText, '', this.formatMoney(this.grandTotal),
       ]],
       showFoot: 'lastPage',
       styles: { fontSize: 9 },

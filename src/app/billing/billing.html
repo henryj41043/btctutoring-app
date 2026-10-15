@@ -98,46 +98,33 @@
         </ng-container>
         <ng-container matColumnDef="cycle">
           <th mat-header-cell *matHeaderCellDef mat-sort-header> Cycle </th>
-          <td mat-cell *matCellDef="let item"> {{isSemiMonthly(item) ? 'Semi-monthly' : 'Monthly'}} </td>
+          <td mat-cell *matCellDef="let item"> {{cycleLabel(item)}} </td>
           <td mat-footer-cell *matFooterCellDef></td>
         </ng-container>
-        <ng-container matColumnDef="due_first">
-          <th mat-header-cell *matHeaderCellDef> Due 1st </th>
+        <ng-container matColumnDef="dues">
+          <th mat-header-cell *matHeaderCellDef> Due </th>
           <td mat-cell *matCellDef="let item" class="due-cell">
-            @if (isOverridden(item, 'first')) {
-              <span class="override-amount" [matTooltip]="overrideTooltip(item, 'first')">
-                {{item.due_first === 0 ? 'No charge' : (item.due_first | currency:'USD':'symbol':'1.2-2')}}
-              </span>
-            } @else {
-              {{item.due_first == null ? '—' : (item.due_first | currency:'USD':'symbol':'1.2-2')}}
-            }
-            <button matIconButton type="button" class="override-button"
-                    aria-label="Override amount due on the 1st" matTooltip="Override this amount"
-                    (click)="openOverrideDialog(item, 'first', $event)">
-              <mat-icon>edit</mat-icon>
-            </button>
-          </td>
-          <td mat-footer-cell *matFooterCellDef> {{grandDueFirst | currency:'USD':'symbol':'1.2-2'}} </td>
-        </ng-container>
-        <ng-container matColumnDef="due_fifteenth">
-          <th mat-header-cell *matHeaderCellDef> Due 15th </th>
-          <td mat-cell *matCellDef="let item" class="due-cell">
-            @if (isOverridden(item, 'fifteenth')) {
-              <span class="override-amount" [matTooltip]="overrideTooltip(item, 'fifteenth')">
-                {{item.due_fifteenth === 0 ? 'No charge' : (item.due_fifteenth | currency:'USD':'symbol':'1.2-2')}}
-              </span>
-            } @else {
-              {{item.due_fifteenth == null ? '—' : (item.due_fifteenth | currency:'USD':'symbol':'1.2-2')}}
-            }
-            @if (isSemiMonthly(item)) {
-              <button matIconButton type="button" class="override-button"
-                      aria-label="Override amount due on the 15th" matTooltip="Override this amount"
-                      (click)="openOverrideDialog(item, 'fifteenth', $event)">
-                <mat-icon>edit</mat-icon>
-              </button>
+            @for (due of item.dues; track due.period_start) {
+              <div class="due-line">
+                <span class="due-label">{{due.label}}</span>
+                @if (isOverridden(due)) {
+                  <span class="override-amount" [matTooltip]="overrideTooltip(due)">
+                    {{due.amount === 0 ? 'No charge' : (due.amount | currency:'USD':'symbol':'1.2-2')}}
+                  </span>
+                } @else {
+                  <span>{{due.amount == null ? '—' : (due.amount | currency:'USD':'symbol':'1.2-2')}}</span>
+                }
+                <button matIconButton type="button" class="override-button"
+                        [attr.aria-label]="'Override the amount due ' + due.label" matTooltip="Override this amount"
+                        (click)="openOverrideDialog(item, due, $event)">
+                  <mat-icon>edit</mat-icon>
+                </button>
+              </div>
+            } @empty {
+              —
             }
           </td>
-          <td mat-footer-cell *matFooterCellDef> {{grandDueFifteenth | currency:'USD':'symbol':'1.2-2'}} </td>
+          <td mat-footer-cell *matFooterCellDef class="due-footer"> {{grandDuesText}} </td>
         </ng-container>
         <ng-container matColumnDef="discount">
           <th mat-header-cell *matHeaderCellDef> Discount </th>
@@ -161,18 +148,14 @@
         <ng-container matColumnDef="paid">
           <th mat-header-cell *matHeaderCellDef> Paid </th>
           <!-- Checkbox clicks must not also trigger the row's contact navigation. -->
-          <td mat-cell *matCellDef="let item" (click)="$event.stopPropagation()">
-            @if (item.due_first) {
-              <mat-checkbox [checked]="item.paid_first"
-                            (change)="togglePaid(item, 'first', $event.checked)">
-                {{isSemiMonthly(item) ? '1st' : ''}}
-              </mat-checkbox>
-            }
-            @if (isSemiMonthly(item) && item.due_fifteenth) {
-              <mat-checkbox [checked]="item.paid_fifteenth"
-                            (change)="togglePaid(item, 'fifteenth', $event.checked)">
-                15th
-              </mat-checkbox>
+          <td mat-cell *matCellDef="let item" class="paid-cell" (click)="$event.stopPropagation()">
+            @for (due of item.dues; track due.period_start) {
+              @if (due.amount) {
+                <mat-checkbox [checked]="due.paid"
+                              (change)="togglePaid(item, due, $event.checked)">
+                  {{item.dues.length > 1 ? due.label : ''}}
+                </mat-checkbox>
+              }
             }
           </td>
           <td mat-footer-cell *matFooterCellDef></td>

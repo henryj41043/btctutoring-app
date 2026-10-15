@@ -404,6 +404,56 @@ describe('Contact', () => {
     expect(form(c).controls['status'].value).toBe('Onboarding');
   });
 
+  describe('billing cycle', () => {
+    it('offers Monthly, Semi-monthly and Weekly with labels, and no Custom', () => {
+      const c = build();
+      expect((c as unknown as { billingCycleOptions: { value: string; label: string }[] }).billingCycleOptions)
+        .toEqual([
+          { value: 'monthly', label: 'Monthly' },
+          { value: 'semi_monthly', label: 'Semi-monthly' },
+          { value: 'weekly', label: 'Weekly' },
+        ]);
+    });
+
+    it('requires the weekday only while the cycle is weekly', () => {
+      const c = build();
+      c.ngOnInit();
+      const f = form(c);
+      expect(f.controls['billing_weekday'].valid).toBe(true);
+      f.controls['billing_cycle'].setValue('weekly');
+      expect(f.controls['billing_weekday'].valid).toBe(false);
+      expect(f.valid).toBe(false);
+      f.controls['billing_weekday'].setValue('FRIDAY');
+      expect(f.valid).toBe(true);
+      f.controls['billing_cycle'].setValue('monthly');
+      f.controls['billing_weekday'].setValue('');
+      expect(f.valid).toBe(true);
+    });
+
+    it('refuses to save a weekly family without a weekday, then saves it with one', () => {
+      const c = build();
+      c.ngOnInit();
+      const f = form(c);
+      f.controls['billing_cycle'].setValue('weekly');
+      c.updateContact();
+      expect(contactService.updateContact).not.toHaveBeenCalled();
+      expect((c as unknown as { updateInvalid: boolean }).updateInvalid).toBe(true);
+      f.controls['billing_weekday'].setValue('FRIDAY');
+      c.updateContact();
+      expect(contactService.updateContact).toHaveBeenCalledWith(
+        expect.objectContaining({ billing_cycle: 'weekly', billing_weekday: 'FRIDAY' }),
+      );
+    });
+
+    it('loads the stored weekday', () => {
+      contactService.getContact.mockReturnValue(of([fullContact({ billing_cycle: BillingCycle.WEEKLY, billing_weekday: 'MONDAY' })]));
+      const c = build();
+      c.ngOnInit();
+      expect(form(c).controls['billing_weekday'].value).toBe('MONDAY');
+      expect(form(c).valid).toBe(true);
+    });
+  });
+
   it('populates every form field from a loaded contact', () => {
     const rich = fullContact({
       first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x.com', phone_number: '1234567890',

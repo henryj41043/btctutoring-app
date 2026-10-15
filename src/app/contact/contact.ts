@@ -30,7 +30,7 @@ import {ParentStatus} from '../enums/parent-status.enum';
 import {cascadeTargetFor, serviceEndForLeaving} from '../utils/parent-status-cascade';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {BillingCycle} from '../enums/billing-cycle.enum';
+import {BILLING_CYCLE_LABELS, BILLING_WEEKDAYS, BillingCycle} from '../enums/billing-cycle.enum';
 import {UserGroup} from '../enums/user-group.enum';
 import {AuthService} from '../services/auth.service';
 import {DatePipe} from '@angular/common';
@@ -132,7 +132,9 @@ export class Contact implements OnInit {
   protected staffStatusOptions: string[] = Object.values(StaffStatus);
   protected parentStatusOptions: string[] = Object.values(ParentStatus);
   protected readonly staffStatusLabel = staffStatusLabel;
-  protected billingCycleOptions: string[] = Object.values(BillingCycle);
+  protected billingCycleOptions: {value: BillingCycle; label: string}[] = Object.values(BillingCycle)
+    .map(value => ({value, label: BILLING_CYCLE_LABELS[value]}));
+  protected readonly billingWeekdays = BILLING_WEEKDAYS;
   protected groupOptions: string[] = Object.values(UserGroup);
   protected tutors: _Contact[] = [];
   protected readonly twentyFiveStatusOptions: string[] = Object.values(TwentyFiveStatus);
@@ -172,6 +174,8 @@ export class Contact implements OnInit {
     service: ['', Validators.required],
     status: '',
     billing_cycle: '',
+    // Required once the cycle is weekly (see watchBillingCycle).
+    billing_weekday: '',
     sibling_discount: 0,
     cc_authorization_received: false,
     twenty_five_deducted: false,
@@ -230,6 +234,7 @@ export class Contact implements OnInit {
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
 
   ngOnInit() {
+    this.watchBillingCycle();
     this.loadContact();
     // Family students are an admin view — tutors only ever see their own
     // (Hiring) page, where the roster loads via loadContact instead. The
@@ -249,6 +254,19 @@ export class Contact implements OnInit {
     // The service limits a tutor to their own students.
     this.loadScheduledMakeup();
     this.getTutors();
+  }
+
+  /** A weekly family must say which day it is billed on; other cycles ignore the field. */
+  private watchBillingCycle(): void {
+    const weekday = this.contactForm.controls['billing_weekday'];
+    const apply = (cycle: unknown) => {
+      weekday.setValidators(cycle === BillingCycle.WEEKLY ? [Validators.required] : []);
+      weekday.updateValueAndValidity({emitEvent: false});
+    };
+    apply(this.contactForm.controls['billing_cycle'].value);
+    this.contactForm.controls['billing_cycle'].valueChanges.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(apply);
   }
 
   /** The package catalog behind the student cards' schedule warning. */
@@ -386,6 +404,7 @@ export class Contact implements OnInit {
     }
     this.contactForm.controls['service'].setValue(contact.service);
     this.contactForm.controls['billing_cycle'].setValue(contact.billing_cycle);
+    this.contactForm.controls['billing_weekday'].setValue(contact.billing_weekday ?? '');
     this.contactForm.controls['sibling_discount'].setValue(contact.sibling_discount ?? 0);
     this.contactForm.controls['cc_authorization_received'].setValue(contact.cc_authorization_received);
     this.contactForm.controls['exclude_bulk_email'].setValue(contact.exclude_bulk_email ?? false);

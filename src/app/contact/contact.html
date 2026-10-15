@@ -437,11 +437,25 @@
         <mat-form-field>
           <mat-label>Billing Cycle</mat-label>
           <mat-select formControlName="billing_cycle">
-            @for (billingCycleOption of billingCycleOptions; track billingCycleOption) {
-              <mat-option [value]="billingCycleOption">{{billingCycleOption}}</mat-option>
+            @for (billingCycleOption of billingCycleOptions; track billingCycleOption.value) {
+              <mat-option [value]="billingCycleOption.value">{{billingCycleOption.label}}</mat-option>
             }
           </mat-select>
         </mat-form-field>
+        @if (contactForm.get('billing_cycle')?.value === 'weekly') {
+          <mat-form-field>
+            <mat-label>Billed on</mat-label>
+            <mat-select formControlName="billing_weekday">
+              @for (weekday of billingWeekdays; track weekday.value) {
+                <mat-option [value]="weekday.value">{{weekday.label}}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>One due each week, on this day</mat-hint>
+            @if (contactForm.get('billing_weekday')?.invalid) {
+              <mat-error>Pick the day the family is billed on</mat-error>
+            }
+          </mat-form-field>
+        }
         @if (qualifiesForSiblingDiscount) {
           <mat-form-field>
             <mat-label>Sibling Discount (%)</mat-label>

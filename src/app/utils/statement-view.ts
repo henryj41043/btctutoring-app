@@ -1,5 +1,6 @@
-import {BillingEntry} from '../models/billing-entry.model';
-import {LineFlag, Statement, StatementLine} from '../models/statement.model';
+import {BillingEntry, EntryDue} from '../models/billing-entry.model';
+import {LineFlag, Statement, StatementDue, StatementLine} from '../models/statement.model';
+import {BILLING_CYCLE_LABELS, BillingCycle} from '../enums/billing-cycle.enum';
 import {round2} from './package-config';
 
 /** What the office reads for each statement flag. */
@@ -109,19 +110,48 @@ export function statementPackages(statement: Statement): string {
   return seen.join('; ');
 }
 
+/** The dues a cycle shows: monthly the 1st, semi-monthly the 1st and 15th, weekly every one. */
+function duesOf(statement: Statement): StatementDue[] {
+  if (statement.cycle === 'weekly') return statement.dues ?? [];
+  const days = statement.cycle === 'semi_monthly' ? [1, 15] : [1];
+  return days
+    .map(day => (statement.dues ?? []).find(d => d.day === day))
+    .filter((d): d is StatementDue => !!d);
+}
+
+/** One row due from a statement due (a blank half renders blank, not $0.00). */
+export function toEntryDue(due: StatementDue, cycle: string): EntryDue {
+  const derived = due.derived ? due.derived : null;
+  const override = due.override ?? null;
+  return {
+    period_start: due.period_start,
+    label: cycle === 'weekly' ? shortDate(due.period_start) : due.day === 15 ? '15th' : '1st',
+    derived,
+    override,
+    amount: override ?? derived,
+    paid: due.paid ?? false,
+  };
+}
+
+/** The total of a row's dues (the overrides counted, blank halves as nothing). */
+export function duesTotal(dues: EntryDue[]): number {
+  return round2(dues.reduce((sum, d) => sum + (d.amount ?? 0), 0));
+}
+
+/** 'Monthly', 'Semi-monthly' or 'Weekly (Fri)' — the weekday read off the first due. */
+export function cycleLabel(cycle: string | undefined, dues: EntryDue[] = []): string {
+  if (cycle === BillingCycle.WEEKLY) {
+    const first = dues[0]?.period_start;
+    if (!first) return 'Weekly';
+    const [y, m, d] = first.split('-').map(Number);
+    return `Weekly (${new Date(y, m - 1, d).toLocaleDateString('en-US', {weekday: 'short'})})`;
+  }
+  return cycle === BillingCycle.SEMI_MONTHLY ? BILLING_CYCLE_LABELS[BillingCycle.SEMI_MONTHLY] : BILLING_CYCLE_LABELS[BillingCycle.MONTHLY];
+}
+
 /** Maps a service statement onto the Billing table row. */
 export function toBillingEntry(statement: Statement): BillingEntry {
-  const semi = statement.cycle === 'semi_monthly';
-  const first = statement.dues.find(d => d.day === 1);
-  const fifteenth = semi ? statement.dues.find(d => d.day === 15) : undefined;
-  // A half with no charge (the blank side of a prorated month) renders blank, not $0.00.
-  const blank = (value: number | undefined): number | null => (value ? value : null);
-  const derivedFirst = blank(first?.derived);
-  const derivedFifteenth = blank(fifteenth?.derived);
-  const overrideFirst = first?.override ?? null;
-  const overrideFifteenth = fifteenth?.override ?? null;
-  const dueFirst = overrideFirst ?? derivedFirst;
-  const dueFifteenth = overrideFifteenth ?? derivedFifteenth;
+  const dues = duesOf(statement).map(due => toEntryDue(due, statement.cycle));
   const studentDiscount = statement.lines.reduce((sum, l) => sum + l.discount_amount, 0);
   const discount = round2(studentDiscount + statement.sibling_discount_amount);
   return {
@@ -129,17 +159,10 @@ export function toBillingEntry(statement: Statement): BillingEntry {
     name: statement.contact_name,
     packages: statementPackages(statement),
     cycle: statement.cycle,
-    due_first: dueFirst,
-    due_fifteenth: dueFifteenth,
-    derived_first: derivedFirst,
-    derived_fifteenth: derivedFifteenth,
-    override_first: overrideFirst,
-    override_fifteenth: overrideFifteenth,
-    total: round2((dueFirst ?? 0) + (dueFifteenth ?? 0)),
+    dues,
+    total: duesTotal(dues),
     discount,
     discount_percent: studentDiscount > 0 ? 0 : statement.sibling_discount_percent,
-    paid_first: first?.paid ?? false,
-    paid_fifteenth: fifteenth?.paid ?? false,
     needs_attention: statement.needs_attention,
     labels: flagLabels(statement.flags),
     statement,
