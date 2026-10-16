@@ -46,8 +46,10 @@ const staffContact = (over: Partial<Contact> = {}): Contact =>
 describe('Payroll', () => {
   let isAdmin: boolean;
   let self: Contact;
+  let isSupportStaff: boolean;
   const authService = {
     isAdmin: () => isAdmin,
+    isSupportStaff: () => isSupportStaff,
     contact: () => self,
   };
   const sessionsService = { getSessionsByTutor: jest.fn(), getAllSessions: jest.fn() };
@@ -75,6 +77,7 @@ describe('Payroll', () => {
   beforeEach(() => {
     sessionStorage.clear();
     isAdmin = false;
+    isSupportStaff = false;
     self = staffContact();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     studentService.getStudents.mockReturnValue(of([]));
@@ -502,6 +505,25 @@ describe('Payroll', () => {
     );
     const p = build();
     p.onDateChange(new Date(2026, 5, 10));
+    expect(data(p)[0].tutoring_hours).toBe(0);
+  });
+
+  it('builds a support-staff row from their own sessions without listing students', () => {
+    isSupportStaff = true;
+    sessionsService.getSessionsByTutor.mockReturnValue(of([
+      {
+        type: SessionType.ADMIN,
+        status: SessionStatus.PENDING,
+        start_datetime: '2026-06-05T09:00:00',
+        end_datetime: '2026-06-05T12:00:00',
+      },
+    ]));
+    const p = build();
+    p.onDateChange(new Date(2026, 5, 10));
+    expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+    expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith(self.id, expect.anything());
+    expect(data(p)).toHaveLength(1);
+    expect(data(p)[0].administrative_time).toBe(3);
     expect(data(p)[0].tutoring_hours).toBe(0);
   });
 

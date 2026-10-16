@@ -17,6 +17,12 @@
       <strong>Make-up session</strong> for <strong>{{lockedTutorName}}</strong> —
       pick the student, date and time. Regular lessons are scheduled by the office.
     </p>
+  } @else if (isAdminTimeLocked && dialogData.type === 'create') {
+    <!-- Support Staff logging hours: Admin Time for themselves, nothing else. -->
+    <p class="locked-hint">
+      <strong>Admin Time</strong> for <strong>{{lockedTutorName}}</strong> —
+      pick the date, start and end time of the hours you worked.
+    </p>
   } @else if (dialogData.type !== 'delete') {
     <mat-form-field>
       <mat-label>Session Type</mat-label>
@@ -42,9 +48,9 @@
       <mat-label>Tutor</mat-label>
       <input matInput disabled [value]="dialogData.session.tutor_name ?? ''">
     </mat-form-field>
-  } @else if (isMakeupLocked) {
+  } @else if (isSelfLocked) {
     <mat-form-field>
-      <mat-label>Tutor</mat-label>
+      <mat-label>{{isAdminTimeLocked ? 'Staff' : 'Tutor'}}</mat-label>
       <input matInput disabled [value]="lockedTutorName">
     </mat-form-field>
   } @else {
@@ -115,7 +121,9 @@
                        [startTime]="startTime"
                        [endTime]="endTime"/>
   }
-  @if (dialogData.type !== 'create') {
+  <!-- Support Staff never take attendance: payroll counts Admin Time whatever
+       its status, and the attendance route is not theirs to call. -->
+  @if (dialogData.type !== 'create' && !isSupportStaff) {
     <mat-form-field>
       <mat-label>Take Attendance</mat-label>
       <mat-select [(ngModel)]="selectedAttendance" [disabled]="isStatusLocked || isReadOnly">

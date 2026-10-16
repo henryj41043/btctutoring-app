@@ -48,6 +48,11 @@ export class ToolBar {
     void this.router.navigate(['/roster']);
   }
 
+  /** The signed-in user's own contact page (Support Staff menu). */
+  profileNav(): void {
+    void this.router.navigate(['/contacts', this.authService.contact().id]);
+  }
+
   onboardingNav(): void {
     void this.router.navigate(['/onboarding']);
   }

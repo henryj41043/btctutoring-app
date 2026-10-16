@@ -4,6 +4,7 @@ import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
 import {AdminGuard} from './guards/admin.guard';
 import {ContactAccessGuard} from './guards/contact-access.guard';
+import {TutorAccessGuard} from './guards/tutor-access.guard';
 import {SessionsTable} from './sessions-table/sessions-table';
 import {ContactsTable} from './contacts-table/contacts-table';
 import {Contact} from './contact/contact';
@@ -33,7 +34,7 @@ export const routes: Routes = [
   {
     path: 'sessions',
     component: SessionsTable,
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, TutorAccessGuard],
   },
   {
     path: 'contacts',
@@ -48,7 +49,7 @@ export const routes: Routes = [
   {
     path: 'roster',
     component: StudentRoster,
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, TutorAccessGuard],
   },
   {
     path: 'onboarding',

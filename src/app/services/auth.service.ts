@@ -42,6 +42,9 @@ export class AuthService {
   readonly isTutorLike = computed(() =>
     this._user().groups.includes(UserGroup.TUTORS) ||
     this._user().groups.includes(UserGroup.LEAD_TUTORS));
+  /** Support Staff: log their own Admin Time and see nothing else. */
+  readonly isSupportStaff = computed(() =>
+    this._user().groups.includes(UserGroup.SUPPORT_STAFF));
   httpClient: HttpClient = inject(HttpClient);
   contactService: ContactService = inject(ContactService);
   router: Router = inject(Router);

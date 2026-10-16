@@ -24,11 +24,12 @@
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
     <!-- Admins create any session; tutors get the same button locked to
-         their own make-ups (they do their own make-up scheduling). -->
+         their own make-ups (they do their own make-up scheduling); Support
+         Staff get it locked to their own Admin Time (how they log hours). -->
     @if (authService.loggedIn()) {
       <button mat-raised-button color="primary" (click)="openCreateSessionDialog()" class="cal-add-btn">
         <mat-icon>add</mat-icon>
-        Add Session
+        {{authService.isSupportStaff() ? 'Add Admin Time' : 'Add Session'}}
       </button>
     }
     @if (authService.isAdmin()) {

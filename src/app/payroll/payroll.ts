@@ -291,11 +291,15 @@ export class Payroll implements OnInit {
       // record (the backend blocks non-admins from listing all contacts).
       const self = this.authService.contact();
       if (self?.id) {
-        this.studentService.getStudentsByTutor(self.id)
-          .pipe(
-            catchError(error => { console.log(error); return of([] as Student[]); }),
-            takeUntilDestroyed(this.destroyRef),
-          )
+        // Support Staff have no students (and may not list any): their row
+        // is Admin Time only, so the extra-planning credits are skipped.
+        const students$ = this.authService.isSupportStaff()
+          ? of([] as Student[])
+          : this.studentService.getStudentsByTutor(self.id).pipe(
+              catchError(error => { console.log(error); return of([] as Student[]); }),
+            );
+        students$
+          .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe(students => {
             this.buildPayrollEntry$(self, this.extraMinutesByStudent(students, self.id))
               .pipe(takeUntilDestroyed(this.destroyRef))

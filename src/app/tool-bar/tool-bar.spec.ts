@@ -7,7 +7,13 @@ import { ChangePasswordDialog } from '../change-password-dialog/change-password-
 
 describe('ToolBar', () => {
   let component: ToolBar;
-  const authService = { logout: jest.fn() };
+  const authService = {
+    logout: jest.fn(),
+    loggedIn: () => false,
+    isAdmin: () => false,
+    isSupportStaff: () => false,
+    contact: () => ({ id: 'c-me', first_name: 'Me', last_name: 'Staff' }),
+  };
   const router = { navigate: jest.fn() };
   const dialog = { open: jest.fn() };
 
@@ -48,5 +54,10 @@ describe('ToolBar', () => {
   ])('%s navigates to %s', (method, route) => {
     (component as unknown as Record<string, () => void>)[method]();
     expect(router.navigate).toHaveBeenCalledWith([route]);
+  });
+
+  it('profileNav opens the signed-in user\'s own contact page', () => {
+    component.profileNav();
+    expect(router.navigate).toHaveBeenCalledWith(['/contacts', 'c-me']);
   });
 });

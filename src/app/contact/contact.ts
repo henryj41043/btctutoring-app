@@ -31,7 +31,7 @@ import {cascadeTargetFor, serviceEndForLeaving} from '../utils/parent-status-cas
 import {MatCheckbox} from '@angular/material/checkbox';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {BILLING_CYCLE_LABELS, BILLING_WEEKDAYS, BillingCycle} from '../enums/billing-cycle.enum';
-import {UserGroup} from '../enums/user-group.enum';
+import {USER_GROUP_LABELS, UserGroup} from '../enums/user-group.enum';
 import {AuthService} from '../services/auth.service';
 import {DatePipe} from '@angular/common';
 import {MatDatepickerModule} from '@angular/material/datepicker';
@@ -135,7 +135,8 @@ export class Contact implements OnInit {
   protected billingCycleOptions: {value: BillingCycle; label: string}[] = Object.values(BillingCycle)
     .map(value => ({value, label: BILLING_CYCLE_LABELS[value]}));
   protected readonly billingWeekdays = BILLING_WEEKDAYS;
-  protected groupOptions: string[] = Object.values(UserGroup);
+  protected groupOptions: {value: UserGroup; label: string}[] = Object.values(UserGroup)
+    .map(value => ({value, label: USER_GROUP_LABELS[value]}));
   protected tutors: _Contact[] = [];
   protected readonly twentyFiveStatusOptions: string[] = Object.values(TwentyFiveStatus);
   protected readonly hireTypeOptions: string[] = Object.values(HireType);
@@ -235,6 +236,7 @@ export class Contact implements OnInit {
 
   ngOnInit() {
     this.watchBillingCycle();
+    this.watchUserGroup();
     this.loadContact();
     // Family students are an admin view — tutors only ever see their own
     // (Hiring) page, where the roster loads via loadContact instead. The
@@ -251,9 +253,27 @@ export class Contact implements OnInit {
       this.notesLoading = false;
     }
     // Scheduled make-up tallies for the family cards and a tutor's roster.
-    // The service limits a tutor to their own students.
-    this.loadScheduledMakeup();
-    this.getTutors();
+    // The service limits a tutor to their own students. Support Staff have
+    // neither (their page shows no roster) and may not call either read.
+    if (!this.authService.isSupportStaff()) {
+      this.loadScheduledMakeup();
+      this.getTutors();
+    }
+  }
+
+  /**
+   * Support Staff are not tutors: picking that group unticks the tutor flag
+   * (and capacity) so they never appear in tutoring dropdowns.
+   */
+  private watchUserGroup(): void {
+    this.contactForm.controls['user_group'].valueChanges.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(group => {
+      if (group === UserGroup.SUPPORT_STAFF) {
+        this.contactForm.controls['is_tutor'].setValue(false);
+        this.contactForm.controls['currently_accepting_students'].setValue(false);
+      }
+    });
   }
 
   /** A weekly family must say which day it is billed on; other cycles ignore the field. */
@@ -387,7 +407,7 @@ export class Contact implements OnInit {
       this.contactLoading = false;
       // Only staff have a tutor roster - a parent page was previously firing
       // this (always-empty) fetch too.
-      if (contacts[0]?.service === Service.HIRING) {
+      if (contacts[0]?.service === Service.HIRING && !this.authService.isSupportStaff()) {
         this.loadRosterStudents();
       }
     });

@@ -16,6 +16,12 @@ export interface SessionDialogData {
    */
   lockToMakeup?: boolean;
   /**
+   * Support Staff logging hours: the dialog is pinned to an ADMIN (Admin
+   * Time) session assigned to the logged-in user. Mirrors the backend rule —
+   * support staff may only create their own Admin Time.
+   */
+  lockToAdminTime?: boolean;
+  /**
    * A calendar drag or resize: the new start and end (ISO). The form opens
    * on these times while `session` keeps the stored ones, so the change is
    * still seen as a change (series scope, availability and schedule checks).

@@ -7,15 +7,23 @@
       <button mat-menu-item (click)="calendarNav()">
         <mat-icon>calendar_month</mat-icon><span>Calendar</span>
       </button>
-      <button mat-menu-item (click)="sessionsNav()">
-        <mat-icon>event_note</mat-icon><span>Sessions</span>
-      </button>
-      <button mat-menu-item (click)="contactsNav()">
-        <mat-icon>contacts</mat-icon><span>Contacts</span>
-      </button>
-      <button mat-menu-item (click)="rosterNav()">
-        <mat-icon>groups</mat-icon><span>Student Roster</span>
-      </button>
+      <!-- Support Staff log hours on the calendar and see no students: only
+           their own profile page and their own payroll row besides it. -->
+      @if (authService.isSupportStaff()) {
+        <button mat-menu-item (click)="profileNav()">
+          <mat-icon>badge</mat-icon><span>My Profile</span>
+        </button>
+      } @else {
+        <button mat-menu-item (click)="sessionsNav()">
+          <mat-icon>event_note</mat-icon><span>Sessions</span>
+        </button>
+        <button mat-menu-item (click)="contactsNav()">
+          <mat-icon>contacts</mat-icon><span>Contacts</span>
+        </button>
+        <button mat-menu-item (click)="rosterNav()">
+          <mat-icon>groups</mat-icon><span>Student Roster</span>
+        </button>
+      }
       <button mat-menu-item (click)="payrollNav()">
         <mat-icon>payments</mat-icon><span>Payroll</span>
       </button>
