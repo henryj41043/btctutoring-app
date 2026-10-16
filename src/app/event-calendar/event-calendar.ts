@@ -220,7 +220,9 @@ export class EventCalendar implements OnInit {
   private updateSessionsData(force: boolean = false): void {
     const isAdmin = this.authService.isAdmin();
     const isTutorLike = this.authService.isTutorLike();
-    if (!isAdmin && !isTutorLike) {
+    // Support Staff see their own calendar too: nothing on it but the Admin
+    // Time they log (the service returns only their own sessions).
+    if (!isAdmin && !isTutorLike && !this.authService.isSupportStaff()) {
       this.events = [];
       this.cdr.markForCheck();
       return;
@@ -572,8 +574,10 @@ export class EventCalendar implements OnInit {
         type: 'create',
         session: new Session(),
         existingSessions: this.allSessions,
-        // Non-admins may only schedule their own make-ups (backend-enforced).
-        lockToMakeup: !this.authService.isAdmin(),
+        // Non-admins may only schedule their own make-ups (backend-enforced);
+        // Support Staff only log their own Admin Time.
+        lockToMakeup: !this.authService.isAdmin() && !this.authService.isSupportStaff(),
+        lockToAdminTime: this.authService.isSupportStaff(),
       },
     });
 

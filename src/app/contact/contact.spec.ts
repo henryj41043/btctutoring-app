@@ -71,8 +71,10 @@ describe('Contact', () => {
     updateNote: jest.fn(),
     deleteNote: jest.fn(),
   };
+  let isSupportStaff: boolean;
   const authService = {
     isAdmin: () => isAdmin,
+    isSupportStaff: () => isSupportStaff,
     contact: () => ({ id: 'me', first_name: 'Admin' }),
   };
   const dialog = { open: jest.fn(() => ({ afterClosed: () => of(afterClosed) })) };
@@ -140,6 +142,7 @@ describe('Contact', () => {
 
   beforeEach(() => {
     isAdmin = true;
+    isSupportStaff = false;
     afterClosed = false;
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     defaults();
@@ -206,6 +209,45 @@ describe('Contact', () => {
     const c = build();
     c.ngOnInit();
     expect(form(c).controls['is_tutor'].value).toBe(true);
+  });
+
+  it('offers every group with a display label', () => {
+    const c = build();
+    expect((c as unknown as { groupOptions: { value: string; label: string }[] }).groupOptions).toEqual([
+      { value: 'Admins', label: 'Admin' },
+      { value: 'Tutors', label: 'Tutor' },
+      { value: 'LeadTutors', label: 'Lead Tutor' },
+      { value: 'SupportStaff', label: 'Support Staff' },
+    ]);
+  });
+
+  it('picking the Support Staff group unticks the tutor flag and capacity', () => {
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ service: Service.HIRING, is_tutor: true, currently_accepting_students: true })]),
+    );
+    const c = build();
+    c.ngOnInit();
+    expect(form(c).controls['is_tutor'].value).toBe(true);
+    form(c).controls['user_group'].setValue('SupportStaff');
+    expect(form(c).controls['is_tutor'].value).toBe(false);
+    expect(form(c).controls['currently_accepting_students'].value).toBe(false);
+    // Any other group leaves the flags alone.
+    form(c).controls['is_tutor'].setValue(true);
+    form(c).controls['user_group'].setValue('Tutors');
+    expect(form(c).controls['is_tutor'].value).toBe(true);
+  });
+
+  it('a support-staff user sees their own page without a roster, staff list or make-up tallies', () => {
+    isAdmin = false;
+    isSupportStaff = true;
+    contactService.getContact.mockReturnValue(
+      of([fullContact({ id: 'me', service: Service.HIRING, user_group: 'SupportStaff' })]),
+    );
+    const c = build('me');
+    c.ngOnInit();
+    expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+    expect(contactService.getStaff).not.toHaveBeenCalled();
+    expect(sessionsService.getScheduledMakeup).not.toHaveBeenCalled();
   });
 
   it('loads a stored is_tutor=false into the checkbox', () => {

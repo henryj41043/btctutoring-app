@@ -123,7 +123,7 @@ export class SessionDialog implements OnInit {
     // at capacity (not currently accepting), their own name must render. The
     // signed-in contact is the fallback when the staff list lacks them (e.g.
     // it failed to load), so the locked tutor is never blank.
-    if (this.isMakeupLocked) {
+    if (this.isSelfLocked) {
       const own = this.authService.contact();
       const fromStaff = this.allStaff.find(c => c.id === own?.id);
       return fromStaff ? [fromStaff] : own?.id ? [own] : [];
@@ -270,6 +270,21 @@ export class SessionDialog implements OnInit {
     return !!this.dialogData?.lockToMakeup;
   }
 
+  /** Support Staff logging hours: type + staff are pinned (Admin Time, self). */
+  get isAdminTimeLocked(): boolean {
+    return !!this.dialogData?.lockToAdminTime;
+  }
+
+  /** Either self-service create: the type and the person are not a choice. */
+  get isSelfLocked(): boolean {
+    return this.isMakeupLocked || this.isAdminTimeLocked;
+  }
+
+  /** The signed-in user is Support Staff (they never take attendance). */
+  get isSupportStaff(): boolean {
+    return !!this.authService.isSupportStaff?.();
+  }
+
   // ── Email notes to parent (opt-in, per save) ─────────────────────────────
   /** Checked = after this save, email the saved notes to the parent. */
   emailNotesToParent: boolean = false;
@@ -373,6 +388,12 @@ export class SessionDialog implements OnInit {
       // getStudents so the caseload pre-filter sees the selected tutor.
       this.selectedType = SessionType.MAKE_UP;
       this.sessionTypeOptions = [SessionType.MAKE_UP];
+      this.selectedTutor = this.authService.contact().id;
+    }
+    if (this.dialogData.type === 'create' && this.isAdminTimeLocked) {
+      // Support Staff log hours: Admin Time only, assigned to themselves.
+      this.selectedType = SessionType.ADMIN;
+      this.sessionTypeOptions = [SessionType.ADMIN];
       this.selectedTutor = this.authService.contact().id;
     }
     if(this.dialogData.type !== 'create') {
@@ -1172,6 +1193,13 @@ export class SessionDialog implements OnInit {
   }
 
   private getTutors() {
+    if (this.isSupportStaff) {
+      // Support Staff may not list staff (the service refuses) and only ever
+      // pick themselves: their own contact record is the whole list.
+      const own = this.authService.contact();
+      this.allStaff = own?.id ? [own] : [];
+      return;
+    }
     this.contactService.getStaff()
       .pipe(
         catchError(error => { console.log(error); return EMPTY; }),
@@ -1197,6 +1225,11 @@ export class SessionDialog implements OnInit {
   }
 
   private getStudents() {
+    // Support Staff have no students (Admin Time has none) and may not list
+    // any — the service refuses the tutor-scoped read for them.
+    if (this.isSupportStaff) {
+      return;
+    }
     // The param-less list is admin-only; tutors and leads may only list
     // their own assigned students — the previous unconditional call 403'd
     // silently for them, leaving the student dropdown empty.

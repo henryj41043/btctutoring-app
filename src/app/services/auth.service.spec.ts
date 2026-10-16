@@ -96,14 +96,16 @@ describe('AuthService', () => {
     });
 
     it.each([
-      [['Admins'], false, false],
-      [['Tutors'], false, true],
-      [['LeadTutors'], true, true],
-      [[], false, false],
-    ])('groups %j -> isLead %s, isTutorLike %s', (groups, isLead, isTutorLike) => {
+      [['Admins'], false, false, false],
+      [['Tutors'], false, true, false],
+      [['LeadTutors'], true, true, false],
+      [['SupportStaff'], false, false, true],
+      [[], false, false, false],
+    ])('groups %j -> isLead %s, isTutorLike %s, isSupportStaff %s', (groups, isLead, isTutorLike, isSupportStaff) => {
       completeSuccessfulLogin(groups as string[]);
       expect(service.isLead()).toBe(isLead);
       expect(service.isTutorLike()).toBe(isTutorLike);
+      expect(service.isSupportStaff()).toBe(isSupportStaff);
     });
 
     it('enters reset-password mode when a new password is required', () => {

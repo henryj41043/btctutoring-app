@@ -67,9 +67,11 @@ describe('SessionDialog', () => {
     getStudentsByTutor: jest.fn(),
     updateStudent: jest.fn(),
   };
+  let isSupportStaff = false;
   const authService = {
     isAdmin: () => isAdmin,
-    contact: () => ({ id: ownContactId }),
+    isSupportStaff: () => isSupportStaff,
+    contact: () => ({ id: ownContactId, first_name: 'Max', last_name: 'Marketing' }),
   };
 
   /** The fixture behind the last build(), for specs that read the template. */
@@ -2042,6 +2044,87 @@ describe('SessionDialog', () => {
       expect(live.selectedType).toBe(SessionType.MAKE_UP);
       expect(fixture.nativeElement.querySelector('app-makeup-repeat')).not.toBeNull();
       expect(c).toBeDefined();
+    });
+  });
+
+  describe('support staff Admin Time (lockToAdminTime)', () => {
+    beforeEach(() => {
+      isAdmin = false;
+      isSupportStaff = true;
+      ownContactId = 'c-support';
+      // Fail loudly if the dialog lists anything on behalf of support staff.
+      contactService.getStaff.mockReturnValue(throwError(() => new Error('403')));
+      studentService.getStudents.mockReturnValue(throwError(() => new Error('403')));
+      studentService.getStudentsByTutor.mockReturnValue(throwError(() => new Error('403')));
+      sessionsService.getScheduledMakeup.mockReturnValue(of(new Map()));
+    });
+    afterEach(() => {
+      isSupportStaff = false;
+    });
+
+    const buildLocked = (): SessionDialog => {
+      const c = build({
+        type: 'create', session: new Session(), existingSessions: [], lockToAdminTime: true,
+      } as SessionDialogData);
+      c.ngOnInit();
+      return c;
+    };
+
+    it('pins the type to ADMIN and the staff to themselves without listing staff or students', () => {
+      const c = buildLocked();
+      expect(c.selectedType).toBe(SessionType.ADMIN);
+      expect(c.sessionTypeOptions).toEqual([SessionType.ADMIN]);
+      expect(c.selectedTutor).toBe('c-support');
+      expect(c.isAdminTimeLocked).toBe(true);
+      expect(c.isSelfLocked).toBe(true);
+      expect(c.isMakeupLocked).toBe(false);
+      expect(c.hasStudent).toBe(false);
+      expect(c.tutors.map(t => t.id)).toEqual(['c-support']);
+      expect(c.lockedTutorName).toContain('Max');
+      expect(contactService.getStaff).not.toHaveBeenCalled();
+      expect(studentService.getStudents).not.toHaveBeenCalled();
+      expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+    });
+
+    it('creates an ADMIN session for themselves with no student', () => {
+      const c = buildLocked();
+      c.date = new Date(2026, 5, 1);
+      c.startTime = new Date(2026, 5, 1, 9, 0);
+      c.endTime = new Date(2026, 5, 1, 12, 0);
+      sessionsService.createSession.mockReturnValue(of({ id: 'a-1' }));
+      c.createSession();
+      const sent = sessionsService.createSession.mock.calls.at(-1)![0] as Session;
+      expect(sent.type).toBe(SessionType.ADMIN);
+      expect(sent.tutor_id).toBe('c-support');
+      expect(sent.tutor_name).toBe('Max');
+      expect(sent.student_id).toBeUndefined();
+      expect(dialogRef.close).toHaveBeenCalled();
+    });
+
+    it('renders the Admin Time hint and no attendance control when editing', () => {
+      const c = buildLocked();
+      expect(renderedText()).toContain('Admin Time');
+      expect(renderedText()).toContain('hours you worked');
+      expect(c).toBeDefined();
+
+      const edit = build({
+        type: 'edit',
+        session: {
+          id: 'a-1', type: SessionType.ADMIN, tutor_id: 'c-support', status: SessionStatus.PENDING,
+          start_datetime: '2026-06-01T09:00:00Z', end_datetime: '2026-06-01T11:00:00Z',
+        },
+        existingSessions: [],
+      } as SessionDialogData);
+      edit.ngOnInit();
+      expect(edit.sessionTypeOptions).toEqual([SessionType.ADMIN]);
+      expect(edit.tutors.map(t => t.id)).toEqual(['c-support']);
+      expect(renderedText()).not.toContain('Take Attendance');
+    });
+
+    it('a signed-in support user with no contact id has nobody to pick', () => {
+      ownContactId = undefined;
+      const c = buildLocked();
+      expect(c.tutors).toEqual([]);
     });
   });
 

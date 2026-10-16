@@ -116,8 +116,8 @@
         <mat-form-field>
           <mat-label>Select Group</mat-label>
           <mat-select formControlName="user_group">
-            @for (groupOption of groupOptions; track groupOption) {
-              <mat-option [value]="groupOption">{{groupOption}}</mat-option>
+            @for (groupOption of groupOptions; track groupOption.value) {
+              <mat-option [value]="groupOption.value">{{groupOption.label}}</mat-option>
             }
           </mat-select>
         </mat-form-field>
@@ -220,7 +220,8 @@
   }
   <div class="contact-tutoring contact-section"
        [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER || contactForm.controls['service'].value === Service.EMPLOYMENT_INQUIRY">
-    @if (contactForm.controls['service'].value === Service.HIRING) {
+    <!-- Support Staff have no roster and no tutor settings: both sections stay off their page. -->
+    @if (contactForm.controls['service'].value === Service.HIRING && !authService.isSupportStaff()) {
       <h2>Student Roster</h2>
       <div class="table-scroll">
       <table mat-table [dataSource]="rosterDataSource" matSort #rosterSort="matSort" class="mat-elevation-z8">
@@ -342,7 +343,7 @@
   </div>
   <div class="contact-billing contact-section" [formGroup]="contactForm"
        [hidden]="contactForm.controls['service'].value === Service.NEWSLETTER || contactForm.controls['service'].value === Service.EMPLOYMENT_INQUIRY">
-    @if (contactForm.controls['service'].value === Service.HIRING) {
+    @if (contactForm.controls['service'].value === Service.HIRING && !authService.isSupportStaff()) {
       <h2>BTC Tutor Information</h2>
       <div class="scholarship-grid">
         <mat-form-field>

@@ -31,6 +31,7 @@ describe('EventCalendar', () => {
     isAdmin: () => isAdmin,
     isLead: () => (groups ?? []).includes('LeadTutors'),
     isTutorLike: () => (groups ?? []).includes('Tutors') || (groups ?? []).includes('LeadTutors'),
+    isSupportStaff: () => (groups ?? []).includes('SupportStaff'),
     user: () => ({ groups }),
     contact: () => ({ id: contactId }),
   };
@@ -241,6 +242,55 @@ describe('EventCalendar', () => {
     const c = build();
     c.ngOnInit();
     expect(c.events).toEqual([]);
+  });
+
+  describe('support staff', () => {
+    beforeEach(() => {
+      isAdmin = false;
+      groups = ['SupportStaff'];
+      contactId = 'c-support';
+      sessionsService.getSessionsByTutor.mockReturnValue(of([
+        {
+          id: 'a-1', type: SessionType.ADMIN, tutor_id: 'c-support', tutor_name: 'Max',
+          start_datetime: '2026-06-01T09:00:00', end_datetime: '2026-06-01T11:00:00',
+        },
+      ]));
+    });
+
+    it('loads their own sessions and renders them as editable Admin Time', () => {
+      const c = build();
+      c.viewDate = new Date(2026, 5, 15);
+      c.ngOnInit();
+      expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith('c-support', expect.anything());
+      expect(sessionsService.getAllSessions).not.toHaveBeenCalled();
+      expect(sessionsService.getTeamSessions).not.toHaveBeenCalled();
+      expect(c.events).toHaveLength(1);
+      expect(c.events[0].title).toContain('Max - Admin Time');
+      expect(c.events[0].actions).toBe(c.actions);
+    });
+
+    it('opens the create dialog locked to their own Admin Time, not a make-up', () => {
+      const c = build();
+      c.openCreateSessionDialog();
+      expect(dialog.open).toHaveBeenCalledWith(
+        SessionDialog,
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'create', lockToAdminTime: true, lockToMakeup: false }),
+        }),
+      );
+    });
+
+    it('a tutor still gets the make-up lock', () => {
+      groups = ['Tutors'];
+      const c = build();
+      c.openCreateSessionDialog();
+      expect(dialog.open).toHaveBeenCalledWith(
+        SessionDialog,
+        expect.objectContaining({
+          data: expect.objectContaining({ lockToAdminTime: false, lockToMakeup: true }),
+        }),
+      );
+    });
   });
 
   it('keeps events empty on a load error', () => {
