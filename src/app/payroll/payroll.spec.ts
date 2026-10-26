@@ -147,7 +147,7 @@ describe('Payroll', () => {
     expect(priv(p).loading).toBe(false);
   });
 
-  it('pays a held trial its actual length and keeps trials out of planning time', () => {
+  it('pays a held trial its actual length and counts it toward planning time', () => {
     sessionsService.getSessionsByTutor.mockReturnValue(
       of([
         {
@@ -203,8 +203,9 @@ describe('Payroll', () => {
     const entry = data(p)[0];
     expect(entry.trial_hours).toBe(2); // 0.75 completed + 0.75 NCNS + 0.5 completed
     expect(entry.tutoring_hours).toBe(1); // trials never join tutoring hours
-    // Planning derives from tutoring hours only: 1/6 h.
-    expect(entry.planning_time).toBeCloseTo(0.17, 2);
+    // Planning derives from every taught hour, trials included (client
+    // 2026-10-26): (1 + 2) / 6 h.
+    expect(entry.planning_time).toBe(0.5);
     expect(entry.hours_subtotal).toBe(3); // 1 tutoring + 0 admin + 2 trial
     // 3h x $40 = $120 at the regular rate — the trial time is in.
     expect(entry.tutoring_compensation).toBe(120);

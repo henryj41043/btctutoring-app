@@ -368,8 +368,10 @@ export class Payroll implements OnInit {
         payrollEntry.administrative_time = payrollEntry.administrative_time! + this.calculateTime(session.start_datetime!, session.end_datetime!);
       } else if (session.type === SessionType.TRIAL) {
         // A held trial (completed or no-show) pays its actual length at the
-        // regular rate (client policy 2026-10-13; a flat hour before), and
-        // never planning credit.
+        // regular rate (client policy 2026-10-13; a flat hour before). It is
+        // teaching time, so it earns the base planning credit below (client
+        // 2026-10-26: their sheet plans on every taught hour) — but never the
+        // per-student extra planning, which is for enrolled students.
         if (session.status === SessionStatus.COMPLETED || session.status === SessionStatus.NO_CALL_NO_SHOW) {
           payrollEntry.trial_hours = payrollEntry.trial_hours! + this.calculateTime(session.start_datetime!, session.end_datetime!);
         }
@@ -393,7 +395,9 @@ export class Payroll implements OnInit {
         }
       }
     });
-    payrollEntry.planning_time = Math.round((payrollEntry.tutoring_hours / 6) * 100) / 100;
+    // Base planning = one sixth of the taught hours: tutoring plus trials.
+    // Admin time and BTC & Me (a flat hour, no prep) earn none.
+    payrollEntry.planning_time = Math.round(((payrollEntry.tutoring_hours + payrollEntry.trial_hours) / 6) * 100) / 100;
     payrollEntry.extra_planning_time = Math.round((extraPlanningMinutes / 60) * 100) / 100;
     payrollEntry.hours_subtotal = payrollEntry.tutoring_hours + payrollEntry.administrative_time + payrollEntry.trial_hours + payrollEntry.group_hours;
     payrollEntry.planning_compensation = Math.round(((payrollEntry.planning_time + payrollEntry.extra_planning_time) * payrollEntry.planning_rate) * 100) / 100;
