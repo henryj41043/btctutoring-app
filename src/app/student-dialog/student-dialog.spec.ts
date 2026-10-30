@@ -885,6 +885,28 @@ describe('StudentDialog', () => {
       make_up_minutes: 0,
       ...over,
     });
+    it('warns under the start date while it precedes the first lesson and slots fall in between', () => {
+      const c = build({
+        mode: 'edit',
+        firstLessonKey: '2026-05-11',
+        student: enrolled({ package_start_date: '2026-05-01T00:00:00' }),
+      });
+      // Mondays May 4 only... start May 1 (Fri) → Monday May 4 is a phantom slot.
+      expect(c.startGapWarning).toBe(
+        'Billing starts May 1 but the first lesson is May 11: 1 scheduled slot will be billed with no session. Move the start date to May 11.',
+      );
+      form(c).controls['package_start_date'].setValue(new Date(2026, 4, 11));
+      expect(c.startGapWarning).toBe('');
+      form(c).controls['package_start_date'].setValue(null);
+      // Blank falls back to the stored start, which still has the gap.
+      expect(c.startGapWarning).toContain('Billing starts May 1');
+    });
+
+    it('shows no warning when the opener did not pass a first lesson', () => {
+      const c = build({ mode: 'edit', student: enrolled({ package_start_date: '2026-05-01T00:00:00' }) });
+      expect(c.startGapWarning).toBe('');
+    });
+
     const lock = (c: StudentDialog) =>
       c as unknown as { serviceStarted: boolean; packageLocked: boolean; correctingPackage: boolean };
     const d = new Date();

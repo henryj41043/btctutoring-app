@@ -84,7 +84,7 @@ describe('Contact', () => {
     deleteFuturePendingSessions: jest.fn(() => of(0)),
     resolveDef: jest.fn(),
   };
-  const sessionsService = { getAllSessions: jest.fn(), getScheduledMakeup: jest.fn() };
+  const sessionsService = { getAllSessions: jest.fn(), getScheduledMakeup: jest.fn(), getSessionsByStudent: jest.fn() };
   const billingService = {
     getBillingRecordsByContact: jest.fn(),
     upsertBillingRecord: jest.fn(),
@@ -107,6 +107,7 @@ describe('Contact', () => {
     billingService.upsertBillingRecord.mockReturnValue(of({}));
     sessionsService.getAllSessions.mockReturnValue(of([]));
     sessionsService.getScheduledMakeup.mockReturnValue(of(new Map<string, number>()));
+    sessionsService.getSessionsByStudent.mockReturnValue(of([]));
   };
 
   const build = (id = 'c-1'): Contact => {
@@ -1181,6 +1182,60 @@ describe('Contact', () => {
       expect(text).toContain('Started: Jul 1, 2026');
       expect(text).toContain('Started: Oct 10, 2026');
       expect((text.match(/Started:/g) ?? []).length).toBe(2);
+    });
+
+    describe('package start before the first lesson', () => {
+      const charlotte = {
+        id: 's-ch', contact_id: 'c-1', name: 'Charlotte', status: StudentStatus.ACTIVE_STUDENT,
+        package: 'Succeed', package_start_date: '2026-10-21T04:00:00.000Z',
+        schedule: [
+          { weekday: 'TUESDAY', start_time: '13:30', end_time: '14:00' },
+          { weekday: 'THURSDAY', start_time: '13:30', end_time: '14:00' },
+        ],
+      };
+      const lessons = [
+        { student_id: 's-ch', type: SessionType.TRIAL, start_datetime: '2026-10-15T17:00:00' },
+        { student_id: 's-ch', type: SessionType.TUTORING, start_datetime: '2026-10-27T17:30:00' },
+        { student_id: 's-ch', type: SessionType.TUTORING, start_datetime: '2026-10-29T17:30:00' },
+      ];
+
+      it('reads each scheduled student\'s first lesson and warns on the card about the phantom slot', () => {
+        studentService.getStudentsByContact.mockReturnValue(of([charlotte]));
+        sessionsService.getSessionsByStudent.mockReturnValue(of(lessons));
+        const c = build();
+        c.ngOnInit();
+        expect(sessionsService.getSessionsByStudent).toHaveBeenCalledWith('s-ch');
+        expect(c.startGap(students(c)[0])).toBe(
+          'Billing starts Oct 21 but the first lesson is Oct 27: 1 scheduled slot will be billed with no session. Move the start date to Oct 27.',
+        );
+        // The dialog gets the first lesson so it can warn live.
+        c.openStudentDialog('edit', students(c)[0]);
+        expect(dialog.open).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ data: expect.objectContaining({ firstLessonKey: '2026-10-27' }) }),
+        );
+      });
+
+      it('is quiet when the start is the first lesson, when the read fails, or for an unscheduled student', () => {
+        studentService.getStudentsByContact.mockReturnValue(of([
+          { ...charlotte, package_start_date: '2026-10-27T04:00:00.000Z' },
+          { ...charlotte, id: 's-none', schedule: [] },
+        ]));
+        sessionsService.getSessionsByStudent.mockReturnValue(of(lessons.map(l => ({ ...l, student_id: 's-ch' }))));
+        const c = build();
+        c.ngOnInit();
+        expect(sessionsService.getSessionsByStudent).toHaveBeenCalledTimes(1);
+        expect(c.startGap(students(c)[0])).toBeNull();
+        expect(c.startGap(students(c)[1])).toBeNull();
+      });
+
+      it('leaves the warning off when the sessions read fails', () => {
+        sessionsService.getSessionsByStudent.mockReturnValue(throwError(() => new Error('x')));
+        studentService.getStudentsByContact.mockReturnValue(of([charlotte]));
+        const c = build();
+        c.ngOnInit();
+        expect(c.startGap(students(c)[0])).toBeNull();
+      });
     });
 
     it('warns on the card when the schedule has fewer slots than the package', () => {

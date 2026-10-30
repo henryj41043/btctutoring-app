@@ -366,7 +366,10 @@ export class ScheduleService {
       ...student,
       assigned_tutor_id: tutor.id,
       schedule: slots,
-      package_start_date: this.dateOnlyIso(startDate),
+      // Billing counts schedule slots from the start date, so the start is
+      // the first lesson, not the day the schedule was set up: a start
+      // picked before the first generated session is moved up to it.
+      package_start_date: this.dateOnlyIso(this.firstLessonDate(startDate, occurrences, firstWeek)),
       auto_renew: autoRenew,
       // A new schedule starts a new start week: stored one-offs are replaced
       // ([] clears them on the service).
@@ -380,6 +383,27 @@ export class ScheduleService {
       switchMap(() => this.fillAhead(updated)),
       map(() => updated),
     );
+  }
+
+  /**
+   * The first lesson a new schedule produces: the earliest generated
+   * occurrence or first-week one-off on or after the picked start. The picked
+   * start itself when nothing is generated in its month (the horizon fill
+   * creates the next month's sessions later).
+   */
+  firstLessonDate(start: Date, occurrences: ScheduleOccurrence[], firstWeek: FirstWeekSession[] = []): Date {
+    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const candidates: Date[] = [
+      ...occurrences.map(o => new Date(o.date.getFullYear(), o.date.getMonth(), o.date.getDate())),
+      ...firstWeek
+        .map(s => {
+          const [y, m, d] = (s.date ?? '').split('-').map(Number);
+          return y && m && d ? new Date(y, m - 1, d) : null;
+        })
+        .filter((d): d is Date => !!d),
+    ].filter(d => d.getTime() >= startDay.getTime());
+    if (candidates.length === 0) return startDay;
+    return candidates.reduce((min, d) => (d.getTime() < min.getTime() ? d : min));
   }
 
   /**
