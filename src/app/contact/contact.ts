@@ -53,9 +53,11 @@ import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-f
 import {availableMakeupMinutes} from '../utils/makeup';
 import {makeupSummary} from '../utils/session-rules';
 import {SessionsService} from '../services/sessions.service';
+import {Session} from '../models/session.model';
 import {studentDisplayName} from '../utils/student-name';
 import {pendingChangeNote, pendingChangesOf} from '../utils/pending-package';
 import {studentStatusChipClass} from '../utils/status-chip';
+import {firstLessonKey, startGap, startGapMessage} from '../utils/start-gap';
 import {normalizeParentStatus} from '../utils/legacy-status';
 import {ScheduleService} from '../services/schedule.service';
 import {PackageService} from '../services/package.service';
@@ -231,6 +233,8 @@ export class Contact implements OnInit {
   // The contact's students (parent/family view). Edited via the Student dialog,
   // reloaded from the backend after every create/edit/delete/schedule change.
   protected students: Student[] = [];
+  /** student id → 'YYYY-MM-DD' of their first tutoring session (admin view). */
+  protected firstLessonByStudent = new Map<string, string>();
   protected rosterDataSource = new MatTableDataSource<Student>([]);
   protected rosterColumns: string[] = ['name', 'status', 'package', 'make_up_minutes', 'scholarship'];
 
@@ -500,9 +504,50 @@ export class Contact implements OnInit {
       this.students = students;
       this.studentsLoading = false;
       this.resolveMissingTutorNames();
+      this.loadFirstLessons(students);
       this.cdr.markForCheck();
       then?.();
     });
+  }
+
+  /**
+   * The first lesson of each scheduled student, for the start-date warning
+   * on the card and in the student dialog. One read per student with a
+   * schedule; a failed read just leaves that student without the warning.
+   */
+  private loadFirstLessons(students: Student[]): void {
+    this.firstLessonByStudent = new Map();
+    students
+      .filter(s => !!s.id && !!s.package_start_date && (s.schedule?.length ?? 0) > 0)
+      .forEach(student => {
+        this.sessionsService.getSessionsByStudent(student.id!).pipe(
+          catchError(error => {
+            console.log(error);
+            return of([] as Session[]);
+          }),
+          takeUntilDestroyed(this.destroyRef),
+        ).subscribe(sessions => {
+          const first = firstLessonKey(sessions, student.id);
+          if (first) {
+            this.firstLessonByStudent.set(student.id!, first);
+            this.cdr.markForCheck();
+          }
+        });
+      });
+  }
+
+  /**
+   * A warning when the package start precedes the first lesson on the
+   * calendar and schedule slots fall in between: billing charges those
+   * slots although no session exists (client 2026-10-30, Charlotte Deming).
+   */
+  startGap(student: Student): string | null {
+    const gap = startGap(
+      student.package_start_date,
+      student.id ? this.firstLessonByStudent.get(student.id) : undefined,
+      student.schedule,
+    );
+    return gap ? startGapMessage(gap) : null;
   }
 
   private loadNotes() {
@@ -800,7 +845,10 @@ export class Contact implements OnInit {
    *  recompute: the Billing page reads the service's statements. */
   openStudentDialog(mode: StudentDialogMode, student?: Student): void {
     const ref = this.dialog.open(StudentDialog, {
-      data: {mode, contactId: this.id, student, tutors: this.tutors},
+      data: {
+        mode, contactId: this.id, student, tutors: this.tutors,
+        firstLessonKey: student?.id ? this.firstLessonByStudent.get(student.id) : undefined,
+      },
       width: '480px',
     });
     ref.afterClosed().subscribe((result?: StudentDialogResult) => {

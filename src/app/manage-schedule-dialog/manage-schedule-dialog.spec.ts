@@ -31,6 +31,7 @@ describe('ManageScheduleDialog', () => {
     }),
     addMinutesToTime: jest.fn().mockReturnValue('11:00'),
     buildOccurrences: jest.fn().mockReturnValue([{}]),
+    firstLessonDate: jest.fn((start: Date) => new Date(start.getFullYear(), start.getMonth(), start.getDate())),
     findAvailabilityFailures: jest.fn().mockReturnValue([]),
     createSchedule: jest.fn(),
     updateSchedule: jest.fn(),
@@ -90,6 +91,36 @@ describe('ManageScheduleDialog', () => {
       expect(c.scheduleSlots).toHaveLength(2); // sessionsPerWeek
       expect(c.startDate).toBeInstanceOf(Date);
       expect(c.autoRenew).toBe(true);
+    });
+
+    it('tells where the first lesson lands when the picked start is not a lesson day', () => {
+      const c = primedCreate();
+      c.startDate = new Date(2026, 6, 2); // Thursday; slots Mon/Wed
+      scheduleService.firstLessonDate.mockReturnValueOnce(new Date(2026, 6, 6));
+      expect(c.firstLessonLabel).toBe(
+        'First lesson: Mon, Jul 6. Billing starts there, so the start date will be saved as Mon, Jul 6.',
+      );
+      expect(scheduleService.buildOccurrences).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({weekday: Weekday.MONDAY})]), c.startDate);
+      // A one-off first-week session feeds the same calculation.
+      c.firstWeek = [{date: new Date(2026, 6, 3), start_time: '11:00', length_min: null, tutor_id: null}];
+      scheduleService.firstLessonDate.mockReturnValueOnce(new Date(2026, 6, 3));
+      expect(c.firstLessonLabel).toContain('Fri, Jul 3');
+      expect(scheduleService.firstLessonDate).toHaveBeenLastCalledWith(
+        c.startDate, expect.anything(), [expect.objectContaining({date: '2026-07-03'})]);
+    });
+
+    it('stays quiet when the start is a lesson day, in edit mode, or without slots', () => {
+      const c = primedCreate();
+      c.startDate = new Date(2026, 6, 6, 9, 15);
+      expect(c.firstLessonLabel).toBe(''); // firstLessonDate returns the start itself
+      c.scheduleSlots = [];
+      expect(c.firstLessonLabel).toBe('');
+      c.startDate = undefined;
+      expect(c.firstLessonLabel).toBe('');
+      const edit = build({student: {id: 's-1', name: 'Pat', package: 'Determination', schedule: slots} as Student, tutor});
+      edit.startDate = new Date(2026, 6, 2);
+      expect(edit.firstLessonLabel).toBe('');
     });
 
     it('pads an existing schedule that has fewer slots than the package (edit mode)', () => {

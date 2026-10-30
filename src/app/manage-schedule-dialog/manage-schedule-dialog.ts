@@ -22,6 +22,7 @@ import {FirstWeekSession, PendingChange, Student} from '../models/student.model'
 import {Contact} from '../models/contact.model';
 import {ScheduleSlot} from '../utils/proration';
 import {Weekday, WEEKDAY_LABELS} from '../enums/weekday.enum';
+import {localDateKey} from '../utils/start-gap';
 import {CUSTOM_PACKAGE, PackageCatalog, PackageDef, resolvePackageDef, toCatalog} from '../utils/package-config';
 import {ScheduleService} from '../services/schedule.service';
 import {StudentService} from '../services/student.service';
@@ -186,6 +187,28 @@ export class ManageScheduleDialog implements OnInit {
       ? new Date(this.startDate.getFullYear(), this.startDate.getMonth(),
           this.startDate.getDate() + FIRST_WEEK_DAYS - 1)
       : null;
+  }
+
+  /**
+   * Where the schedule's first lesson lands for the picked start: the
+   * earliest generated occurrence or one-off on or after it. Billing starts
+   * there, so the start date is moved up to it on save when it is later.
+   */
+  get firstLessonLabel(): string {
+    if (!this.startDate || this.isEdit || this.pendingMode) return '';
+    const slots = this.scheduleSlots
+      .filter(s => !!s.weekday && !!s.start_time)
+      .map(s => ({weekday: s.weekday as Weekday, start_time: s.start_time, end_time: s.start_time}));
+    if (slots.length === 0) return '';
+    const firstWeek = this.firstWeek
+      .filter(r => r.date instanceof Date)
+      .map(r => ({date: localDateKey(r.date as Date), start_time: r.start_time, end_time: r.start_time}));
+    const first = this.scheduleService.firstLessonDate(
+      this.startDate, this.scheduleService.buildOccurrences(slots, this.startDate), firstWeek);
+    const start = new Date(this.startDate.getFullYear(), this.startDate.getMonth(), this.startDate.getDate());
+    if (first.getTime() <= start.getTime()) return '';
+    const label = first.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'});
+    return `First lesson: ${label}. Billing starts there, so the start date will be saved as ${label}.`;
   }
 
   addFirstWeekSession(): void {

@@ -21,6 +21,7 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {PendingChange, Student} from '../models/student.model';
+import {startGap, startGapMessage} from '../utils/start-gap';
 import {Contact} from '../models/contact.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {StudentService} from '../services/student.service';
@@ -71,6 +72,8 @@ export interface StudentDialogData {
   contactId: string;
   student?: Student;
   tutors: Contact[];
+  /** 'YYYY-MM-DD' of the student's first tutoring session, when the opener knows it. */
+  firstLessonKey?: string;
 }
 
 /**
@@ -260,6 +263,19 @@ export class StudentDialog implements OnInit {
   /** The package start date is editable once a package is set (edit mode). */
   get showPackageStart(): boolean {
     return this.mode === 'edit' && !this.locked && !!this.data.student?.package;
+  }
+
+  /**
+   * Live warning under the start date: the entered start precedes the first
+   * lesson on the calendar and schedule slots fall in between, which billing
+   * would charge for (client 2026-10-30). Blank when the opener did not pass
+   * the first lesson, or when nothing would be billed.
+   */
+  get startGapWarning(): string {
+    const entered = this.studentForm?.controls['package_start_date']?.value as Date | string | null | undefined;
+    const key = this.toDateString(entered) ?? this.storedStartKey;
+    const gap = startGap(key, this.data.firstLessonKey, this.data.student?.schedule);
+    return gap ? startGapMessage(gap) : '';
   }
 
   /**

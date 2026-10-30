@@ -252,6 +252,37 @@ describe('ScheduleService', () => {
       expect(result).toBe(saved);
     });
 
+    it('moves the start date up to the first generated lesson (billing starts with the first lesson)', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      // Thursday July 2 picked; Mon/Wed slots → first lesson Monday July 6.
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 2), true).subscribe();
+      const saved = studentService.updateStudent.mock.calls.at(-1)![0] as Student;
+      expect(saved.package_start_date).toContain('2026-07-06');
+    });
+
+    it('keeps a start that is itself a lesson day, and one with nothing generated in its month', () => {
+      sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
+      studentService.updateStudent.mockReturnValue(of({} as Student));
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 1), true).subscribe();
+      expect((studentService.updateStudent.mock.calls.at(-1)![0] as Student).package_start_date).toContain('2026-07-01');
+      // Friday July 31: no Mon/Wed left in July — the fill adds August later.
+      service.createSchedule(student(), tutor(), slots, new Date(2026, 6, 31), true).subscribe();
+      expect((studentService.updateStudent.mock.calls.at(-1)![0] as Student).package_start_date).toContain('2026-07-31');
+    });
+
+    it('firstLessonDate prefers an earlier first-week one-off and ignores dates before the start', () => {
+      const occurrences = service.buildOccurrences(slots, new Date(2026, 6, 2));
+      const first = service.firstLessonDate(new Date(2026, 6, 2), occurrences, [
+        {date: '2026-07-04', start_time: '11:00', end_time: '11:45'},
+        {date: '2026-06-30', start_time: '11:00', end_time: '11:45'},
+        {date: 'bad', start_time: '11:00', end_time: '11:45'},
+      ]);
+      expect(first.getDate()).toBe(4);
+      expect(service.firstLessonDate(new Date(2026, 6, 2, 15, 30), [], []).getTime())
+        .toBe(new Date(2026, 6, 2).getTime());
+    });
+
     it('adds the first-week one-off sessions outside any series and stores them', () => {
       sessionsService.createSessions.mockReturnValue(of({message: 'ok'}));
       studentService.updateStudent.mockReturnValue(of({} as Student));

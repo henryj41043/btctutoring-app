@@ -137,6 +137,9 @@
               <mat-datepicker #startPicker/>
               <mat-hint>Set by Manage Schedule when the first schedule is created</mat-hint>
             </mat-form-field>
+            @if (startGapWarning; as warning) {
+              <p class="start-gap-warning">{{warning}}</p>
+            }
           </div>
         }
         @if (showPricing) {
