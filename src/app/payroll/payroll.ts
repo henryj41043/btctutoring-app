@@ -336,8 +336,14 @@ export class Payroll implements OnInit {
     return map;
   }
 
+  /**
+   * The rows land alphabetized by first name (client 2026-11-02), so the tab,
+   * the footer and the PDF all open in that order; the header sort can still
+   * reorder them, and a saved sort from a previous visit is restored on top.
+   */
   private finishLoading(entries: PayrollEntry[]): void {
-    this.dataSource.data = entries;
+    this.dataSource.data = [...entries].sort((a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '', 'en', {sensitivity: 'base'}));
     this.loading = false;
     this.cdr.markForCheck();
   }
