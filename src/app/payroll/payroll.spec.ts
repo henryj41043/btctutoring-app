@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { MatSort } from '@angular/material/sort';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import jsPDF from 'jspdf';
@@ -637,6 +639,40 @@ describe('Payroll', () => {
       // One range-scoped fetch for the whole staff - never per tutor.
       expect(sessionsService.getAllSessions).toHaveBeenCalledTimes(1);
       expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
+    });
+
+    it('opens alphabetized by first name, case-insensitively, and the PDF follows', () => {
+      contactService.getStaff.mockReturnValue(
+        of([
+          staffContact({ id: 'c-z', first_name: 'Zoe' }),
+          staffContact({ id: 'c-a', first_name: 'amy' }),
+          staffContact({ id: 'c-b', first_name: 'Bob' }),
+          staffContact({ id: 'c-n', first_name: undefined }),
+        ]),
+      );
+      const p = build();
+      p.onDateChange(new Date(2026, 5, 10));
+      expect(data(p).map(e => e.name)).toEqual([undefined, 'amy', 'Bob', 'Zoe']);
+    });
+
+    it('starts the header sort on the name column, ascending', () => {
+      contactService.getStaff.mockReturnValue(of([staffContact()]));
+      TestBed.configureTestingModule({
+        imports: [Payroll],
+        providers: [
+          provideNoopAnimations(),
+          { provide: AuthService, useValue: authService },
+          { provide: SessionsService, useValue: sessionsService },
+          { provide: ContactService, useValue: contactService },
+          { provide: StudentService, useValue: studentService },
+        ],
+      });
+      const fixture = TestBed.createComponent(Payroll);
+      fixture.componentInstance.onDateChange(new Date(2026, 5, 10));
+      fixture.detectChanges();
+      const sort = fixture.debugElement.query(By.directive(MatSort)).injector.get(MatSort);
+      expect(sort.active).toBe('name');
+      expect(sort.direction).toBe('asc');
     });
 
     it('groups the single sessions fetch per tutor', () => {
