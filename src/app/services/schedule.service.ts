@@ -13,6 +13,7 @@ import {SessionType} from '../enums/session-type.enum';
 import {PackageDef, PackageCatalog, resolvePackageDef} from '../utils/package-config';
 import {studentDisplayName} from '../utils/student-name';
 import {effectiveSlotTutorId, groupSlotsByEffectiveTutor} from '../utils/slot-tutor';
+import {ClashSlot, clashSummary, scheduleClashes} from '../utils/schedule-clashes';
 
 /** One generated occurrence of a weekly slot on a concrete calendar date. */
 export interface ScheduleOccurrence {
@@ -237,16 +238,65 @@ export class ScheduleService {
     window?: {from: Date; to?: Date},
   ): Observable<Session[]> {
     return this.sessionsService.getSessionsByStudent(studentId).pipe(
-      map(sessions =>
-        sessions.filter(
-          s =>
-            s.type === SessionType.TUTORING &&
-            s.status === SessionStatus.PENDING &&
-            !!s.start_datetime &&
-            new Date(s.start_datetime) > now &&
-            this.inWindow(s, window),
-        ),
-      ),
+      map(sessions => sessions.filter(s => this.isFuturePendingTutoring(s, now, window))),
+    );
+  }
+
+  private isFuturePendingTutoring(s: Session, now: Date, window?: {from: Date; to?: Date}): boolean {
+    return (
+      s.type === SessionType.TUTORING &&
+      s.status === SessionStatus.PENDING &&
+      !!s.start_datetime &&
+      new Date(s.start_datetime) > now &&
+      this.inWindow(s, window)
+    );
+  }
+
+  /**
+   * The clash summary for a schedule about to be saved, or null when it fits
+   * (see utils/schedule-clashes). Reads the student's sessions and each slot
+   * tutor's sessions from `window.from`. `replaces` names the student's own
+   * sessions the save deletes first: 'series' for a live-schedule edit,
+   * 'tutoring' for a pending change's window, 'none' for a new schedule.
+   */
+  findScheduleClash(
+    student: Student,
+    tutor: Contact,
+    slots: ScheduleSlot[],
+    firstWeek: FirstWeekSession[],
+    window: {from: Date; to?: Date},
+    replaces: 'none' | 'series' | 'tutoring',
+    tutorsById: Map<string, Contact> = new Map(),
+  ): Observable<string | null> {
+    const withTutor = {...student, assigned_tutor_id: tutor.id};
+    const clashSlots: ClashSlot[] = slots.map(slot => ({
+      ...slot,
+      tutor_id: effectiveSlotTutorId(slot, withTutor) ?? tutor.id ?? '',
+    }));
+    const oneOffs = this.buildFirstWeekSessions(student, tutor, firstWeek, tutorsById);
+    const tutorIds = [...new Set([...clashSlots.map(s => s.tutor_id), ...oneOffs.map(s => s.tutor_id ?? '')])]
+      .filter(id => !!id);
+    const range = {from: window.from.toISOString()};
+    const own$: Observable<Session[]> = student.id
+      ? this.sessionsService.getSessionsByStudent(student.id)
+      : of([]);
+    return forkJoin([own$, ...tutorIds.map(id => this.sessionsService.getSessionsByTutor(id, range))]).pipe(
+      map(([own, ...perTutor]) => {
+        const now = new Date();
+        const replaced =
+          replaces === 'series'
+            ? this.futurePendingSeries(own, now)
+            : replaces === 'tutoring'
+              ? own.filter(s => this.isFuturePendingTutoring(s, now, window))
+              : [];
+        const messages = scheduleClashes(clashSlots, oneOffs, [...own, ...perTutor.flat()], {
+          studentId: student.id ?? '',
+          from: window.from,
+          to: window.to,
+          ignoreIds: new Set(replaced.map(s => s.id ?? '').filter(id => !!id)),
+        });
+        return messages.length ? clashSummary(messages) : null;
+      }),
     );
   }
 

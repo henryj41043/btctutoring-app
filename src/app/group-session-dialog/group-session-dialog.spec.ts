@@ -157,6 +157,18 @@ describe('GroupSessionDialog', () => {
   });
 
   describe('edit (admin)', () => {
+    it('shows a double-booking the batch was refused for', () => {
+      sessionsService.createSessions.mockReturnValue(throwError(() => ({error: {message: 'Tess already has Admin Time.'}})));
+      const c = build({mode: 'create'});
+      const p = priv(c);
+      p.selectedTutor = 't-1';
+      p.selectedStudentIds = ['s-a'];
+      p.date = new Date(2026, 7, 5);
+      p.startTime = new Date(2026, 7, 5, 17, 0);
+      c.save();
+      expect(p.errorMessage).toBe('Tess already has Admin Time.');
+    });
+
     it('prefills from the stored occurrence', () => {
       const c = build({mode: 'edit', session: storedSession()});
       const p = priv(c);
@@ -364,6 +376,18 @@ describe('GroupSessionDialog', () => {
       c.chooseSeriesScope('future');
       expect(p.hasError).toBe(true);
       expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it("a series update refused as a double-booking shows the service's reason", () => {
+      sessionsService.getSessionsBySeries.mockReturnValue(of([storedSession()]));
+      sessionsService.updateSession.mockReturnValue(
+        throwError(() => ({error: {message: 'Pat already has a session with Mo.'}})));
+      const c = build({mode: 'edit', session: storedSession()});
+      const p = priv(c);
+      p.selectedStudentIds = ['s-a', 's-b'];
+      c.save();
+      c.chooseSeriesScope('future');
+      expect(p.errorMessage).toBe('Pat already has a session with Mo.');
     });
 
     it('a future edit with no pending targets closes with zero updates', () => {

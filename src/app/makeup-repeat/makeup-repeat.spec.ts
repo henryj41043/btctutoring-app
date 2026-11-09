@@ -120,6 +120,19 @@ describe('MakeupRepeat', () => {
       expect(rows[0].classList.contains('repeat-skipped')).toBe(false);
     });
 
+    it("names what is already booked on a date skipped for a clash", () => {
+      build();
+      c.onModeChange('weekly');
+      sessionsService.createMakeupSet.mockReturnValue(of(plan({
+        accepted: [0],
+        skipped: [{ index: 1, reason: 'conflict', message: 'Tess already has a session with Graham on Tue, Oct 13, 4:00 PM.' }],
+      })));
+      c.onUntilChange(new Date(2026, 9, 13));
+      const rows = Array.from(el().querySelectorAll('.repeat-preview li'));
+      expect(rows[1].querySelector('.repeat-reason')?.textContent).toBe(
+        'Skipped: Tess already has a session with Graham on Tue, Oct 13, 4:00 PM.');
+    });
+
     it('re-previews when a weekday, the until date or the form above changes', () => {
       build();
       c.onModeChange('weekly');

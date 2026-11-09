@@ -65,3 +65,10 @@ export function easternSlotToUtc(
   const [h, m] = (time ?? '').split(':').map(Number);
   return easternWallTimeToUtc(year, month, day, h || 0, m || 0);
 }
+
+/** The Eastern calendar date (month 0-indexed) on which an instant falls. */
+export function easternDateOf(at: Date): {year: number; month: number; day: number} {
+  const parts = easternParts.formatToParts(at);
+  const get = (type: string): number => Number(parts.find(p => p.type === type)?.value ?? '0');
+  return {year: get('year'), month: get('month') - 1, day: get('day')};
+}

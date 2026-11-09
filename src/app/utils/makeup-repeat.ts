@@ -102,6 +102,8 @@ export function skipReasonText(reason: MakeupSkipReason): string {
       return 'minutes expire before this date';
     case 'after_service_end':
       return 'after the last day of service';
+    case 'conflict':
+      return 'already booked at this time';
     default:
       return 'not enough minutes left';
   }

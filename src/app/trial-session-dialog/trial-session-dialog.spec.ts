@@ -274,4 +274,13 @@ describe('TrialSessionDialog', () => {
     expect((c as unknown as { submitting: boolean }).submitting).toBe(false);
     expect(dialogRef.close).not.toHaveBeenCalled();
   });
+
+  it('shows the double-booking the service refused', () => {
+    sessionsService.createSession.mockReturnValue(throwError(() => ({ error: { message: 'Tess already has a session.' } })));
+    const c = build();
+    c.ngOnInit();
+    (c as unknown as { startTime: Date }).startTime = new Date(2026, 7, 21, 10, 0);
+    (c as unknown as { save: () => void }).save();
+    expect((c as unknown as { errorMessage: string }).errorMessage).toBe('Tess already has a session.');
+  });
 });

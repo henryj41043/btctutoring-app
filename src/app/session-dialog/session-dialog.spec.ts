@@ -421,6 +421,15 @@ describe('SessionDialog', () => {
       expect(c.hasError).toBe(true);
     });
 
+    it('shows the double-booking the service refused', () => {
+      const c = primedCreate();
+      sessionsService.createSession.mockReturnValue(throwError(() =>
+        new HttpErrorResponse({ status: 409, error: { message: 'Tess already has a make-up with Graham on Thu, Nov 13, 10:00 AM.' } })));
+      c.createSession();
+      expect(c.errorMessage).toBe('Tess already has a make-up with Graham on Thu, Nov 13, 10:00 AM.');
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    });
+
     it('blocks a tutoring session longer than the package allows', () => {
       const c = primedCreate();
       c.endTime = new Date(2026, 5, 1, 11, 30); // 90 min vs Determination's 60
@@ -1509,6 +1518,30 @@ describe('SessionDialog', () => {
       c.chooseSeriesScope('future');
       expect(sessionsService.getSessionsBySeries).toHaveBeenCalledWith('series-1');
       expect(dialogRef.close).toHaveBeenCalledWith({ updated: 2 });
+    });
+
+    it('a series edit stops at the first double-booking and says how far it got', () => {
+      const c = seriesEdit();
+      c.updateSession();
+      sessionsService.getSessionsBySeries.mockReturnValue(
+        of([
+          { id: 'sess-1', status: SessionStatus.PENDING, start_datetime: '2026-06-01T10:00:00Z' },
+          { id: 'sess-2', status: SessionStatus.PENDING, start_datetime: '2026-06-08T10:00:00Z' },
+          { id: 'sess-3', status: SessionStatus.PENDING, start_datetime: '2026-06-15T10:00:00Z' },
+        ]),
+      );
+      const refusal = new HttpErrorResponse({ status: 409, error: { message: 'Tess already has a session with Graham.' } });
+      sessionsService.updateSession
+        .mockReturnValueOnce(of({}))
+        .mockReturnValueOnce(throwError(() => refusal))
+        .mockReturnValue(of({}));
+      c.chooseSeriesScope('future');
+      expect(sessionsService.updateSession).toHaveBeenCalledTimes(2);
+      expect(c.errorMessage).toBe(
+        'Tess already has a session with Graham. 1 of 3 sessions were already updated; the rest were not changed.',
+      );
+      expect(c.submitting).toBe(false);
+      expect(dialogRef.close).not.toHaveBeenCalled();
     });
 
     it('chooseSeriesScope(future) closes with zero when nothing matches', () => {

@@ -15,16 +15,17 @@ export interface MakeupSetRequest {
 
 /**
  * Why a proposed make-up cannot be scheduled: the minutes are used up; they
- * exist today but lapse before that date; or the date is after the student's
- * last day of service.
+ * exist today but lapse before that date; the date is after the student's
+ * last day of service; or the tutor or student is already booked then.
  */
-export type MakeupSkipReason = 'insufficient' | 'expired' | 'after_service_end';
+export type MakeupSkipReason = 'insufficient' | 'expired' | 'after_service_end' | 'conflict';
 
 /** The service's plan for a set (and, when it was not a dry run, what it created). */
 export interface MakeupSetResult {
   /** Indexes into the sessions sent that the minutes cover. */
   accepted: number[];
-  skipped: {index: number; reason: MakeupSkipReason}[];
+  /** `message` names what is already booked for a 'conflict'. */
+  skipped: {index: number; reason: MakeupSkipReason; message?: string}[];
   minutes_used: number;
   minutes_left: number;
   dry_run: boolean;
