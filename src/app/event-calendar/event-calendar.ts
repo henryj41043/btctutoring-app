@@ -567,17 +567,37 @@ export class EventCalendar implements OnInit {
     }
   }
 
-  openCreateSessionDialog(): void {
+  /** The main add button: what the signed-in user creates with it. */
+  get createButtonLabel(): string {
+    if (this.authService.isSupportStaff()) {
+      return 'Add Admin Time';
+    }
+    return this.authService.isAdmin() ? 'Add Session' : 'Add Make-up';
+  }
+
+  /** Tutors (not admins, not Support Staff) get a second button for their own Admin Time. */
+  get showTutorAdminTime(): boolean {
+    return !this.authService.isAdmin() && !this.authService.isSupportStaff() && this.authService.isTutorLike();
+  }
+
+  /**
+   * Opens the create dialog. Admins create any session. Tutors schedule
+   * their own make-ups, or log their own Admin Time with `'admin-time'`
+   * (client 2026-11-09). Support Staff only ever log Admin Time. The
+   * service enforces all of it.
+   */
+  openCreateSessionDialog(kind: 'session' | 'admin-time' = 'session'): void {
     console.log('openCreateSessionDialog');
+    const admin = this.authService.isAdmin();
+    const support = this.authService.isSupportStaff();
+    const adminTime = support || (!admin && kind === 'admin-time');
     const sessionDialogRef = this.sessionDialog.open(SessionDialog, {
       data: {
         type: 'create',
         session: new Session(),
         existingSessions: this.allSessions,
-        // Non-admins may only schedule their own make-ups (backend-enforced);
-        // Support Staff only log their own Admin Time.
-        lockToMakeup: !this.authService.isAdmin() && !this.authService.isSupportStaff(),
-        lockToAdminTime: this.authService.isSupportStaff(),
+        lockToMakeup: !admin && !adminTime,
+        lockToAdminTime: adminTime,
       },
     });
 
