@@ -18,6 +18,12 @@ export function flagLabels(flags: LineFlag[] | undefined): string[] {
   return (flags ?? []).map(f => FLAG_LABELS[f]).filter(label => !!label);
 }
 
+/** A line's labels: its flags, plus "Due the 15th" for a student billed on the 15th. */
+export function lineLabels(line: StatementLine): string[] {
+  const labels = flagLabels(line.flags);
+  return line.due_day === 15 ? ['Due the 15th', ...labels] : labels;
+}
+
 export function formatMoney(value: number | undefined | null): string {
   return (value ?? 0).toLocaleString('en-US', {
     style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,

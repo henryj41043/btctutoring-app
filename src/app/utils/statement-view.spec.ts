@@ -1,11 +1,11 @@
 import {
-  coversWholeMonth, cycleLabel, duesTotal, FLAG_LABELS, flagLabels, formatMoney, linePeriod, lineSessions, lineSummary,
+  coversWholeMonth, cycleLabel, duesTotal, FLAG_LABELS, flagLabels, formatMoney, lineLabels, linePeriod, lineSessions, lineSummary,
   shortDate, statementPackages, toBillingEntry,
 } from './statement-view';
 import {EntryDue} from '../models/billing-entry.model';
 import {StatementDue} from '../models/statement.model';
 import {semiStatement, statement, statementDue, statementLine} from '../../testing/statement.fixture';
-import {LineFlag} from '../models/statement.model';
+import {LineFlag, StatementLine} from '../models/statement.model';
 
 describe('statement-view', () => {
   it('labels every flag', () => {
@@ -21,6 +21,12 @@ describe('statement-view', () => {
     expect(flagLabels(['prorated_start', 'discount'])).toEqual(['Prorated start', 'Discount']);
     expect(flagLabels(undefined)).toEqual([]);
     expect(flagLabels(['nope' as LineFlag, 'unpriced'])).toEqual(['Not priced']);
+  });
+
+  it('lineLabels leads with the 15th for a student billed on the 15th', () => {
+    const line = {flags: ['discount']} as unknown as StatementLine;
+    expect(lineLabels(line)).toEqual(['Discount']);
+    expect(lineLabels({...line, due_day: 15})).toEqual(['Due the 15th', 'Discount']);
   });
 
   it('formats money with cents and a zero fallback', () => {

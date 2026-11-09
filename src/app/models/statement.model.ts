@@ -34,6 +34,8 @@ export interface StatementLine {
   flags: LineFlag[];
   /** Weekly families: the line's charge per Sunday–Saturday week. */
   weeks?: {week_start: string; sessions: number; amount: number}[];
+  /** Monthly families: 15 when this student's month is due on the 15th. */
+  due_day?: 15;
 }
 
 export interface StatementDue {

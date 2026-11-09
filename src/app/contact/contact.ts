@@ -848,6 +848,7 @@ export class Contact implements OnInit {
       data: {
         mode, contactId: this.id, student, tutors: this.tutors,
         firstLessonKey: student?.id ? this.firstLessonByStudent.get(student.id) : undefined,
+        billingCycle: this.contactForm.controls['billing_cycle'].value,
       },
       width: '480px',
     });

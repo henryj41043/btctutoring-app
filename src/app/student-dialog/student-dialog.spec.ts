@@ -1249,7 +1249,48 @@ describe('StudentDialog', () => {
 
     afterEach(() => jest.useRealTimers());
 
+    describe('billed on (client 2026-11-09)', () => {
+      const dueDay = (c: StudentDialog) => (c as unknown as { showDueDay: boolean }).showDueDay;
+
+      it('is offered to monthly families only, defaulting to the 1st', () => {
+        const c = build({ mode: 'edit', student: enrolled(), billingCycle: 'monthly' });
+        expect(dueDay(c)).toBe(true);
+        expect(form(c).get('billing_due_day')!.value).toBe(1);
+        TestBed.resetTestingModule();
+        expect(dueDay(build({ mode: 'edit', student: enrolled() }))).toBe(true);
+        for (const cycle of ['semi_monthly', 'biweekly', 'weekly']) {
+          TestBed.resetTestingModule();
+          expect(dueDay(build({ mode: 'edit', student: enrolled(), billingCycle: cycle }))).toBe(false);
+        }
+      });
+
+      it('saves a move to the 15th, and a move back to the 1st', () => {
+        const c = build({ mode: 'edit', student: enrolled(), billingCycle: 'monthly' });
+        form(c).get('billing_due_day')!.setValue(15);
+        c.save();
+        expect(saved().billing_due_day).toBe(15);
+        TestBed.resetTestingModule();
+        const back = build({ mode: 'edit', student: enrolled({ billing_due_day: 15 }), billingCycle: 'monthly' });
+        expect(form(back).get('billing_due_day')!.value).toBe(15);
+        form(back).get('billing_due_day')!.setValue(1);
+        back.save();
+        expect(saved().billing_due_day).toBe(1);
+      });
+
+      it('leaves the day out when unchanged, or when the family is not monthly', () => {
+        const c = build({ mode: 'edit', student: enrolled({ billing_due_day: 15 }), billingCycle: 'monthly' });
+        c.save();
+        expect(saved()).not.toHaveProperty('billing_due_day');
+        TestBed.resetTestingModule();
+        const semi = build({ mode: 'edit', student: enrolled(), billingCycle: 'semi_monthly' });
+        form(semi).get('billing_due_day')!.setValue(15);
+        semi.save();
+        expect(saved()).not.toHaveProperty('billing_due_day');
+      });
+    });
+
     it('loads the stored values', () => {
+
       const c = build({
         mode: 'edit',
         student: enrolled({ price_override: 410.4, discount_percent: 10, discount_reason: 'Staff' }),

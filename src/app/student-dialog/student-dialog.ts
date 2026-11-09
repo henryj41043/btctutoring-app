@@ -74,6 +74,8 @@ export interface StudentDialogData {
   tutors: Contact[];
   /** 'YYYY-MM-DD' of the student's first tutoring session, when the opener knows it. */
   firstLessonKey?: string;
+  /** The family's billing cycle, so a monthly family can pick each student's due day. */
+  billingCycle?: string;
 }
 
 /**
@@ -190,6 +192,8 @@ export class StudentDialog implements OnInit {
       price_override: [student.price_override ?? null, [Validators.min(0)]],
       discount_percent: [student.discount_percent ?? null, [Validators.min(0), Validators.max(100)]],
       discount_reason: [student.discount_reason ?? ''],
+      // Monthly families: the day this student's month is due (client 2026-11-09).
+      billing_due_day: [student.billing_due_day === 15 ? 15 : 1],
       // Billing v2: the last day of service and the status that follows it.
       service_end_date: [this.toDate((student.service_end_date ?? '').slice(0, 10))],
       end_status: [student.end_status ?? StudentStatus.PAST_STUDENT],
@@ -422,6 +426,15 @@ export class StudentDialog implements OnInit {
     return this.mode === 'edit' && !this.locked && !!this.studentForm.get('package')?.value;
   }
 
+  /**
+   * A monthly family can pay each student's month on the 1st or the 15th.
+   * Semi-monthly and weekly families have their own due dates.
+   */
+  get showDueDay(): boolean {
+    const cycle = this.data.billingCycle ?? '';
+    return !['semi_monthly', 'biweekly', 'weekly'].includes(cycle);
+  }
+
   /** A Custom package already carries its own price; only the discount applies. */
   get showPriceOverride(): boolean {
     return this.studentForm.get('package')?.value !== CUSTOM_PACKAGE;
@@ -443,6 +456,14 @@ export class StudentDialog implements OnInit {
       student.price_override = null;
     } else {
       delete student.price_override;
+    }
+
+    const storedDay = stored.billing_due_day === 15 ? 15 : 1;
+    const day = this.showDueDay && Number(student.billing_due_day) === 15 ? 15 : 1;
+    if (day !== storedDay) {
+      student.billing_due_day = day; // 1 = back to the 1st (the service removes it)
+    } else {
+      delete student.billing_due_day;
     }
 
     const percent = numberOf(student.discount_percent) || null;

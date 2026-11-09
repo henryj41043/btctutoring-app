@@ -1234,6 +1234,19 @@ describe('Contact', () => {
         );
       });
 
+      it("hands the family's billing cycle to the student dialog", () => {
+        studentService.getStudentsByContact.mockReturnValue(of([charlotte]));
+        sessionsService.getSessionsByStudent.mockReturnValue(of(lessons));
+        const c = build();
+        c.ngOnInit();
+        (c as unknown as { contactForm: FormGroup }).contactForm.controls['billing_cycle'].setValue('monthly');
+        c.openStudentDialog('edit', students(c)[0]);
+        expect(dialog.open).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ data: expect.objectContaining({ billingCycle: 'monthly' }) }),
+        );
+      });
+
       it('is quiet when the start is the first lesson, when the read fails, or for an unscheduled student', () => {
         studentService.getStudentsByContact.mockReturnValue(of([
           { ...charlotte, package_start_date: '2026-10-27T04:00:00.000Z' },
