@@ -376,10 +376,15 @@ export class StudentRoster implements OnInit {
     return this.dataSource.data.length;
   }
 
-  /** Row click drills into the student's family contact page. */
+  /**
+   * Row click drills into the family: admins get the full contact page,
+   * tutors the read-only family page (client 2026-11-09: tutors landed on
+   * their own contact page, since they may not open a family's).
+   */
   openContact(student: Student): void {
     if (student.contact_id) {
-      void this.router.navigate(['/contacts', student.contact_id]);
+      const page = this.authService.isAdmin() ? '/contacts' : '/family';
+      void this.router.navigate([page, student.contact_id]);
     }
   }
 

@@ -289,6 +289,14 @@ describe('StudentRoster', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/contacts', 'c-9']);
   });
 
+  it("a tutor's row click opens the read-only family page", () => {
+    isAdmin = false;
+    studentService.getStudentsByTutor.mockReturnValue(of([]));
+    const component = build();
+    component.openContact({ ...student, contact_id: 'c-9' });
+    expect(router.navigate).toHaveBeenCalledWith(['/family', 'c-9']);
+  });
+
   it('row click is a no-op for a student without a contact id', () => {
     studentService.getStudents.mockReturnValue(of([]));
     const component = build();

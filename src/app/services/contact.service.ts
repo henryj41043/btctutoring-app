@@ -4,6 +4,7 @@ import {HttpClient, HttpParams} from '@angular/common/http';
 import {concat, Observable, of, tap} from 'rxjs';
 import {Response} from '../models/response.model';
 import {Contact} from '../models/contact.model';
+import {FamilyView} from '../models/family-view.model';
 
 @Injectable({
   providedIn: 'root'
@@ -15,6 +16,11 @@ export class ContactService {
   getContact(id: string): Observable<Contact[]> {
     let params: HttpParams = new HttpParams().set('id', id);
     return this.httpClient.get<Contact[]>(`${this.baseUrl}/contacts`, { params: params });
+  }
+
+  /** The read-only family page for tutors: parent details + the students in their scope. */
+  getFamily(id: string): Observable<FamilyView> {
+    return this.httpClient.get<FamilyView>(`${this.baseUrl}/family/${encodeURIComponent(id)}`);
   }
 
   getContacts(): Observable<Contact[]> {

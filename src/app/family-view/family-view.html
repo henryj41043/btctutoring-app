@@ -1,0 +1,83 @@
+<div class="family-view">
+  <div class="btc-page-header">
+    <button matIconButton routerLink="/roster" aria-label="Back to My Roster">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <h2>{{family ? parentName : 'Family'}}</h2>
+  </div>
+
+  @if (loading) {
+    <div class="family-spinner">
+      <mat-spinner [diameter]="48"></mat-spinner>
+      <span>Loading family…</span>
+    </div>
+  } @else if (error) {
+    <p class="family-error">{{error}}</p>
+  } @else if (family) {
+    <mat-card appearance="outlined" class="family-card">
+      <mat-card-header>
+        <mat-card-title>Parent / Guardian</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p class="parent-name">{{parentName}}</p>
+        <p class="parent-line">
+          <mat-icon inline>mail</mat-icon>
+          @if (family.email) {
+            <a [href]="'mailto:' + family.email">{{family.email}}</a>
+          } @else {
+            <span class="muted">No email on file</span>
+          }
+        </p>
+        <p class="parent-line">
+          <mat-icon inline>call</mat-icon>
+          @if (family.phone_number) {
+            <a [href]="'tel:' + family.phone_number">{{family.phone_number}}</a>
+          } @else {
+            <span class="muted">No phone on file</span>
+          }
+        </p>
+        <div class="parent-line">
+          <mat-icon inline>home</mat-icon>
+          @if (hasAddress) {
+            <address>
+              @if (family.address_line1) { <span>{{family.address_line1}}</span> }
+              @if (family.address_line2) { <span>{{family.address_line2}}</span> }
+              @if (cityLine) { <span>{{cityLine}}</span> }
+            </address>
+          } @else {
+            <span class="muted">No address on file</span>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    @for (student of family.students; track student.id) {
+      <mat-card appearance="outlined" class="family-card">
+        <mat-card-header>
+          <mat-card-title>{{student.name || 'Unnamed student'}}</mat-card-title>
+          <mat-card-subtitle>
+            <span [class]="'btc-chip ' + statusChipClass(student.status)">{{student.status}}</span>
+            @if (student.package) { <span class="student-package">{{student.package}}</span> }
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <p><strong>Tutor:</strong> {{student.tutor_name || '—'}}</p>
+          <p class="section-label"><strong>Schedule</strong></p>
+          @if (student.schedule.length) {
+            <ul class="schedule-list">
+              @for (slot of student.schedule; track $index) {
+                <li>{{slotLabel(student, slot)}}</li>
+              }
+            </ul>
+          } @else {
+            <p class="muted">No weekly schedule yet.</p>
+          }
+          <p>
+            <strong>Make-up time owed:</strong> {{makeupLabel(student)}}
+            @if (student.make_up_never_expire) { <span class="muted">(never expires)</span> }
+          </p>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+</div>

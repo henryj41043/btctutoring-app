@@ -1,4 +1,6 @@
 import { Routes } from '@angular/router';
+import {FamilyView} from './family-view/family-view';
+import {FamilyAccessGuard} from './guards/family-access.guard';
 import {EventCalendar} from './event-calendar/event-calendar';
 import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
@@ -45,6 +47,13 @@ export const routes: Routes = [
     path: 'contacts/:id',
     component: Contact,
     canActivate: [AuthGuard, ContactAccessGuard],
+  },
+  {
+    // Read-only family page for tutors (client 2026-11-09); admins are sent
+    // to the full contact page.
+    path: 'family/:id',
+    component: FamilyView,
+    canActivate: [AuthGuard, FamilyAccessGuard],
   },
   {
     path: 'roster',
