@@ -3,6 +3,7 @@ import { of, throwError, Subject } from 'rxjs';
 import { FormGroup } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MakeupEditDialog } from '../makeup-edit-dialog/makeup-edit-dialog';
+import { localDateKey, shortDateLabel } from '../utils/start-gap';
 import { StudentDialog, StudentDialogData } from './student-dialog';
 import { StudentService } from '../services/student.service';
 import { ScheduleService } from '../services/schedule.service';
@@ -1803,6 +1804,61 @@ describe('StudentDialog', () => {
           .showPackageStart).toBe(false);
         TestBed.resetTestingModule();
         expect((build({ mode: 'create' }) as unknown as { showPackageStart: boolean }).showPackageStart).toBe(false);
+      });
+
+      describe('until the first lesson (client 2026-11-04)', () => {
+        const dayKey = (offset: number) => {
+          const d = new Date();
+          d.setDate(d.getDate() + offset);
+          return localDateKey(d);
+        };
+
+        it('is shown while the student is still onboarding once a start is stored', () => {
+          const c = build({
+            mode: 'edit',
+            student: enrolled({ status: StudentStatus.ONBOARDING, onboarding_complete: false }),
+          }) as unknown as { showPackageStart: boolean; locked: boolean };
+          expect(c.locked).toBe(true);
+          expect(c.showPackageStart).toBe(true);
+        });
+
+        it('stays hidden for an onboarding student with no start yet', () => {
+          const c = build({
+            mode: 'edit',
+            student: enrolled({
+              status: StudentStatus.ONBOARDING,
+              onboarding_complete: false,
+              package_start_date: undefined,
+            }),
+          }) as unknown as { showPackageStart: boolean };
+          expect(c.showPackageStart).toBe(false);
+        });
+
+        it('locks once the first lesson day has passed, and sends the stored start back', () => {
+          const c = build({ mode: 'edit', firstLessonKey: dayKey(-1), student: enrolled() });
+          expect(c.startLocked).toBe(true);
+          expect(startControl(c).disabled).toBe(true);
+          expect(c.startLockedHint).toBe(`Locked: the first lesson was ${shortDateLabel(dayKey(-1), true)}.`);
+          c.save();
+          const payload = studentService.updateStudent.mock.calls[0][0] as Student;
+          expect(payload.package_start_date).toBe('2026-05-01T00:00:00');
+          expect(scheduleService.rebuildFrom).not.toHaveBeenCalled();
+        });
+
+        it('stays editable on the day of the first lesson, before it, and with no lesson known', () => {
+          for (const firstLessonKey of [dayKey(0), dayKey(3), undefined]) {
+            TestBed.resetTestingModule();
+            const c = build({ mode: 'edit', firstLessonKey, student: enrolled() });
+            expect(c.startLocked).toBe(false);
+            expect(c.startLockedHint).toBe(firstLessonKey ? `Locked: the first lesson was ${shortDateLabel(firstLessonKey, true)}.` : '');
+            expect(startControl(c).enabled).toBe(true);
+          }
+        });
+
+        it('never locks outside edit mode', () => {
+          const c = build({ mode: 'create', firstLessonKey: dayKey(-5) });
+          expect(c.startLocked).toBe(false);
+        });
       });
 
       it('loads the stored start as a local day and sends it back unchanged when untouched', () => {

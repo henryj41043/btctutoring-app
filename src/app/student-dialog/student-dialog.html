@@ -127,17 +127,22 @@
           <div class="pricing-section">
             <p class="pending-change-title">Package Start</p>
             <p class="planning-overrides-hint">
-              The first day of the package: billing and sessions run from it. Moving it rebuilds the
-              upcoming sessions. Months already billed are not recomputed.
+              The first day of the package: billing and sessions run from it. It can be moved until
+              the first lesson. Moving it rebuilds the upcoming sessions. Months already billed are
+              not recomputed.
             </p>
             <mat-form-field>
               <mat-label>Package Start Date</mat-label>
               <input matInput [matDatepicker]="startPicker" formControlName="package_start_date">
               <mat-datepicker-toggle [for]="startPicker" matSuffix/>
               <mat-datepicker #startPicker/>
-              <mat-hint>Set by Manage Schedule when the first schedule is created</mat-hint>
+              @if (startLocked) {
+                <mat-hint>{{startLockedHint}}</mat-hint>
+              } @else {
+                <mat-hint>Editable until the first lesson. Set by Manage Schedule when the first schedule is created.</mat-hint>
+              }
             </mat-form-field>
-            @if (startGapWarning; as warning) {
+            @if (!startLocked && startGapWarning; as warning) {
               <p class="start-gap-warning">{{warning}}</p>
             }
           </div>

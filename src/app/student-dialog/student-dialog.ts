@@ -21,7 +21,7 @@ import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {PendingChange, Student} from '../models/student.model';
-import {startGap, startGapMessage} from '../utils/start-gap';
+import {localDateKey, shortDateLabel, startGap, startGapMessage} from '../utils/start-gap';
 import {Contact} from '../models/contact.model';
 import {StudentStatus} from '../enums/student-status.enum';
 import {StudentService} from '../services/student.service';
@@ -203,6 +203,10 @@ export class StudentDialog implements OnInit {
     this.buildPlanningOverrideRows(student);
     this.watchPricing();
     this.lockCurrentPackage();
+    // Client 2026-11-04: the start can move until the first lesson, never after.
+    if (this.startLocked) {
+      this.studentForm.controls['package_start_date'].disable();
+    }
   }
 
   // ── End of service ──
@@ -260,9 +264,33 @@ export class StudentDialog implements OnInit {
     return (this.data.student?.package_start_date ?? '').slice(0, 10) || undefined;
   }
 
-  /** The package start date is editable once a package is set (edit mode). */
+  /**
+   * The package start date is shown in edit mode once a package is set; while
+   * the student is still onboarding, as soon as a start is stored:
+   * that is when a start most often needs correcting (client 2026-11-04).
+   */
   get showPackageStart(): boolean {
-    return this.mode === 'edit' && !this.locked && !!this.data.student?.package;
+    if (this.mode !== 'edit' || !this.data.student?.package) {
+      return false;
+    }
+    return !this.locked || !!this.storedStartKey;
+  }
+
+  /**
+   * True once the first lesson's day has passed: from then on the start date
+   * cannot move here (client 2026-11-04, a hard lock). Unlocked while no
+   * lesson is known, or on the day of the first lesson itself.
+   */
+  get startLocked(): boolean {
+    const first = this.data.firstLessonKey;
+    return this.mode === 'edit' && !!first && first < localDateKey(new Date());
+  }
+
+  /** The hint under a locked start date. */
+  get startLockedHint(): string {
+    return this.data.firstLessonKey
+      ? `Locked: the first lesson was ${shortDateLabel(this.data.firstLessonKey, true)}.`
+      : '';
   }
 
   /**
