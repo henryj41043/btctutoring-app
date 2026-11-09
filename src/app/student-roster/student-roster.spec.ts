@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { ActivatedRoute } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -26,6 +27,7 @@ describe('StudentRoster', () => {
   const studentService = {
     getStudents: jest.fn(),
     getStudentsByTutor: jest.fn(),
+    getTeamStudents: jest.fn(),
   };
   const sessionsService = { getAllSessions: jest.fn(), getScheduledMakeup: jest.fn() };
   const contactService = { getStaff: jest.fn(), getContact: jest.fn() };
@@ -37,10 +39,11 @@ describe('StudentRoster', () => {
   const snackBar = { open: jest.fn() };
   const router = { navigate: jest.fn() };
 
-  const build = (): StudentRoster => {
+  const build = (mode?: string): StudentRoster => {
     TestBed.configureTestingModule({
       imports: [StudentRoster],
       providers: [
+        ...(mode ? [{ provide: ActivatedRoute, useValue: { snapshot: { data: { mode } } } }] : []),
         { provide: StudentService, useValue: studentService },
         { provide: SessionsService, useValue: sessionsService },
         { provide: ContactService, useValue: contactService },
@@ -64,6 +67,48 @@ describe('StudentRoster', () => {
       { id: 't-1', first_name: 'Tess', last_name: 'Ng' } as Contact,
     ]));
     contactService.getContact.mockReturnValue(of([]));
+  });
+
+  describe('Team Roster mode (client 2026-11-09)', () => {
+    beforeEach(() => {
+      isAdmin = false;
+      contactId = 'c-lead';
+    });
+
+    it("loads the lead's team students with parent names, titled Team Roster", () => {
+      studentService.getTeamStudents.mockReturnValue(of([{ ...student, contact_id: 'fam-1' }]));
+      const component = build('team');
+      component.ngOnInit();
+      expect(studentService.getTeamStudents).toHaveBeenCalledWith(true);
+      expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+      expect((component as unknown as { title: string }).title).toBe('Team Roster');
+      expect(component.activeCount).toBe(1);
+      component.openContact({ ...student, contact_id: 'fam-1' });
+      expect(router.navigate).toHaveBeenCalledWith(['/family', 'fam-1']);
+    });
+
+    it('still loads when the signed-in contact id is not resolved yet', () => {
+      contactId = undefined;
+      studentService.getTeamStudents.mockReturnValue(of([]));
+      const component = build('team');
+      component.ngOnInit();
+      expect(studentService.getTeamStudents).toHaveBeenCalled();
+    });
+
+    it('any other route mode is the ordinary roster', () => {
+      studentService.getStudentsByTutor.mockReturnValue(of([]));
+      const component = build('other');
+      component.ngOnInit();
+      expect(studentService.getTeamStudents).not.toHaveBeenCalled();
+      expect((component as unknown as { title: string }).title).toBe('My Roster');
+    });
+
+    it('an admin sees the Student Roster title outside team mode', () => {
+      isAdmin = true;
+      studentService.getStudents.mockReturnValue(of([]));
+      const component = build();
+      expect((component as unknown as { title: string }).title).toBe('Student Roster');
+    });
   });
 
   it('loads all students (with parent names) for an admin on init', () => {

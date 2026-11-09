@@ -1,6 +1,6 @@
 <div class="student-roster">
   <div class="btc-page-header">
-    <h2>{{authService.isAdmin() ? 'Student Roster' : 'My Roster'}}</h2>
+    <h2>{{title}}</h2>
     @if (!historyMode && !loading) {
       <span class="btc-chip btc-chip--ok roster-count">{{activeCount}} active students</span>
     }
@@ -8,7 +8,7 @@
       <span class="btc-chip btc-chip--info roster-count">{{historyCount}} students · {{selectedDate | date:'MMMM y'}}</span>
     }
     <div class="roster-controls">
-      @if (authService.isAdmin()) {
+      @if (authService.isAdmin() && !teamMode) {
         <mat-slide-toggle [checked]="historyMode" (change)="onHistoryToggle($event.checked)">
           Monthly history
         </mat-slide-toggle>
@@ -90,6 +90,10 @@
           <mat-spinner [diameter]="48"></mat-spinner>
           <span class="table-spinner-label">Loading students…</span>
         </div>
+      } @else if (teamMode && dataSource.data.length === 0) {
+        <p class="empty-note">
+          No students on your team's lists. An admin sets up teams on the Teams page.
+        </p>
       } @else {
       <div class="table-scroll">
       <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">

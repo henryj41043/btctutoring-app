@@ -50,6 +50,13 @@ describe('StudentService', () => {
       .flush([]);
   });
 
+  it('getTeamStudents asks for the team roster, with names when requested', () => {
+    service.getTeamStudents().subscribe();
+    httpMock.expectOne(`${base}/students?team=self`).flush([]);
+    service.getTeamStudents(true).subscribe();
+    httpMock.expectOne(`${base}/students?team=self&include=contact_name`).flush([]);
+  });
+
   it('getStudents GETs /students', () => {
     service.getStudents().subscribe();
     httpMock.expectOne(`${base}/students`).flush([]);

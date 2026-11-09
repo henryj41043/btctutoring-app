@@ -17,7 +17,7 @@ import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatButtonModule} from '@angular/material/button';
-import {Router} from '@angular/router';
+import {ActivatedRoute, Router} from '@angular/router';
 import {catchError, EMPTY, of, forkJoin} from 'rxjs';
 import {StudentService} from '../services/student.service';
 import {ContactService} from '../services/contact.service';
@@ -91,7 +91,13 @@ export class StudentRoster implements OnInit {
   // Setter form: the table is inside an @if, so sort/paginator only exist
   // once loading finishes.
   // Restores the admin's place (page/sort/filters) after navigating away.
-  private readonly viewState = new TableStateStore('btc-roster-view');
+  /**
+   * Team Roster mode (route data `mode: 'team'`, client 2026-11-09): a Lead
+   * Tutor's view of the students their team members teach.
+   */
+  protected readonly teamMode: boolean =
+    inject(ActivatedRoute, {optional: true})?.snapshot?.data?.['mode'] === 'team';
+  private readonly viewState = new TableStateStore(this.teamMode ? 'btc-team-roster-view' : 'btc-roster-view');
   // The @if swap between current and history tables creates a fresh
   // MatSort/MatPaginator each time — attach whichever data source is showing.
   @ViewChild(MatSort) set matSort(sort: MatSort) {
@@ -168,15 +174,17 @@ export class StudentRoster implements OnInit {
       }
     }
     const tutorId = this.authService.contact().id;
-    if (!isAdmin && !tutorId) {
+    if (!isAdmin && !tutorId && !this.teamMode) {
       // No resolved contact id — never query with 'undefined'.
       this.loading = false;
       this.cdr.markForCheck();
       return;
     }
-    const source$ = isAdmin
-      ? this.studentService.getStudents(true)
-      : this.studentService.getStudentsByTutor(tutorId!, true);
+    const source$ = this.teamMode
+      ? this.studentService.getTeamStudents(true)
+      : isAdmin
+        ? this.studentService.getStudents(true)
+        : this.studentService.getStudentsByTutor(tutorId!, true);
     this.loadScheduledMakeup();
 
     forkJoin({
@@ -372,6 +380,14 @@ export class StudentRoster implements OnInit {
   }
 
   /** The number of active students on the roster (not parents). */
+  /** The page title: the admins' org roster, a tutor's own, or a lead's team. */
+  protected get title(): string {
+    if (this.teamMode) {
+      return 'Team Roster';
+    }
+    return this.authService.isAdmin() ? 'Student Roster' : 'My Roster';
+  }
+
   get activeCount(): number {
     return this.dataSource.data.length;
   }

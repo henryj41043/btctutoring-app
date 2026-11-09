@@ -31,6 +31,18 @@ export class StudentService {
     return this.httpClient.get<Student[]>(`${this.baseUrl}/students`, { params: params });
   }
 
+  /**
+   * A Lead Tutor's Team Roster (client 2026-11-09): the students of the tutors
+   * they manage, nested teams included, their own left out. Lead Tutors only.
+   */
+  getTeamStudents(includeContactName: boolean = false): Observable<Student[]> {
+    let params: HttpParams = new HttpParams().set('team', 'self');
+    if (includeContactName) {
+      params = params.set('include', 'contact_name');
+    }
+    return this.httpClient.get<Student[]>(`${this.baseUrl}/students`, { params: params });
+  }
+
   getStudents(includeContactName: boolean = false): Observable<Student[]> {
     let params: HttpParams = new HttpParams();
     if (includeContactName) {
