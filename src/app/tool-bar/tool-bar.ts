@@ -48,6 +48,11 @@ export class ToolBar {
     void this.router.navigate(['/roster']);
   }
 
+  /** A Lead Tutor's Team Roster (client 2026-11-09). */
+  teamRosterNav(): void {
+    void this.router.navigate(['/roster', 'team']);
+  }
+
   /** The signed-in user's own contact page (Support Staff menu). */
   profileNav(): void {
     void this.router.navigate(['/contacts', this.authService.contact().id]);

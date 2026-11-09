@@ -48,12 +48,13 @@ describe('ToolBar', () => {
     ['sessionsNav', '/sessions'],
     ['contactsNav', '/contacts'],
     ['rosterNav', '/roster'],
+    ['teamRosterNav', '/roster', 'team'],
     ['onboardingNav', '/onboarding'],
     ['payrollNav', '/payroll'],
     ['teamsNav', '/teams'],
-  ])('%s navigates to %s', (method, route) => {
+  ])('%s navigates to %s', (method, route, ...rest) => {
     (component as unknown as Record<string, () => void>)[method]();
-    expect(router.navigate).toHaveBeenCalledWith([route]);
+    expect(router.navigate).toHaveBeenCalledWith([route, ...rest]);
   });
 
   it('profileNav opens the signed-in user\'s own contact page', () => {

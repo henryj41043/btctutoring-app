@@ -23,6 +23,11 @@
         <button mat-menu-item (click)="rosterNav()">
           <mat-icon>groups</mat-icon><span>{{authService.isAdmin() ? 'Student Roster' : 'My Roster'}}</span>
         </button>
+        @if (authService.isLead() && !authService.isAdmin()) {
+          <button mat-menu-item (click)="teamRosterNav()">
+            <mat-icon>diversity_3</mat-icon><span>Team Roster</span>
+          </button>
+        }
       }
       <button mat-menu-item (click)="payrollNav()">
         <mat-icon>payments</mat-icon><span>Payroll</span>
