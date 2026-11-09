@@ -99,10 +99,12 @@ describe('AuthService', () => {
       [['Admins'], false, false, false],
       [['Tutors'], false, true, false],
       [['LeadTutors'], true, true, false],
+      [['HeadTutors'], true, true, false],
       [['SupportStaff'], false, false, true],
       [[], false, false, false],
     ])('groups %j -> isLead %s, isTutorLike %s, isSupportStaff %s', (groups, isLead, isTutorLike, isSupportStaff) => {
       completeSuccessfulLogin(groups as string[]);
+      expect(service.isHeadTutor()).toBe((groups as string[]).includes('HeadTutors'));
       expect(service.isLead()).toBe(isLead);
       expect(service.isTutorLike()).toBe(isTutorLike);
       expect(service.isSupportStaff()).toBe(isSupportStaff);

@@ -218,6 +218,7 @@ describe('Contact', () => {
       { value: 'Admins', label: 'Admin' },
       { value: 'Tutors', label: 'Tutor' },
       { value: 'LeadTutors', label: 'Lead Tutor' },
+      { value: 'HeadTutors', label: 'Head Tutor' },
       { value: 'SupportStaff', label: 'Support Staff' },
     ]);
   });

@@ -1,3 +1,4 @@
+import { UserGroup } from '../enums/user-group.enum';
 import { TestBed } from '@angular/core/testing';
 import { of, throwError, Subject } from 'rxjs';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -57,6 +58,13 @@ describe('TeamDialog', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  it('offers a Head Tutor as a lead and as a member (client 2026-11-09)', () => {
+    const head = { ...leadA, id: 'c-head', user_group: UserGroup.HEAD_TUTORS };
+    const c = build({ mode: 'create', teams: [], contacts: [...contacts, head] });
+    expect(c.leadOptions.map(o => o.id)).toContain('c-head');
+    expect(c.memberOptions.map(o => o.id)).toContain('c-head');
   });
 
   it('hides applicants and former staff from both pickers (current staff only)', () => {

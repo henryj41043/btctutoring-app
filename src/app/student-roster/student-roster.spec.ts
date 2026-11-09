@@ -95,6 +95,25 @@ describe('StudentRoster', () => {
       expect(studentService.getTeamStudents).toHaveBeenCalled();
     });
 
+    it("org mode lists the whole roster for the Head Tutor, titled Student Roster, rows open the family page", () => {
+      studentService.getStudents.mockReturnValue(of([{ ...student, contact_id: 'fam-1' }]));
+      const component = build('org');
+      component.ngOnInit();
+      expect(studentService.getStudents).toHaveBeenCalledWith(true);
+      expect(studentService.getStudentsByTutor).not.toHaveBeenCalled();
+      expect((component as unknown as { title: string }).title).toBe('Student Roster');
+      component.openContact({ ...student, contact_id: 'fam-1' });
+      expect(router.navigate).toHaveBeenCalledWith(['/family', 'fam-1']);
+    });
+
+    it('org mode still loads before the contact id resolves', () => {
+      contactId = undefined;
+      studentService.getStudents.mockReturnValue(of([]));
+      const component = build('org');
+      component.ngOnInit();
+      expect(studentService.getStudents).toHaveBeenCalled();
+    });
+
     it('any other route mode is the ordinary roster', () => {
       studentService.getStudentsByTutor.mockReturnValue(of([]));
       const component = build('other');

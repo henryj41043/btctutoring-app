@@ -49,6 +49,7 @@ describe('ToolBar', () => {
     ['contactsNav', '/contacts'],
     ['rosterNav', '/roster'],
     ['teamRosterNav', '/roster', 'team'],
+    ['orgRosterNav', '/roster', 'all'],
     ['onboardingNav', '/onboarding'],
     ['payrollNav', '/payroll'],
     ['teamsNav', '/teams'],

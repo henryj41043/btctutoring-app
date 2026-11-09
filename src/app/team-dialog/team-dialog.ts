@@ -82,11 +82,12 @@ export class TeamDialog implements OnInit {
     return contact.service === Service.HIRING && contact.status === StaffStatus.ACTIVE_STAFF;
   }
 
-  /** Active Lead Tutor contacts (plus this team's current lead) for the lead picker. */
+  /** Active Lead Tutor and Head Tutor contacts (plus this team's current lead) for the lead picker. */
   get leadOptions(): Contact[] {
     const currentLead = this.data.team?.lead_contact_id;
     return this.data.contacts.filter(c =>
-      c.user_group === UserGroup.LEAD_TUTORS && (this.isCurrentStaff(c) || c.id === currentLead));
+      (c.user_group === UserGroup.LEAD_TUTORS || c.user_group === UserGroup.HEAD_TUTORS)
+      && (this.isCurrentStaff(c) || c.id === currentLead));
   }
 
   /**
@@ -100,7 +101,8 @@ export class TeamDialog implements OnInit {
     const currentMembers = new Set(this.data.team?.member_contact_ids ?? []);
     const selectedLead: string | null = this.teamForm?.get('lead_contact_id')?.value ?? null;
     return this.data.contacts.filter(c =>
-      (c.user_group === UserGroup.TUTORS || c.user_group === UserGroup.LEAD_TUTORS)
+      (c.user_group === UserGroup.TUTORS || c.user_group === UserGroup.LEAD_TUTORS
+        || c.user_group === UserGroup.HEAD_TUTORS)
       && c.id !== selectedLead
       && (this.isCurrentStaff(c) || currentMembers.has(c.id ?? '')));
   }
