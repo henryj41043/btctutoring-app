@@ -21,7 +21,7 @@
           <mat-icon>contacts</mat-icon><span>Contacts</span>
         </button>
         <button mat-menu-item (click)="rosterNav()">
-          <mat-icon>groups</mat-icon><span>Student Roster</span>
+          <mat-icon>groups</mat-icon><span>{{authService.isAdmin() ? 'Student Roster' : 'My Roster'}}</span>
         </button>
       }
       <button mat-menu-item (click)="payrollNav()">

@@ -1,6 +1,6 @@
 <div class="student-roster">
   <div class="btc-page-header">
-    <h2>Student Roster</h2>
+    <h2>{{authService.isAdmin() ? 'Student Roster' : 'My Roster'}}</h2>
     @if (!historyMode && !loading) {
       <span class="btc-chip btc-chip--ok roster-count">{{activeCount}} active students</span>
     }

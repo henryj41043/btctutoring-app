@@ -1,0 +1,56 @@
+.family-view {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
+
+  .family-card {
+    margin-bottom: 16px;
+  }
+
+  .family-spinner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 0;
+  }
+
+  .family-error {
+    color: var(--mat-sys-error);
+  }
+
+  .parent-name {
+    font-size: 1.1rem;
+    font-weight: 500;
+  }
+
+  .parent-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 6px 0;
+    overflow-wrap: anywhere;
+
+    address {
+      display: flex;
+      flex-direction: column;
+      font-style: normal;
+    }
+  }
+
+  .student-package {
+    margin-left: 8px;
+  }
+
+  .section-label {
+    margin-bottom: 4px;
+  }
+
+  .schedule-list {
+    margin: 0 0 12px;
+    padding-left: 20px;
+  }
+
+  .muted {
+    color: var(--mat-sys-on-surface-variant);
+  }
+}

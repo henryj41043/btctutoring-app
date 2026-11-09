@@ -39,6 +39,15 @@ describe('ContactService', () => {
     expect(result).toEqual(expected);
   });
 
+  it('getFamily issues a GET for the read-only family page', () => {
+    let result: unknown;
+    service.getFamily('fam 1').subscribe((r) => (result = r));
+    const req = httpMock.expectOne(`${base}/family/fam%201`);
+    expect(req.request.method).toBe('GET');
+    req.flush({ id: 'fam 1', students: [] });
+    expect(result).toEqual({ id: 'fam 1', students: [] });
+  });
+
   it('getContacts issues a GET for all contacts', () => {
     service.getContacts().subscribe();
     const req = httpMock.expectOne(`${base}/contacts`);
