@@ -1,3 +1,4 @@
+import {messageOf} from '../utils/http-error';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -231,7 +232,7 @@ export class MakeupRepeat implements OnChanges {
   }
 
   private rowsOf(plan: MakeupSetResult): PreviewRow[] {
-    const reasons = new Map(plan.skipped.map(s => [s.index, skipReasonText(s.reason)]));
+    const reasons = new Map(plan.skipped.map(s => [s.index, s.message || skipReasonText(s.reason)]));
     return this.candidates.map((candidate, index) => ({
       start: candidate.start_datetime,
       end: candidate.end_datetime,
@@ -266,8 +267,4 @@ export class MakeupRepeat implements OnChanges {
   }
 }
 
-/** The service explains a refusal (400/403/404); anything else is a plain failure. */
-export function messageOf(error: HttpErrorResponse | undefined, fallback: string): string {
-  const message: unknown = error?.error?.message;
-  return typeof message === 'string' && message ? message : fallback;
-}
+export {messageOf};

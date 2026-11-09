@@ -1,5 +1,6 @@
 import {TestBed} from '@angular/core/testing';
-import {of, throwError} from 'rxjs';
+import {Observable, of, throwError} from 'rxjs';
+import {HttpErrorResponse} from '@angular/common/http';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {ManageScheduleDialog, ManageScheduleDialogData} from './manage-schedule-dialog';
 import {ScheduleService} from '../services/schedule.service';
@@ -38,6 +39,7 @@ describe('ManageScheduleDialog', () => {
     deleteSchedule: jest.fn(),
     deleteFuturePendingSessions: jest.fn(() => of(0)),
     fillAhead: jest.fn(() => of(null)),
+    findScheduleClash: jest.fn((): Observable<string | null> => of(null)),
   };
   const authService = {isAdmin: () => isAdmin};
   const studentService = {updateStudent: jest.fn()};
@@ -80,6 +82,7 @@ describe('ManageScheduleDialog', () => {
     scheduleService.addMinutesToTime.mockReturnValue('11:00');
     scheduleService.buildOccurrences.mockReturnValue([{}]);
     scheduleService.findAvailabilityFailures.mockReturnValue([]);
+    scheduleService.findScheduleClash.mockReturnValue(of(null));
     contactService.getStaff.mockReturnValue(of([]));
     contactService.getContact.mockReturnValue(of([]));
   });
@@ -877,6 +880,87 @@ describe('ManageScheduleDialog', () => {
         } as Student,
         tutor, pendingEffective: '2026-10-01',
       })).storedFirstWeek).toEqual([]);
+    });
+  });
+  describe('overlap pre-check', () => {
+    const editStudent = (over: Partial<Student> = {}) =>
+      ({id: 's-1', name: 'Pat', package: 'Determination', schedule: slots, ...over}) as Student;
+
+    it('stops a new schedule that overlaps a booked session, before anything is written', () => {
+      scheduleService.findScheduleClash.mockReturnValue(of('Tess already has a session with Graham on Mon, Nov 16, 10:00 AM.'));
+      const c = primedCreate();
+      c.save();
+      expect(scheduleService.createSchedule).not.toHaveBeenCalled();
+      expect(c.hasError).toBe(true);
+      expect(c.saving).toBe(false);
+      expect(c.errorMessage).toBe('Tess already has a session with Graham on Mon, Nov 16, 10:00 AM.');
+      const [, , checked, , window, replaces] = scheduleService.findScheduleClash.mock.calls.at(-1)! as unknown[];
+      expect(checked).toHaveLength(2);
+      expect((window as {from: Date}).from).toBe(c.startDate);
+      expect(replaces).toBe('none');
+    });
+
+    it('stops when the booked sessions cannot be read', () => {
+      scheduleService.findScheduleClash.mockReturnValue(throwError(() => new Error('down')));
+      const c = primedCreate();
+      c.save();
+      expect(scheduleService.createSchedule).not.toHaveBeenCalled();
+      expect(c.saving).toBe(false);
+      expect(c.errorMessage).toContain('could not be checked for overlapping sessions');
+    });
+
+    it("an edit checks from today up to the next scheduled change, replacing the student's series", () => {
+      scheduleService.updateSchedule.mockReturnValue(of({} as Student));
+      const c = build({
+        student: editStudent({pending_changes: [{package: 'Achieve', effective: '2099-02-01'}, {package: 'Excel', effective: '2001-01-01'}]}),
+        tutor,
+      });
+      c.save();
+      const [, , , , window, replaces] = scheduleService.findScheduleClash.mock.calls.at(-1)! as unknown[];
+      expect(replaces).toBe('series');
+      expect((window as {to?: Date}).to).toEqual(new Date(2099, 1, 1));
+      expect(scheduleService.updateSchedule).toHaveBeenCalled();
+    });
+
+    it("shows the service's refusal when the save itself is refused", () => {
+      scheduleService.updateSchedule.mockReturnValue(
+        throwError(() => new HttpErrorResponse({status: 409, error: {message: 'Pat already has a make-up.'}})));
+      const c = build({student: editStudent(), tutor});
+      c.save();
+      expect(c.errorMessage).toBe('Pat already has a make-up.');
+    });
+
+    it("a pending change checks its own window and replaces the student's tutoring sessions there", () => {
+      studentService.updateStudent.mockReturnValue(of({}));
+      const c = build({
+        student: editStudent({pending_changes: [{package: 'Determination', effective: '2099-03-01'}, {package: 'Excel', effective: '2099-06-01'}]}),
+        tutor,
+        pendingEffective: '2099-03-01',
+      });
+      c.scheduleSlots = [
+        {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null},
+        {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null},
+      ];
+      c.save();
+      const [, , , , window, replaces] = scheduleService.findScheduleClash.mock.calls.at(-1)! as unknown[];
+      expect(replaces).toBe('tutoring');
+      expect(window).toEqual({from: new Date(2099, 2, 1), to: new Date(2099, 5, 1)});
+    });
+
+    it('a pending change already in effect checks from now', () => {
+      studentService.updateStudent.mockReturnValue(of({}));
+      const c = build({
+        student: editStudent({pending_changes: [{package: 'Determination', effective: '2001-03-01'}]}),
+        tutor,
+        pendingEffective: '2001-03-01',
+      });
+      c.scheduleSlots = [
+        {weekday: Weekday.MONDAY, start_time: '10:00', tutor_id: null},
+        {weekday: Weekday.WEDNESDAY, start_time: '10:00', tutor_id: null},
+      ];
+      c.save();
+      const [, , , , window] = scheduleService.findScheduleClash.mock.calls.at(-1)! as unknown[];
+      expect((window as {from: Date}).from.getFullYear()).toBeGreaterThan(2001);
     });
   });
 });

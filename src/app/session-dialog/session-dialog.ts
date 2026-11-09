@@ -54,7 +54,9 @@ import {mutatesStudent, validateMakeupPendingBalance, validateMakeupAgainstSched
   makeupAfterServiceEndError, makeupMinutesLeftToSchedule, validateSessionLength} from '../utils/session-rules';
 
 import {HttpErrorResponse} from '@angular/common/http';
-import {MakeupRepeat, messageOf} from '../makeup-repeat/makeup-repeat';
+import {MakeupRepeat} from '../makeup-repeat/makeup-repeat';
+import {messageOf} from '../utils/http-error';
+import {seriesFailureMessage, updateInOrder} from '../utils/series-updates';
 
 @Component({
   selector: 'app-session-dialog',
@@ -602,7 +604,7 @@ export class SessionDialog implements OnInit {
     if (otherFieldsChanged) {
       this.sessionsService.updateSession({...session, status: SessionStatus.PENDING}).pipe(
         catchError(err => {
-          this.errorMessage = 'Update session failed';
+          this.errorMessage = messageOf(err, 'Update session failed');
           this.hasError = true;
           this.submitting = false;
           return EMPTY;
@@ -845,7 +847,7 @@ export class SessionDialog implements OnInit {
       this.submitting = true;
       this.sessionsService.createSession(session).pipe(
         catchError(err => {
-          this.errorMessage = 'Create session failed';
+          this.errorMessage = messageOf(err, 'Create session failed');
           this.hasError = true;
           this.submitting = false;
           return EMPTY;
@@ -974,7 +976,7 @@ export class SessionDialog implements OnInit {
         this.submitting = true;
         this.sessionsService.updateSession(session).pipe(
           catchError(err => {
-            this.errorMessage = 'Update session failed';
+            this.errorMessage = messageOf(err, 'Update session failed');
             this.hasError = true;
             this.submitting = false;
             return EMPTY;
@@ -1071,9 +1073,13 @@ export class SessionDialog implements OnInit {
       }
       const updates = retimeSeriesOccurrences(targets, this.startTime!, this.endTime!, tutor, this.notes);
       this.submitting = true;
-      forkJoin(updates.map(u => this.sessionsService.updateSession(u))).pipe(
-        catchError(err => { this.errorMessage = 'Update session series failed'; this.hasError = true; this.submitting = false; return EMPTY; })
-      ).subscribe(() => {
+      updateInOrder(updates, u => this.sessionsService.updateSession(u)).subscribe(outcome => {
+        if (outcome.failed) {
+          this.errorMessage = seriesFailureMessage(outcome, updates.length, 'Update session series failed');
+          this.hasError = true;
+          this.submitting = false;
+          return;
+        }
         this.hasError = false;
         this.dialogRef.close({ updated: updates.length });
       });

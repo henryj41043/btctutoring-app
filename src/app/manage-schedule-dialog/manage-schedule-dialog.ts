@@ -32,6 +32,7 @@ import {PackageService} from '../services/package.service';
 import {PackageRow} from '../models/package-row.model';
 import {findPendingChange, pendingChangeNote, pendingChangesOf, withPendingSchedule} from '../utils/pending-package';
 import {groupSlotsByEffectiveTutor} from '../utils/slot-tutor';
+import {messageOf} from '../utils/http-error';
 import {contactDisplayName} from '../utils/contact-name';
 import {StaffStatus} from '../enums/staff-status.enum';
 import {Service} from '../enums/service.enum';
@@ -494,8 +495,54 @@ export class ManageScheduleDialog implements OnInit {
     return this.parseDateKey(later);
   }
 
+  /**
+   * Saves only when nothing booked overlaps the new schedule. The check runs
+   * BEFORE the save, because an edit deletes the sessions it replaces first:
+   * a refusal after the deletes would leave the student with no sessions.
+   */
   private persist(slots: ScheduleSlot[], firstWeek: FirstWeekSession[] = []): void {
     this.saving = true;
+    const replaces = this.pendingMode ? 'tutoring' : this.isEdit ? 'series' : 'none';
+    this.scheduleService
+      .findScheduleClash(this.student, this.tutor!, slots, firstWeek, this.clashWindow(), replaces, this.staffById)
+      .pipe(
+        catchError(() => {
+          this.saving = false;
+          this.fail('The schedule could not be checked for overlapping sessions. Please try again.');
+          return EMPTY;
+        }),
+      )
+      .subscribe(clash => {
+        if (clash) {
+          this.saving = false;
+          this.fail(clash);
+          return;
+        }
+        this.write(slots, firstWeek);
+      });
+  }
+
+  /**
+   * The dates the schedule being saved applies to: a pending change's own
+   * window, otherwise from today (an edit) or the chosen start (a new
+   * schedule) up to the next scheduled change.
+   */
+  private clashWindow(): {from: Date; to?: Date} {
+    const now = new Date();
+    if (this.pendingMode) {
+      const anchor = this.effectiveAnchor();
+      return {from: anchor > now ? anchor : now, to: this.nextChangeAnchor()};
+    }
+    const from = this.isEdit || !this.startDate ? now : this.startDate;
+    const fromKey = localDateKey(from);
+    const next = pendingChangesOf(this.student)
+      .map(c => c.effective)
+      .filter(e => !!e && e > fromKey)
+      .sort()[0];
+    return {from, to: this.parseDateKey(next)};
+  }
+
+  private write(slots: ScheduleSlot[], firstWeek: FirstWeekSession[]): void {
     if (this.pendingMode) {
       // Only this change's slots change — no live-schedule fields. The whole
       // list is rewritten (the backend replaces it and drops any legacy
@@ -530,9 +577,9 @@ export class ManageScheduleDialog implements OnInit {
           this.student, tutor, slots, this.startDate!, this.autoRenew, this.staffById, firstWeek);
     request$
       .pipe(
-        catchError(() => {
+        catchError(error => {
           this.saving = false;
-          this.fail(this.isEdit ? 'Updating the schedule failed.' : 'Creating the schedule failed.');
+          this.fail(messageOf(error, this.isEdit ? 'Updating the schedule failed.' : 'Creating the schedule failed.'));
           return EMPTY;
         }),
       )

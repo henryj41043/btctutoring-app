@@ -43,6 +43,7 @@ describe('ScheduleService', () => {
   const sessionsService = {
     createSessions: jest.fn(),
     getSessionsByStudent: jest.fn(),
+    getSessionsByTutor: jest.fn(),
     deleteSession: jest.fn(),
     fillHorizon: jest.fn(),
   };
@@ -601,6 +602,76 @@ describe('ScheduleService', () => {
       let error: Error | undefined;
       service.rebuildFrom('s-1', '2026-10-14').subscribe({error: e => (error = e)});
       expect(error?.message).toBe('boom');
+    });
+  });
+  describe('findScheduleClash (clock pinned to 2026-11-09)', () => {
+    beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-11-09T14:00:00.000Z')));
+    afterEach(() => jest.useRealTimers());
+
+    // Monday 2026-11-16, 10:30 Eastern: inside the Monday 10:00-11:00 slot.
+    const at = (over: Partial<Session>): Session =>
+      ({
+        type: SessionType.TUTORING,
+        status: SessionStatus.PENDING,
+        start_datetime: '2026-11-16T15:30:00.000Z',
+        end_datetime: '2026-11-16T16:15:00.000Z',
+        ...over,
+      }) as Session;
+    const otherStudent = at({id: 'other', tutor_id: 't-1', tutor_name: 'Tess', student_id: 's-9', student_name: 'Graham'});
+    const ownSeries = at({id: 'own-series', tutor_id: 't-1', student_id: 's-1', series_id: 'ser'});
+    const ownOneOff = at({id: 'own-one-off', tutor_id: 't-1', student_id: 's-1'});
+    const window = {from: new Date('2026-11-09T14:00:00.000Z')};
+
+    it("names a clash with the tutor's other student, reading each slot tutor from the window start", () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of([]));
+      sessionsService.getSessionsByTutor.mockReturnValue(of([otherStudent]));
+      const perSlot: ScheduleSlot[] = [slots[0], {...slots[1], tutor_id: 't-2'}];
+      let result: string | null | undefined;
+      service.findScheduleClash(student(), tutor(), perSlot, [], window, 'none').subscribe(r => (result = r));
+      expect(result).toBe('Tess already has a session with Graham on Mon, Nov 16, 10:30 AM.');
+      expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith('t-1', {from: '2026-11-09T14:00:00.000Z'});
+      expect(sessionsService.getSessionsByTutor).toHaveBeenCalledWith('t-2', {from: '2026-11-09T14:00:00.000Z'});
+    });
+
+    it("an edit ignores the student's own series sessions it replaces, but not a one-off", () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of([ownSeries]));
+      sessionsService.getSessionsByTutor.mockReturnValue(of([ownSeries]));
+      let result: string | null | undefined;
+      service.findScheduleClash(student(), tutor(), slots, [], window, 'series').subscribe(r => (result = r));
+      expect(result).toBeNull();
+
+      sessionsService.getSessionsByStudent.mockReturnValue(of([ownSeries, ownOneOff]));
+      service.findScheduleClash(student(), tutor(), slots, [], window, 'series').subscribe(r => (result = r));
+      expect(result).toContain('already has a session');
+    });
+
+    it("a pending change ignores the student's tutoring sessions in its window", () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of([ownSeries, ownOneOff]));
+      sessionsService.getSessionsByTutor.mockReturnValue(of([]));
+      let result: string | null | undefined;
+      service.findScheduleClash(student(), tutor(), slots, [], window, 'tutoring').subscribe(r => (result = r));
+      expect(result).toBeNull();
+    });
+
+    it('checks the start-week one-offs, including their own tutor', () => {
+      sessionsService.getSessionsByStudent.mockReturnValue(of([]));
+      sessionsService.getSessionsByTutor.mockImplementation((id: string) =>
+        of(id === 't-3' ? [at({id: 'x', tutor_id: 't-3', start_datetime: '2026-11-11T20:00:00.000Z',
+          end_datetime: '2026-11-11T21:00:00.000Z'})] : []));
+      const firstWeek = [{date: '2026-11-11', start_time: '15:30', end_time: '16:30', tutor_id: 't-3'}];
+      let result: string | null | undefined;
+      service.findScheduleClash(student(), tutor(), [], firstWeek, window, 'none').subscribe(r => (result = r));
+      expect(result).toContain('Wed, Nov 11, 3:00 PM');
+    });
+
+    it('a student not saved yet reads only the tutors', () => {
+      sessionsService.getSessionsByTutor.mockReturnValue(of([]));
+      let result: string | null | undefined;
+      service.findScheduleClash(student({id: undefined}), tutor({id: undefined}), slots, [], window, 'none')
+        .subscribe(r => (result = r));
+      expect(result).toBeNull();
+      expect(sessionsService.getSessionsByStudent).not.toHaveBeenCalled();
+      expect(sessionsService.getSessionsByTutor).not.toHaveBeenCalled();
     });
   });
 });

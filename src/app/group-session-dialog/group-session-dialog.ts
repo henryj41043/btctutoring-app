@@ -31,6 +31,7 @@ import {Service} from '../enums/service.enum';
 import {studentDisplayName} from '../utils/student-name';
 import {contactDisplayName} from '../utils/contact-name';
 import {futureSeriesTargets} from '../utils/session-times';
+import {seriesFailureMessage, updateInOrder} from '../utils/series-updates';
 import {
   applyGroupSeriesEdit,
   buildGroupOccurrenceDates,
@@ -330,7 +331,7 @@ export class GroupSessionDialog implements OnInit {
     this.sessionsService.createSessions(sessions).pipe(
       catchError(error => {
         console.log(error);
-        this.fail('Failed to create the group sessions. Please try again.');
+        this.fail(this.serviceMessage(error) ?? 'Failed to create the group sessions. Please try again.');
         return EMPTY;
       }),
     ).subscribe(() => this.dialogRef.close({created: sessions.length}));
@@ -434,13 +435,13 @@ export class GroupSessionDialog implements OnInit {
         this.selectedParticipants(),
         this.notes,
       );
-      forkJoin(updates.map(u => this.sessionsService.updateSession(u))).pipe(
-        catchError(error => {
-          console.log(error);
-          this.fail('Failed to update the series. Please try again.');
-          return EMPTY;
-        }),
-      ).subscribe(() => this.dialogRef.close({updated: updates.length}));
+      updateInOrder(updates, u => this.sessionsService.updateSession(u)).subscribe(outcome => {
+        if (outcome.failed) {
+          this.fail(seriesFailureMessage(outcome, updates.length, 'Failed to update the series. Please try again.'));
+          return;
+        }
+        this.dialogRef.close({updated: updates.length});
+      });
     });
   }
 

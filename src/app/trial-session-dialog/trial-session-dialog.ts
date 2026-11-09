@@ -28,6 +28,7 @@ import {SessionType} from '../enums/session-type.enum';
 import {Response} from '../models/response.model';
 import {studentDisplayName} from '../utils/student-name';
 import {contactDisplayName} from '../utils/contact-name';
+import {messageOf} from '../utils/http-error';
 import {StudentStatus} from '../enums/student-status.enum';
 
 /**
@@ -201,7 +202,7 @@ export class TrialSessionDialog implements OnInit {
         }),
         catchError(error => {
           console.log(error);
-          this.errorMessage = 'Failed to schedule the trial session. Please try again.';
+          this.errorMessage = messageOf(error, 'Failed to schedule the trial session. Please try again.');
           this.hasError = true;
           this.submitting = false;
           return EMPTY;

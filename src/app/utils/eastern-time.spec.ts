@@ -1,4 +1,4 @@
-import {easternSlotToUtc, easternWallTimeToUtc} from './eastern-time';
+import {easternDateOf, easternSlotToUtc, easternWallTimeToUtc} from './eastern-time';
 
 describe('easternWallTimeToUtc', () => {
   it('converts an EDT (summer) wall time at UTC-4', () => {
@@ -40,5 +40,12 @@ describe('easternSlotToUtc', () => {
     expect(easternSlotToUtc(2026, 6, 10, '').toISOString()).toBe('2026-07-10T04:00:00.000Z');
     expect(easternSlotToUtc(2026, 6, 10, undefined as never).toISOString()).toBe('2026-07-10T04:00:00.000Z');
     expect(easternSlotToUtc(2026, 6, 10, 'garbage').toISOString()).toBe('2026-07-10T04:00:00.000Z');
+  });
+});
+
+describe('easternDateOf', () => {
+  it('gives the Eastern calendar date, which can differ from the UTC one', () => {
+    expect(easternDateOf(new Date('2026-11-17T03:30:00.000Z'))).toEqual({year: 2026, month: 10, day: 16});
+    expect(easternDateOf(new Date('2026-07-01T12:00:00.000Z'))).toEqual({year: 2026, month: 6, day: 1});
   });
 });

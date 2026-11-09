@@ -152,5 +152,6 @@ describe('makeup-repeat', () => {
     expect(skipReasonText('expired')).toBe('minutes expire before this date');
     expect(skipReasonText('after_service_end')).toBe('after the last day of service');
     expect(skipReasonText('insufficient')).toBe('not enough minutes left');
+    expect(skipReasonText('conflict')).toBe('already booked at this time');
   });
 });
