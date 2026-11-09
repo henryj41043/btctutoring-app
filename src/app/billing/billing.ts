@@ -33,7 +33,7 @@ import {BillingCycle} from '../enums/billing-cycle.enum';
 import {round2} from '../utils/package-config';
 import {TableStateStore} from '../utils/table-state';
 import {StatementLine} from '../models/statement.model';
-import {cycleLabel, duesTotal, flagLabels, formatMoney, linePeriod, lineSessions, lineSummary, shortDate, toBillingEntry} from '../utils/statement-view';
+import {cycleLabel, duesTotal, formatMoney, lineLabels, linePeriod, lineSessions, lineSummary, shortDate, toBillingEntry} from '../utils/statement-view';
 import {EntryDue} from '../models/billing-entry.model';
 import {monthKeyOf} from '../utils/month-key';
 import {requestedDateText, scholarshipSummary} from '../utils/scholarship-view';
@@ -217,7 +217,7 @@ export class Billing implements OnInit {
 
   protected linePeriod(line: StatementLine, month?: string): string { return linePeriod(line, month); }
   protected lineSessions(line: StatementLine): string { return lineSessions(line); }
-  protected lineLabels(line: StatementLine): string[] { return flagLabels(line.flags); }
+  protected lineLabels(line: StatementLine): string[] { return lineLabels(line); }
 
   /** True when a due's amount is an admin override rather than derived. */
   protected isOverridden(due: EntryDue): boolean {
@@ -407,7 +407,7 @@ export class Billing implements OnInit {
       {content: this.formatMoney(amount), styles},
     ];
     const rows = statement.lines.map(line => {
-      const labels = flagLabels(line.flags);
+      const labels = lineLabels(line);
       return row(`${lineSummary(line, statement.month)}${labels.length ? ` [${labels.join(', ')}]` : ''}`, line.net);
     });
     if (statement.sibling_discount_amount > 0) {

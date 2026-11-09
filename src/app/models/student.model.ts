@@ -50,6 +50,8 @@ export class Student {
   scholarship?: boolean;
   /** Enrolled in the "BTC & Me" group program — bills a flat monthly fee. */
   btc_and_me?: boolean;
+  /** Monthly families: 15 = this student's month is due on the 15th; absent = the 1st. */
+  billing_due_day?: number | null;
   /** Weekly recurring tutoring slots; the template auto-renew repeats each month. */
   schedule?: ScheduleSlot[];
   /** ISO date the student's package began; drives first-month proration. */

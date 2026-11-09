@@ -167,6 +167,16 @@
               <span matTextSuffix>%</span>
               <mat-hint>Applies before any sibling discount</mat-hint>
             </mat-form-field>
+            @if (showDueDay) {
+              <mat-form-field>
+                <mat-label>Billed On</mat-label>
+                <mat-select formControlName="billing_due_day">
+                  <mat-option [value]="1">The 1st</mat-option>
+                  <mat-option [value]="15">The 15th</mat-option>
+                </mat-select>
+                <mat-hint>When this student's month is due</mat-hint>
+              </mat-form-field>
+            }
             @if (studentForm.get('discount_percent')?.value) {
               <mat-form-field class="pricing-reason">
                 <mat-label>Discount Reason</mat-label>
