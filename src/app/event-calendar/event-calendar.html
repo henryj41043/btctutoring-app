@@ -23,14 +23,20 @@
              (input)="applyFilter(calSearch.value)">
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
-    <!-- Admins create any session; tutors get the same button locked to
-         their own make-ups (they do their own make-up scheduling); Support
-         Staff get it locked to their own Admin Time (how they log hours). -->
+    <!-- Admins create any session. Tutors get two buttons: their own
+         make-ups, and their own Admin Time (client 2026-11-09, paid at their
+         hourly rate). Support Staff only log their own Admin Time. -->
     @if (authService.loggedIn()) {
       <button mat-raised-button color="primary" (click)="openCreateSessionDialog()" class="cal-add-btn">
         <mat-icon>add</mat-icon>
-        {{authService.isSupportStaff() ? 'Add Admin Time' : 'Add Session'}}
+        {{createButtonLabel}}
       </button>
+      @if (showTutorAdminTime) {
+        <button mat-raised-button (click)="openCreateSessionDialog('admin-time')" class="cal-add-btn">
+          <mat-icon>schedule</mat-icon>
+          Add Admin Time
+        </button>
+      }
     }
     <!-- "Add BTC & Me" was removed (client 2026-11-09: the program is not
          running). Existing group sessions still open in the group dialog,

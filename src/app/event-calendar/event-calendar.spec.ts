@@ -280,6 +280,46 @@ describe('EventCalendar', () => {
       );
     });
 
+    it('labels the main button per role and shows the tutor Admin Time button to tutors only', () => {
+      const c = build();
+      expect(c.createButtonLabel).toBe('Add Admin Time');
+      expect(c.showTutorAdminTime).toBe(false);
+      groups = ['Tutors'];
+      expect(c.createButtonLabel).toBe('Add Make-up');
+      expect(c.showTutorAdminTime).toBe(true);
+      groups = ['LeadTutors'];
+      expect(c.showTutorAdminTime).toBe(true);
+      isAdmin = true;
+      groups = ['Admins'];
+      expect(c.createButtonLabel).toBe('Add Session');
+      expect(c.showTutorAdminTime).toBe(false);
+    });
+
+    it('an admin is never locked, whichever kind is asked for', () => {
+      isAdmin = true;
+      groups = ['Admins'];
+      const c = build();
+      c.openCreateSessionDialog('admin-time');
+      expect(dialog.open).toHaveBeenCalledWith(
+        SessionDialog,
+        expect.objectContaining({
+          data: expect.objectContaining({ lockToAdminTime: false, lockToMakeup: false }),
+        }),
+      );
+    });
+
+    it('a tutor opens their own Admin Time from the second button', () => {
+      groups = ['Tutors'];
+      const c = build();
+      c.openCreateSessionDialog('admin-time');
+      expect(dialog.open).toHaveBeenCalledWith(
+        SessionDialog,
+        expect.objectContaining({
+          data: expect.objectContaining({ lockToAdminTime: true, lockToMakeup: false }),
+        }),
+      );
+    });
+
     it('a tutor still gets the make-up lock', () => {
       groups = ['Tutors'];
       const c = build();

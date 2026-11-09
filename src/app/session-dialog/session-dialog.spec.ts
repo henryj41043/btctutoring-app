@@ -2047,6 +2047,56 @@ describe('SessionDialog', () => {
     });
   });
 
+  describe('attendance on Admin Time (tutors log their own, client 2026-11-09)', () => {
+    const editOf = (type: SessionType): SessionDialogData => ({
+      type: 'edit',
+      session: {
+        id: 'x-1', type, tutor_id: 'c-1', status: SessionStatus.PENDING,
+        start_datetime: '2026-06-01T09:00:00Z', end_datetime: '2026-06-01T10:00:00Z',
+      },
+      existingSessions: [],
+    } as SessionDialogData);
+
+    it('a tutor gets no attendance control on their own Admin Time', () => {
+      isAdmin = false;
+      const c = build(editOf(SessionType.ADMIN));
+      c.ngOnInit();
+      expect(c.showAttendance).toBe(false);
+    });
+
+    it('a tutor keeps the attendance control on their other sessions', () => {
+      isAdmin = false;
+      const c = build(editOf(SessionType.MAKE_UP));
+      c.ngOnInit();
+      expect(c.showAttendance).toBe(true);
+    });
+
+    it('an admin keeps the attendance control on Admin Time', () => {
+      isAdmin = true;
+      const c = build(editOf(SessionType.ADMIN));
+      c.ngOnInit();
+      expect(c.showAttendance).toBe(true);
+    });
+
+    it('nobody takes attendance while creating', () => {
+      isAdmin = true;
+      const c = build({ type: 'create', session: new Session(), existingSessions: [] } as SessionDialogData);
+      expect(c.showAttendance).toBe(false);
+    });
+
+    it('a tutor opening Admin Time logs it for themselves with no student', () => {
+      isAdmin = false;
+      const c = build({
+        type: 'create', session: new Session(), existingSessions: [], lockToAdminTime: true,
+      } as SessionDialogData);
+      c.ngOnInit();
+      expect(c.isAdminTimeLocked).toBe(true);
+      expect(c.isMakeupLocked).toBe(false);
+      expect(c.sessionTypeOptions).toEqual([SessionType.ADMIN]);
+      expect(c.selectedType).toBe(SessionType.ADMIN);
+    });
+  });
+
   describe('support staff Admin Time (lockToAdminTime)', () => {
     beforeEach(() => {
       isAdmin = false;

@@ -18,7 +18,7 @@
       pick the student, date and time. Regular lessons are scheduled by the office.
     </p>
   } @else if (isAdminTimeLocked && dialogData.type === 'create') {
-    <!-- Support Staff logging hours: Admin Time for themselves, nothing else. -->
+    <!-- Support Staff and tutors logging hours: Admin Time for themselves. -->
     <p class="locked-hint">
       <strong>Admin Time</strong> for <strong>{{lockedTutorName}}</strong> —
       pick the date, start and end time of the hours you worked.
@@ -121,9 +121,9 @@
                        [startTime]="startTime"
                        [endTime]="endTime"/>
   }
-  <!-- Support Staff never take attendance: payroll counts Admin Time whatever
-       its status, and the attendance route is not theirs to call. -->
-  @if (dialogData.type !== 'create' && !isSupportStaff) {
+  <!-- No attendance on Admin Time for the staff who logged it (payroll counts
+       it whatever its status); Support Staff never take attendance at all. -->
+  @if (showAttendance) {
     <mat-form-field>
       <mat-label>Take Attendance</mat-label>
       <mat-select [(ngModel)]="selectedAttendance" [disabled]="isStatusLocked || isReadOnly">

@@ -281,6 +281,18 @@ export class SessionDialog implements OnInit {
   }
 
   /** The signed-in user is Support Staff (they never take attendance). */
+  /**
+   * Attendance is never taken on Admin Time by the staff who logged it:
+   * payroll counts Admin Time whatever its status (Support Staff 2026-10-15,
+   * tutors 2026-11-09). Admins keep the control on every session.
+   */
+  get showAttendance(): boolean {
+    if (this.dialogData.type === 'create' || this.isSupportStaff) {
+      return false;
+    }
+    return this.authService.isAdmin() || this.selectedType !== SessionType.ADMIN;
+  }
+
   get isSupportStaff(): boolean {
     return !!this.authService.isSupportStaff?.();
   }
@@ -391,7 +403,7 @@ export class SessionDialog implements OnInit {
       this.selectedTutor = this.authService.contact().id;
     }
     if (this.dialogData.type === 'create' && this.isAdminTimeLocked) {
-      // Support Staff log hours: Admin Time only, assigned to themselves.
+      // Support Staff and tutors log hours: Admin Time only, for themselves.
       this.selectedType = SessionType.ADMIN;
       this.sessionTypeOptions = [SessionType.ADMIN];
       this.selectedTutor = this.authService.contact().id;
