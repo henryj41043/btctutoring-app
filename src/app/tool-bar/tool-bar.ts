@@ -48,6 +48,11 @@ export class ToolBar {
     void this.router.navigate(['/roster']);
   }
 
+  /** The Head Tutor's organization-wide Student Roster (client 2026-11-09). */
+  orgRosterNav(): void {
+    void this.router.navigate(['/roster', 'all']);
+  }
+
   /** A Lead Tutor's Team Roster (client 2026-11-09). */
   teamRosterNav(): void {
     void this.router.navigate(['/roster', 'team']);

@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import {FamilyView} from './family-view/family-view';
 import {FamilyAccessGuard} from './guards/family-access.guard';
 import {TeamRosterGuard} from './guards/team-roster.guard';
+import {OrgRosterGuard} from './guards/org-roster.guard';
 import {EventCalendar} from './event-calendar/event-calendar';
 import {Login} from './login/login';
 import {AuthGuard} from './guards/auth.guard';
@@ -67,6 +68,13 @@ export const routes: Routes = [
     component: StudentRoster,
     canActivate: [AuthGuard, TutorAccessGuard, TeamRosterGuard],
     data: {mode: 'team'},
+  },
+  {
+    // The Head Tutor's organization-wide Student Roster (client 2026-11-09).
+    path: 'roster/all',
+    component: StudentRoster,
+    canActivate: [AuthGuard, TutorAccessGuard, OrgRosterGuard],
+    data: {mode: 'org'},
   },
   {
     path: 'onboarding',

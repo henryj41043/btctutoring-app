@@ -95,9 +95,16 @@ export class StudentRoster implements OnInit {
    * Team Roster mode (route data `mode: 'team'`, client 2026-11-09): a Lead
    * Tutor's view of the students their team members teach.
    */
-  protected readonly teamMode: boolean =
-    inject(ActivatedRoute, {optional: true})?.snapshot?.data?.['mode'] === 'team';
-  private readonly viewState = new TableStateStore(this.teamMode ? 'btc-team-roster-view' : 'btc-roster-view');
+  private readonly routeMode: string | undefined =
+    inject(ActivatedRoute, {optional: true})?.snapshot?.data?.['mode'];
+  protected readonly teamMode: boolean = this.routeMode === 'team';
+  /**
+   * Organization mode (route data `mode: 'org'`, client 2026-11-09): the Head
+   * Tutor's read-only view of the whole Student Roster for parent check-ins.
+   */
+  protected readonly orgMode: boolean = this.routeMode === 'org';
+  private readonly viewState = new TableStateStore(
+    this.teamMode ? 'btc-team-roster-view' : this.orgMode ? 'btc-org-roster-view' : 'btc-roster-view');
   // The @if swap between current and history tables creates a fresh
   // MatSort/MatPaginator each time — attach whichever data source is showing.
   @ViewChild(MatSort) set matSort(sort: MatSort) {
@@ -174,7 +181,7 @@ export class StudentRoster implements OnInit {
       }
     }
     const tutorId = this.authService.contact().id;
-    if (!isAdmin && !tutorId && !this.teamMode) {
+    if (!isAdmin && !tutorId && !this.teamMode && !this.orgMode) {
       // No resolved contact id — never query with 'undefined'.
       this.loading = false;
       this.cdr.markForCheck();
@@ -182,7 +189,7 @@ export class StudentRoster implements OnInit {
     }
     const source$ = this.teamMode
       ? this.studentService.getTeamStudents(true)
-      : isAdmin
+      : isAdmin || this.orgMode
         ? this.studentService.getStudents(true)
         : this.studentService.getStudentsByTutor(tutorId!, true);
     this.loadScheduledMakeup();
@@ -385,7 +392,7 @@ export class StudentRoster implements OnInit {
     if (this.teamMode) {
       return 'Team Roster';
     }
-    return this.authService.isAdmin() ? 'Student Roster' : 'My Roster';
+    return this.authService.isAdmin() || this.orgMode ? 'Student Roster' : 'My Roster';
   }
 
   get activeCount(): number {
