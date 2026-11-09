@@ -48,7 +48,7 @@ import {DeleteContactDialog} from '../delete-contact-dialog/delete-contact-dialo
 import {ManageScheduleDialog} from '../manage-schedule-dialog/manage-schedule-dialog';
 import {StudentDialog, StudentDialogMode, StudentDialogResult} from '../student-dialog/student-dialog';
 import {TrialSessionDialog, TrialSessionDialogResult} from '../trial-session-dialog/trial-session-dialog';
-import {minNoteOrder, noteDateIso, noteGroup, sortNotes} from '../utils/note-forms';
+import {minNoteOrder, noteDateIso, noteFromForm, noteGroup, sortNotes} from '../utils/note-forms';
 import {buildTimeOptions, createAvailabilityGroup} from '../utils/availability-forms';
 import {availableMakeupMinutes} from '../utils/makeup';
 import {makeupSummary} from '../utils/session-rules';
@@ -878,7 +878,7 @@ export class Contact implements OnInit {
   saveNoteAt(index: number) {
     const group = this.notes.controls.at(index)!;
     const raw = group.getRawValue() as Record<string, unknown>;
-    const noteToSave: Note = {...raw, date_time: noteDateIso(raw['date_time'])} as Note;
+    const noteToSave: Note = noteFromForm(raw);
     // Empty notes are never persisted — they'd render as blank cards forever.
     if (!(noteToSave.message ?? '').trim()) {
       this.noteEmptyError = true;
@@ -970,7 +970,7 @@ export class Contact implements OnInit {
   private persistNoteOrder(): void {
     this.notes.controls.forEach(control => {
       const raw = control.getRawValue() as Record<string, unknown>;
-      const note: Note = {...raw, date_time: noteDateIso(raw['date_time'])} as Note;
+      const note: Note = noteFromForm(raw);
       if (this.newNoteIds.has(note.id!)) {
         // An unsaved local note must never be PUT — it doesn't exist server-side.
         return;

@@ -1,5 +1,5 @@
 import {FormBuilder} from '@angular/forms';
-import {minNoteOrder, noteDate, noteDateIso, noteGroup, sortNotes} from './note-forms';
+import {mergeNoteDateTime, minNoteOrder, noteDate, noteDateIso, noteFromForm, noteGroup, sortNotes} from './note-forms';
 import {Note} from '../models/note.model';
 
 describe('note-forms', () => {
@@ -58,6 +58,53 @@ describe('note-forms', () => {
       expect((group.get('date_time')!.value as Date).toISOString()).toBe('2026-08-20T10:00:00.000Z');
       expect(group.get('type')!.value).toBe('');
       expect(group.get('order')!.value).toBeNull();
+    });
+
+    it('keeps a changed date when the time is edited afterwards (client 2026-11-09)', () => {
+      const group = noteGroup(new FormBuilder(), {id: 'n-1', date_time: new Date(2026, 10, 9, 16, 30).toISOString()} as Note);
+      group.get('note_date')!.setValue(new Date(2026, 10, 8));
+      expect(group.get('date_time')!.value).toEqual(new Date(2026, 10, 8, 16, 30));
+      // The timepicker hands back its own remembered day (the 9th) with the new time.
+      group.get('note_time')!.setValue(new Date(2026, 10, 9, 15, 15));
+      expect(group.get('date_time')!.value).toEqual(new Date(2026, 10, 8, 15, 15));
+    });
+
+    it('a time change alone keeps the date, and each picker starts from the stored value', () => {
+      const stored = new Date(2026, 10, 2, 9, 0);
+      const group = noteGroup(new FormBuilder(), {id: 'n-1', date_time: stored.toISOString()} as Note);
+      expect(group.get('note_date')!.value).toEqual(stored);
+      expect(group.get('note_time')!.value).toEqual(stored);
+      group.get('note_time')!.setValue(new Date(2030, 0, 1, 13, 45));
+      expect(group.get('date_time')!.value).toEqual(new Date(2026, 10, 2, 13, 45));
+    });
+  });
+
+  describe('mergeNoteDateTime', () => {
+    const stored = new Date(2026, 10, 9, 16, 30);
+    it('takes the day from the date picker and the clock from the time picker', () => {
+      expect(mergeNoteDateTime(new Date(2026, 10, 8), new Date(2026, 10, 9, 10, 5), stored)).toEqual(new Date(2026, 10, 8, 10, 5));
+    });
+    it('fills a cleared or invalid half from the stored value', () => {
+      expect(mergeNoteDateTime(null, new Date(2026, 0, 1, 8, 0), stored)).toEqual(new Date(2026, 10, 9, 8, 0));
+      expect(mergeNoteDateTime(new Date(2026, 10, 8), new Date(NaN), stored)).toEqual(new Date(2026, 10, 8, 16, 30));
+    });
+    it('uses whichever half exists when nothing is stored, else null', () => {
+      expect(mergeNoteDateTime(new Date(2026, 10, 8), null, null)).toEqual(new Date(2026, 10, 8));
+      expect(mergeNoteDateTime(null, new Date(2026, 10, 8, 7, 0), 'x')).toEqual(new Date(2026, 10, 8, 7, 0));
+      expect(mergeNoteDateTime(null, null, null)).toBeNull();
+    });
+  });
+
+  describe('noteFromForm', () => {
+    it('drops the picker-only controls and sends date_time as ISO', () => {
+      const note = noteFromForm({
+        id: 'n-1',
+        message: 'm',
+        date_time: new Date('2026-11-08T21:30:00.000Z'),
+        note_date: new Date(),
+        note_time: new Date(),
+      });
+      expect(note).toEqual({id: 'n-1', message: 'm', date_time: '2026-11-08T21:30:00.000Z'});
     });
   });
 

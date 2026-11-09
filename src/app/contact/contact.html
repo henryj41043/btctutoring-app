@@ -180,13 +180,13 @@
               </mat-form-field>
               <mat-form-field>
                 <mat-label>Date</mat-label>
-                <input matInput [matDatepicker]="notePicker" formControlName="date_time">
+                <input matInput [matDatepicker]="notePicker" formControlName="note_date">
                 <mat-datepicker-toggle [for]="notePicker" matSuffix/>
                 <mat-datepicker #notePicker/>
               </mat-form-field>
               <mat-form-field>
                 <mat-label>Time</mat-label>
-                <input matInput [matTimepicker]="noteTimePicker" formControlName="date_time">
+                <input matInput [matTimepicker]="noteTimePicker" formControlName="note_time">
                 <mat-timepicker-toggle [for]="noteTimePicker" matSuffix/>
                 <mat-timepicker #noteTimePicker/>
               </mat-form-field>

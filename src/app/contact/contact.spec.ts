@@ -585,6 +585,23 @@ describe('Contact', () => {
       expect(notes(c).length).toBe(0);
     });
 
+    it('saves a backdated note with the date and time the user picked', () => {
+      const c = build();
+      noteService.getNotesByRecipient.mockReturnValue(
+        of([{ id: 'n-1', message: 'Sent follow up text', date_time: new Date(2026, 10, 9, 16, 30).toISOString() } as Note]),
+      );
+      c.ngOnInit();
+      c.setNotesEditIndex(0);
+      notes(c).at(0).get('note_date')!.setValue(new Date(2026, 10, 8));
+      notes(c).at(0).get('note_time')!.setValue(new Date(2026, 10, 9, 16, 30));
+      noteService.updateNote.mockReturnValue(of({ id: 'n-1' } as Note));
+      c.saveNoteAt(0);
+      const sent = noteService.updateNote.mock.calls.at(-1)![0] as Note & Record<string, unknown>;
+      expect(sent.date_time).toBe(new Date(2026, 10, 8, 16, 30).toISOString());
+      expect(sent['note_date']).toBeUndefined();
+      expect(sent['note_time']).toBeUndefined();
+    });
+
     it('saves a note', () => {
       const c = build();
       seedNote(c);
